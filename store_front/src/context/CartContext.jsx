@@ -27,18 +27,18 @@ export function CartProvider({ children }) {
   const addItem = async (product, quantity = 1) => {
     await api.addToCart({ product_id: product.id, quantity });
     notyf.success('Producto agregado');
-    fetchCart();
+    await fetchCart();
   };
 
-  const updateItem = async (productId, quantity) => {
-    await api.updateCart({ product_id: productId, quantity });
-    fetchCart();
+  const updateItem = async (itemId, quantity) => {
+    await api.updateCart(itemId, { quantity });
+    await fetchCart();
   };
 
-  const removeItem = async (productId) => {
-    await api.removeFromCart({ product_id: productId });
+  const removeItem = async (itemId) => {
+    await api.removeFromCart(itemId);
     notyf.success('Producto eliminado');
-    fetchCart();
+    await fetchCart();
   };
 
   const clear = async () => {

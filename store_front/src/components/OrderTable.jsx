@@ -33,7 +33,7 @@ export default function OrderTable({ orders, onView }) {
             <td>{order.id}</td>
             <td>{order.status}</td>
             <td>{new Date(order.created_at).toLocaleDateString()}</td>
-            <td>${order.total}</td>
+            <td>${order.total_amount}</td>
             <td>
               <button className="btn btn-outline-primary btn-sm" onClick={() => onView(order)} data-bs-toggle="modal" data-bs-target="#orderDetailModal">
                 <i className="bi bi-receipt" />

@@ -24,9 +24,9 @@ export default function OrdersPage() {
             </div>
             <div className="modal-body">
               <p>Estado: {selected?.status}</p>
-              <p>Total: ${selected?.total}</p>
+              <p>Total: ${selected?.total_amount}</p>
               <ul>
-                {selected?.items?.map((item) => <li key={item.product_id}>{item.name} x {item.quantity}</li>)}
+                {selected?.items?.map((item) => <li key={item.id}>{item.product_name} x {item.quantity}</li>)}
               </ul>
             </div>
           </div>

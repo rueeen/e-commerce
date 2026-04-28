@@ -6,16 +6,16 @@ export const api = {
   categories: () => apiClient.get('/api/categories/'),
 
   cart: () => apiClient.get('/api/cart/'),
-  addToCart: (payload) => apiClient.post('/api/cart/add/', payload),
-  updateCart: (payload) => apiClient.patch('/api/cart/update/', payload),
-  removeFromCart: (payload) => apiClient.post('/api/cart/remove/', payload),
-  clearCart: () => apiClient.post('/api/cart/clear/'),
+  addToCart: (payload) => apiClient.post('/api/cart/items/', payload),
+  updateCart: (itemId, payload) => apiClient.patch(`/api/cart/items/${itemId}/`, payload),
+  removeFromCart: (itemId) => apiClient.delete(`/api/cart/items/${itemId}/remove/`),
+  clearCart: () => apiClient.delete('/api/cart/clear/'),
 
   orders: () => apiClient.get('/api/orders/'),
   orderById: (id) => apiClient.get(`/api/orders/${id}/`),
   checkout: () => apiClient.post('/api/orders/checkout/'),
 
-  digitalLibrary: () => apiClient.get('/api/digital-library/'),
+  digitalLibrary: () => apiClient.get('/api/library/'),
 
   register: (payload) => apiClient.post('/api/auth/register/', payload),
   login: (payload) => apiClient.post('/api/auth/login/', payload),
