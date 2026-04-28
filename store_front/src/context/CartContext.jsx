@@ -26,7 +26,7 @@ export function CartProvider({ children }) {
 
   const addItem = async (product, quantity = 1) => {
     await api.addToCart({ product_id: product.id, quantity });
-    notyf.success('Producto agregado');
+    notyf.success('Producto agregado al carrito');
     await fetchCart();
   };
 
