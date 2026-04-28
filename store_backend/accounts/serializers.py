@@ -1,6 +1,9 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
+from .models import Profile
+from .permissions import get_user_role
+
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
@@ -14,12 +17,16 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         user = User(**validated_data)
         user.set_password(password)
         user.save()
+        Profile.objects.get_or_create(user=user, defaults={"role": Profile.Role.CUSTOMER})
         return user
 
 
 class UserSerializer(serializers.ModelSerializer):
-    is_admin = serializers.BooleanField(source="is_staff", read_only=True)
+    role = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ("id", "username", "email", "first_name", "last_name", "is_admin")
+        fields = ("id", "username", "email", "first_name", "last_name", "is_staff", "role")
+
+    def get_role(self, obj):
+        return get_user_role(obj)

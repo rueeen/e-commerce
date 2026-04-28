@@ -14,6 +14,8 @@ import AdminProductsPage from './pages/AdminProductsPage';
 import AdminOrdersPage from './pages/AdminOrdersPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
+import WorkerRoute from './components/WorkerRoute';
+import CustomerRoute from './components/CustomerRoute';
 
 export default function App() {
   return (
@@ -23,12 +25,14 @@ export default function App() {
         <Route path="/catalog" element={<CatalogPage />} />
         <Route path="/products/:id" element={<ProductDetailPage />} />
         <Route path="/cart" element={<CartPage />} />
-        <Route path="/orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
-        <Route path="/library" element={<ProtectedRoute><DigitalLibraryPage /></ProtectedRoute>} />
+        <Route path="/orders" element={<CustomerRoute><OrdersPage /></CustomerRoute>} />
+        <Route path="/library" element={<CustomerRoute><DigitalLibraryPage /></CustomerRoute>} />
         <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
         <Route path="/logout" element={<ProtectedRoute><LogoutPage /></ProtectedRoute>} />
-        <Route path="/admin/products" element={<AdminRoute><AdminProductsPage /></AdminRoute>} />
-        <Route path="/admin/orders" element={<AdminRoute><AdminOrdersPage /></AdminRoute>} />
+        <Route path="/dashboard" element={<AdminRoute><AdminProductsPage /></AdminRoute>} />
+        <Route path="/admin/users" element={<AdminRoute><div className="alert alert-warning">TODO: Vista de usuarios pendiente.</div></AdminRoute>} />
+        <Route path="/admin/products" element={<WorkerRoute><AdminProductsPage /></WorkerRoute>} />
+        <Route path="/admin/orders" element={<WorkerRoute><AdminOrdersPage /></WorkerRoute>} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

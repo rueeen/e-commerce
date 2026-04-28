@@ -3,7 +3,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useCart } from '../hooks/useCart';
 
 export default function MainLayout() {
-  const { isAuthenticated, isAdmin, logout } = useAuth();
+  const { isAuthenticated, isAdmin, isWorker, role, logout } = useAuth();
   const { items } = useCart();
 
   return (
@@ -25,7 +25,11 @@ export default function MainLayout() {
                   <li className="nav-item"><NavLink className="nav-link" to="/orders">Pedidos</NavLink></li>
                   <li className="nav-item"><NavLink className="nav-link" to="/library">Mis singles</NavLink></li>
                   <li className="nav-item"><NavLink className="nav-link" to="/profile">Perfil</NavLink></li>
-                  {isAdmin ? <li className="nav-item"><NavLink className="nav-link" to="/admin/products">Admin</NavLink></li> : null}
+                  {(isAdmin || isWorker) ? <li className="nav-item"><NavLink className="nav-link" to="/admin/products">Productos</NavLink></li> : null}
+                  {(isAdmin || isWorker) ? <li className="nav-item"><NavLink className="nav-link" to="/admin/orders">Órdenes</NavLink></li> : null}
+                  {isAdmin ? <li className="nav-item"><NavLink className="nav-link" to="/dashboard">Dashboard</NavLink></li> : null}
+                  {isAdmin ? <li className="nav-item"><NavLink className="nav-link" to="/admin/users">Usuarios</NavLink></li> : null}
+                  <li className="nav-item"><span className="badge text-bg-light border">Rol: {role}</span></li>
                   <li className="nav-item"><button className="btn btn-outline-dark btn-sm" onClick={logout}>Logout</button></li>
                 </>
               ) : (
