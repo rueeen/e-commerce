@@ -1,0 +1,44 @@
+:root {
+  --brand: #5a48f5;
+  --brand-dark: #3e30b5;
+  --surface: #f8f9ff;
+}
+
+body {
+  background: var(--surface);
+  color: #1d2433;
+}
+
+.hero-banner {
+  background: linear-gradient(135deg, var(--brand), #7d6dff);
+  border-radius: 1rem;
+}
+
+.product-card {
+  border: 0;
+  border-radius: 1rem;
+  box-shadow: 0 10px 24px rgba(23, 32, 74, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.product-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 28px rgba(23, 32, 74, 0.12);
+}
+
+.btn-primary {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
+.btn-primary:hover {
+  background: var(--brand-dark);
+  border-color: var(--brand-dark);
+}
+
+.card,
+.form-control,
+.form-select,
+.btn {
+  border-radius: 0.75rem;
+}

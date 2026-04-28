@@ -1,0 +1,37 @@
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+    initial = True
+
+    dependencies = []
+
+    operations = [
+        migrations.CreateModel(
+            name='Category',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=120, unique=True)),
+                ('slug', models.SlugField(unique=True)),
+                ('is_active', models.BooleanField(default=True)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+            ],
+            options={'ordering': ['name']},
+        ),
+        migrations.CreateModel(
+            name='Product',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=200)),
+                ('description', models.TextField(blank=True)),
+                ('price', models.DecimalField(decimal_places=2, max_digits=10)),
+                ('stock', models.PositiveIntegerField(default=0)),
+                ('image', models.URLField(blank=True)),
+                ('product_type', models.CharField(choices=[('physical', 'Físico'), ('digital', 'Digital')], max_length=20)),
+                ('is_active', models.BooleanField(default=True)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('category', models.ForeignKey(on_delete=models.deletion.PROTECT, related_name='products', to='products.category')),
+            ],
+            options={'ordering': ['-created_at']},
+        ),
+    ]
