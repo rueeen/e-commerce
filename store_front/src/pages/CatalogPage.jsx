@@ -14,8 +14,8 @@ export default function CatalogPage() {
   const { addItem } = useCart();
 
   useEffect(() => {
-    api.products().then(({ data }) => setProducts(data.results || data));
-    api.categories().then(({ data }) => setCategories(data.results || data));
+    api.getProducts({ active: true }).then(({ data }) => setProducts(data.results || data));
+    api.getCategories().then(({ data }) => setCategories(data.results || data));
   }, []);
 
   const filtered = useMemo(() => {

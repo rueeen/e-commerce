@@ -9,7 +9,7 @@ export default function HomePage() {
   const { addItem } = useCart();
 
   useEffect(() => {
-    api.products().then(({ data }) => setProducts(data.results || data));
+    api.getProducts({ active: true }).then(({ data }) => setProducts(data.results || data));
   }, []);
 
   return (

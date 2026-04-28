@@ -13,7 +13,7 @@ export default function ProductCard({ product, onAdd }) {
           <span className="badge text-bg-light border">{product.category?.name || 'Sin categoría'}</span>
         </div>
         <div className="mb-2 d-flex gap-2 flex-wrap">
-          <span className={`badge ${isDigital ? 'text-bg-dark' : 'text-bg-info'}`}>{isDigital ? 'Single digital' : 'Físico'}</span>
+          <span className={`badge ${isDigital ? 'text-bg-dark' : 'text-bg-info'}`}>{isDigital ? 'Digital' : 'Físico'}</span>
           {product.featured ? <span className="badge text-bg-warning">Destacado</span> : null}
         </div>
         <p className="text-muted small flex-grow-1">{product.description?.slice(0, 90) || 'Sin descripción disponible.'}</p>
