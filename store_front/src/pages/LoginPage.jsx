@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 
 export default function LoginPage() {
   const { login, loading } = useAuth();
-  const [form, setForm] = useState({ email: '', password: '' });
+  const [form, setForm] = useState({ username: '', password: '' });
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -19,7 +19,7 @@ export default function LoginPage() {
         <div className="card p-4 shadow-sm">
           <h2 className="mb-3">Login</h2>
           <form onSubmit={handleSubmit} className="d-grid gap-3">
-            <input className="form-control" placeholder="Email" type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+            <input className="form-control" placeholder="Usuario" value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} />
             <input className="form-control" placeholder="Contraseña" type="password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} />
             <button className="btn btn-primary" disabled={loading}>Ingresar</button>
           </form>
