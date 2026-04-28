@@ -42,3 +42,12 @@ body {
 .btn {
   border-radius: 0.75rem;
 }
+
+.product-cover {
+  height: 220px;
+  object-fit: cover;
+}
+
+.product-card .badge {
+  border-radius: 999px;
+}
