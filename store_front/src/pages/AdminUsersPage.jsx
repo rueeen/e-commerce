@@ -11,6 +11,7 @@ const ROLES = [
 export default function AdminUsersPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [meId, setMeId] = useState(null);
 
   const loadUsers = async () => {
     try {
@@ -23,7 +24,7 @@ export default function AdminUsersPage() {
     }
   };
 
-  useEffect(() => { loadUsers(); }, []);
+  useEffect(() => { api.me().then(({data})=>setMeId(data.id)); loadUsers(); }, []);
 
   const onFieldChange = (id, field, value) => {
     setUsers((prev) => prev.map((user) => (user.id === id ? { ...user, [field]: value } : user)));
@@ -95,7 +96,7 @@ export default function AdminUsersPage() {
                 <td><span className={`badge ${user.is_active ? 'text-bg-success' : 'text-bg-secondary'}`}>{user.is_active ? 'Activo' : 'Inactivo'}</span></td>
                 <td className="d-flex gap-2">
                   <button className="btn btn-primary btn-sm" onClick={() => saveBasics(user)}>Guardar</button>
-                  <button className={`btn btn-sm ${user.is_active ? 'btn-outline-danger' : 'btn-outline-success'}`} onClick={() => toggleStatus(user)}>{user.is_active ? 'Desactivar' : 'Activar'}</button>
+                  <button disabled={user.id===meId} className={`btn btn-sm ${user.is_active ? 'btn-outline-danger' : 'btn-outline-success'}`} onClick={() => toggleStatus(user)}>{user.id===meId ? 'Tu cuenta' : (user.is_active ? 'Desactivar' : 'Activar')}</button>
                 </td>
               </tr>
             ))}

@@ -26,10 +26,7 @@ export default function MainLayout() {
                   {isCustomer ? <li className="nav-item"><NavLink className="nav-link" to="/orders">Pedidos</NavLink></li> : null}
                   {isCustomer ? <li className="nav-item"><NavLink className="nav-link" to="/library">Mis singles</NavLink></li> : null}
                   <li className="nav-item"><NavLink className="nav-link" to="/profile">Perfil</NavLink></li>
-                  {(isAdmin || isWorker) ? <li className="nav-item"><NavLink className="nav-link" to="/admin/products">Productos</NavLink></li> : null}
-                  {(isAdmin || isWorker) ? <li className="nav-item"><NavLink className="nav-link" to="/admin/orders">Órdenes</NavLink></li> : null}
-                  {isAdmin ? <li className="nav-item"><NavLink className="nav-link" to="/dashboard">Dashboard</NavLink></li> : null}
-                  {isAdmin ? <li className="nav-item"><NavLink className="nav-link" to="/admin/users">Usuarios</NavLink></li> : null}
+                  {(isAdmin || isWorker) ? <li className="nav-item"><NavLink className="nav-link" to="/admin">Panel admin</NavLink></li> : null}
                   <li className="nav-item"><span className="badge role-badge">Rol: {roleLabel}</span></li>
                   <li className="nav-item"><button className="btn btn-outline-primary btn-sm" onClick={logout}>Logout</button></li>
                 </>
