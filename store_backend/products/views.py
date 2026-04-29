@@ -2,9 +2,9 @@ from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .models import MTGCard, Product
+from .models import Category, MTGCard, Product
 from .permissions import IsAdminOrReadOnly
-from .serializers import MTGCardSerializer, ProductSerializer
+from .serializers import CategorySerializer, MTGCardSerializer, ProductSerializer
 from .services import import_card, import_set, search_cards, sync_bulk_data
 
 
@@ -73,3 +73,11 @@ class ScryfallImportViewSet(viewsets.ViewSet):
     def import_bulk_action(self, request):
         max_cards = int(request.data.get("max_cards", 5000))
         return Response(sync_bulk_data(max_cards=max_cards))
+
+
+class CategoryViewSet(viewsets.ModelViewSet):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+    permission_classes = [IsAdminOrReadOnly]
+    filter_backends = [filters.SearchFilter]
+    search_fields = ["name"]
