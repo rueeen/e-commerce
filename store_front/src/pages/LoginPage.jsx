@@ -16,7 +16,7 @@ export default function LoginPage() {
   return (
     <div className="row justify-content-center">
       <div className="col-md-5">
-        <div className="card p-4 shadow-sm">
+        <div className="panel-card p-4">
           <h2 className="mb-3">Login</h2>
           <form onSubmit={handleSubmit} className="d-grid gap-3">
             <input className="form-control" placeholder="Usuario" value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} />
