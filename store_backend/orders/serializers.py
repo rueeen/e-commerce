@@ -1,20 +1,30 @@
 from rest_framework import serializers
 
-from .models import Order, OrderItem
+from .models import AssistedPurchaseItem, AssistedPurchaseOrder
 
 
-class OrderItemSerializer(serializers.ModelSerializer):
+class AssistedPurchaseItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source="product.name", read_only=True)
 
     class Meta:
-        model = OrderItem
-        fields = ("id", "product", "product_name", "quantity", "unit_price", "subtotal")
+        model = AssistedPurchaseItem
+        fields = ("id", "product", "product_name", "quantity", "unit_price_usd", "subtotal_usd")
 
 
-class OrderSerializer(serializers.ModelSerializer):
-    items = OrderItemSerializer(many=True, read_only=True)
+class AssistedPurchaseOrderSerializer(serializers.ModelSerializer):
+    items = AssistedPurchaseItemSerializer(many=True)
 
     class Meta:
-        model = Order
-        fields = ("id", "status", "total_amount", "created_at", "updated_at", "items")
-        read_only_fields = ("total_amount", "created_at", "updated_at")
+        model = AssistedPurchaseOrder
+        fields = (
+            "id", "user", "supplier", "status", "subtotal_usd", "exchange_rate", "service_fee", "shipping_estimate",
+            "tax_estimate", "total_clp", "notes", "created_at", "updated_at", "items",
+        )
+        read_only_fields = ("user", "created_at", "updated_at")
+
+    def create(self, validated_data):
+        items_data = validated_data.pop("items", [])
+        order = AssistedPurchaseOrder.objects.create(**validated_data)
+        for item_data in items_data:
+            AssistedPurchaseItem.objects.create(order=order, **item_data)
+        return order

@@ -1,9 +1,8 @@
-from django.urls import path
+from rest_framework.routers import DefaultRouter
 
-from .views import CheckoutView, UserOrderDetailView, UserOrderListView
+from .views import AssistedPurchaseOrderViewSet
 
-urlpatterns = [
-    path('checkout/', CheckoutView.as_view(), name='checkout'),
-    path('', UserOrderListView.as_view(), name='order-list'),
-    path('<int:pk>/', UserOrderDetailView.as_view(), name='order-detail'),
-]
+router = DefaultRouter()
+router.register("", AssistedPurchaseOrderViewSet, basename="assisted-order")
+
+urlpatterns = router.urls
