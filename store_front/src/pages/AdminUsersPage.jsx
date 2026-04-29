@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/endpoints';
 import { notyf } from '../api/notifier';
 
@@ -12,19 +12,28 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [meId, setMeId] = useState(null);
+  const hasLoaded = useRef(false);
 
   const loadUsers = async () => {
     try {
       const { data } = await api.adminUsers();
       setUsers(data.results || data);
-    } catch {
-      notyf.error('No fue posible cargar usuarios');
+    } catch (error) {
+      if (error.response?.status !== 401) {
+        notyf.error('No fue posible cargar usuarios');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { api.me().then(({data})=>setMeId(data.id)); loadUsers(); }, []);
+  useEffect(() => {
+    if (hasLoaded.current) return;
+    hasLoaded.current = true;
+
+    api.me().then(({ data }) => setMeId(data.id));
+    loadUsers();
+  }, []);
 
   const onFieldChange = (id, field, value) => {
     setUsers((prev) => prev.map((user) => (user.id === id ? { ...user, [field]: value } : user)));
