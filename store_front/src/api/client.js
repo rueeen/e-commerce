@@ -27,6 +27,7 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('authToken');
       localStorage.removeItem('authUser');
+      return Promise.reject(error);
     }
 
     notyf.error(message);
