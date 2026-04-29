@@ -25,7 +25,9 @@ class ProductSerializer(serializers.ModelSerializer):
 
 
 class CategorySerializer(serializers.ModelSerializer):
+    products_count = serializers.IntegerField(read_only=True)
+
     class Meta:
         model = Category
-        fields = ("id", "name", "description", "is_active", "created_at", "updated_at")
+        fields = ("id", "name", "slug", "description", "is_active", "products_count", "created_at", "updated_at")
         read_only_fields = ("created_at", "updated_at")

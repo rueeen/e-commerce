@@ -1,4 +1,22 @@
-import { NavLink, useNavigate } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
-const items=[['/admin/dashboard','bi-speedometer2','Dashboard'],['/admin/productos','bi-box-seam','Productos'],['/admin/categorias','bi-tags','Categorías'],['/admin/usuarios','bi-people','Usuarios'],['/admin/pedidos','bi-receipt','Pedidos'],['/admin/stock','bi-archive','Stock'],['/admin/configuracion','bi-gear','Configuración']];
-export default function AdminSidebar({open,onClose}){const {logout}=useAuth(); const nav=useNavigate(); return <aside className={`admin-sidebar ${open?'open':''}`}><div className='admin-brand'>E-Commerce Admin</div><nav>{items.map(([to,icon,label])=><NavLink key={to} to={to} onClick={onClose} className='admin-link'><i className={`bi ${icon}`}></i>{label}</NavLink>)}</nav><div className='mt-auto d-grid gap-2'><NavLink className='btn btn-outline-secondary' to='/' onClick={onClose}>Volver a tienda</NavLink><button className='btn btn-primary' onClick={()=>{logout();nav('/login');}}>Cerrar sesión</button></div></aside>}
+import { NavLink, useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
+
+const items = [
+  ['/admin/dashboard', 'bi-speedometer2', 'Dashboard'],
+  ['/admin/productos', 'bi-box-seam', 'Productos'],
+  ['/admin/categorias', 'bi-tags', 'Categorías'],
+  ['/admin/usuarios', 'bi-people', 'Usuarios'],
+  ['/admin/pedidos', 'bi-receipt', 'Pedidos'],
+  ['/admin/importar-excel', 'bi-file-earmark-excel', 'Importar productos Excel'],
+];
+
+export default function AdminSidebar({ open, onClose }) {
+  const { logout, isAdmin } = useAuth();
+  const nav = useNavigate();
+
+  return <aside className={`admin-sidebar ${open ? 'open' : ''}`}>
+    <div className="admin-brand">ManaMarket Admin</div>
+    <nav className="d-flex flex-column gap-1">{items.filter((item) => isAdmin || item[0] !== '/admin/usuarios').map(([to, icon, label]) => <NavLink key={to} to={to} onClick={onClose} className="admin-link"><i className={`bi ${icon}`} />{label}</NavLink>)}</nav>
+    <div className="mt-auto d-grid gap-2"><NavLink className="btn btn-outline-secondary" to="/">Volver a la tienda</NavLink><button className="btn btn-primary" onClick={() => { logout(); nav('/login'); }}>Cerrar sesión</button></div>
+  </aside>;
+}
