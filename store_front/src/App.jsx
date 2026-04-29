@@ -12,6 +12,7 @@ import ProfilePage from './pages/ProfilePage';
 import LogoutPage from './pages/LogoutPage';
 import AdminProductsPage from './pages/AdminProductsPage';
 import AdminOrdersPage from './pages/AdminOrdersPage';
+import AdminUsersPage from './pages/AdminUsersPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import WorkerRoute from './components/WorkerRoute';
@@ -30,7 +31,7 @@ export default function App() {
         <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
         <Route path="/logout" element={<ProtectedRoute><LogoutPage /></ProtectedRoute>} />
         <Route path="/dashboard" element={<AdminRoute><AdminProductsPage /></AdminRoute>} />
-        <Route path="/admin/users" element={<AdminRoute><div className="alert alert-warning">TODO: Vista de usuarios pendiente.</div></AdminRoute>} />
+        <Route path="/admin/users" element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
         <Route path="/admin/products" element={<WorkerRoute><AdminProductsPage /></WorkerRoute>} />
         <Route path="/admin/orders" element={<WorkerRoute><AdminOrdersPage /></WorkerRoute>} />
         <Route path="/login" element={<LoginPage />} />

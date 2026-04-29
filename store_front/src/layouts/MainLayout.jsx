@@ -3,8 +3,9 @@ import { useAuth } from '../hooks/useAuth';
 import { useCart } from '../hooks/useCart';
 
 export default function MainLayout() {
-  const { isAuthenticated, isAdmin, isWorker, role, logout } = useAuth();
+  const { isAuthenticated, isAdmin, isWorker, isCustomer, role, logout } = useAuth();
   const { items } = useCart();
+  const roleLabel = { admin: 'Administrador', worker: 'Trabajador', customer: 'Cliente' }[role] || role;
 
   return (
     <>
@@ -22,14 +23,14 @@ export default function MainLayout() {
               <li className="nav-item"><NavLink className="nav-link" to="/cart">Carrito ({items.length})</NavLink></li>
               {isAuthenticated ? (
                 <>
-                  <li className="nav-item"><NavLink className="nav-link" to="/orders">Pedidos</NavLink></li>
-                  <li className="nav-item"><NavLink className="nav-link" to="/library">Mis singles</NavLink></li>
+                  {isCustomer ? <li className="nav-item"><NavLink className="nav-link" to="/orders">Pedidos</NavLink></li> : null}
+                  {isCustomer ? <li className="nav-item"><NavLink className="nav-link" to="/library">Mis singles</NavLink></li> : null}
                   <li className="nav-item"><NavLink className="nav-link" to="/profile">Perfil</NavLink></li>
                   {(isAdmin || isWorker) ? <li className="nav-item"><NavLink className="nav-link" to="/admin/products">Productos</NavLink></li> : null}
                   {(isAdmin || isWorker) ? <li className="nav-item"><NavLink className="nav-link" to="/admin/orders">Órdenes</NavLink></li> : null}
                   {isAdmin ? <li className="nav-item"><NavLink className="nav-link" to="/dashboard">Dashboard</NavLink></li> : null}
                   {isAdmin ? <li className="nav-item"><NavLink className="nav-link" to="/admin/users">Usuarios</NavLink></li> : null}
-                  <li className="nav-item"><span className="badge text-bg-light border">Rol: {role}</span></li>
+                  <li className="nav-item"><span className="badge text-bg-light border">Rol: {roleLabel}</span></li>
                   <li className="nav-item"><button className="btn btn-outline-dark btn-sm" onClick={logout}>Logout</button></li>
                 </>
               ) : (
