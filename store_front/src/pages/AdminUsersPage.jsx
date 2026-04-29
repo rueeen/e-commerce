@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api/endpoints';
+import { useAuth } from '../hooks/useAuth';
 import { notyf } from '../api/notifier';
 
 const ROLES = [
@@ -9,6 +11,8 @@ const ROLES = [
 ];
 
 export default function AdminUsersPage() {
+  const navigate = useNavigate();
+  const { token } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [meId, setMeId] = useState(null);
@@ -19,7 +23,9 @@ export default function AdminUsersPage() {
       const { data } = await api.adminUsers();
       setUsers(data.results || data);
     } catch (error) {
-      if (error.response?.status !== 401) {
+      if (error.response?.status === 401) {
+        navigate('/login', { replace: true });
+      } else {
         notyf.error('No fue posible cargar usuarios');
       }
     } finally {
@@ -28,12 +34,18 @@ export default function AdminUsersPage() {
   };
 
   useEffect(() => {
-    if (hasLoaded.current) return;
+    if (!token || hasLoaded.current) return;
     hasLoaded.current = true;
 
-    api.me().then(({ data }) => setMeId(data.id));
+    api.me()
+      .then(({ data }) => setMeId(data.id))
+      .catch((error) => {
+        if (error.response?.status === 401) {
+          navigate('/login', { replace: true });
+        }
+      });
     loadUsers();
-  }, []);
+  }, [navigate, token]);
 
   const onFieldChange = (id, field, value) => {
     setUsers((prev) => prev.map((user) => (user.id === id ? { ...user, [field]: value } : user)));
