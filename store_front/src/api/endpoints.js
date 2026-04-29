@@ -26,4 +26,9 @@ export const api = {
   register: (payload) => apiClient.post('/api/auth/register/', payload),
   login: (payload) => apiClient.post('/api/auth/login/', payload),
   me: () => apiClient.get('/api/auth/me/'),
+  adminUsers: () => apiClient.get('/api/auth/users/'),
+  adminUserById: (id) => apiClient.get(`/api/auth/users/${id}/`),
+  adminUpdateUser: (id, payload) => apiClient.patch(`/api/auth/users/${id}/`, payload),
+  adminUpdateUserRole: (id, role) => apiClient.patch(`/api/auth/users/${id}/role/`, { role }),
+  adminUpdateUserStatus: (id, is_active) => apiClient.patch(`/api/auth/users/${id}/status/`, { is_active }),
 };
