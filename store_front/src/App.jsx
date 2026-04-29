@@ -1,43 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
-import MainLayout from './layouts/MainLayout';
-import HomePage from './pages/HomePage';
-import CatalogPage from './pages/CatalogPage';
-import ProductDetailPage from './pages/ProductDetailPage';
-import CartPage from './pages/CartPage';
-import OrdersPage from './pages/OrdersPage';
-import DigitalLibraryPage from './pages/DigitalLibraryPage';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import ProfilePage from './pages/ProfilePage';
-import LogoutPage from './pages/LogoutPage';
-import AdminProductsPage from './pages/AdminProductsPage';
-import AdminOrdersPage from './pages/AdminOrdersPage';
-import AdminUsersPage from './pages/AdminUsersPage';
-import ProtectedRoute from './components/ProtectedRoute';
-import AdminRoute from './components/AdminRoute';
-import WorkerRoute from './components/WorkerRoute';
-import CustomerRoute from './components/CustomerRoute';
-
-export default function App() {
-  return (
-    <Routes>
-      <Route element={<MainLayout />}>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/catalog" element={<CatalogPage />} />
-        <Route path="/products/:id" element={<ProductDetailPage />} />
-        <Route path="/cart" element={<CartPage />} />
-        <Route path="/orders" element={<CustomerRoute><OrdersPage /></CustomerRoute>} />
-        <Route path="/library" element={<CustomerRoute><DigitalLibraryPage /></CustomerRoute>} />
-        <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-        <Route path="/logout" element={<ProtectedRoute><LogoutPage /></ProtectedRoute>} />
-        <Route path="/dashboard" element={<AdminRoute><AdminProductsPage /></AdminRoute>} />
-        <Route path="/admin/users" element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
-        <Route path="/admin/products" element={<WorkerRoute><AdminProductsPage /></WorkerRoute>} />
-        <Route path="/admin/orders" element={<WorkerRoute><AdminOrdersPage /></WorkerRoute>} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Route>
-    </Routes>
-  );
-}
+import MainLayout from './layouts/MainLayout';import AdminLayout from './layouts/AdminLayout';
+import HomePage from './pages/HomePage';import CatalogPage from './pages/CatalogPage';import ProductDetailPage from './pages/ProductDetailPage';import CartPage from './pages/CartPage';import OrdersPage from './pages/OrdersPage';import LoginPage from './pages/LoginPage';import RegisterPage from './pages/RegisterPage';import ProfilePage from './pages/ProfilePage';import AdminProductsPage from './pages/AdminProductsPage';import AdminOrdersPage from './pages/AdminOrdersPage';import AdminUsersPage from './pages/AdminUsersPage';import ProtectedRoute from './components/ProtectedRoute';import AdminRoute from './components/AdminRoute';import WorkerRoute from './components/WorkerRoute';import CustomerRoute from './components/CustomerRoute';import CategoryList from './pages/CategoryList';import CategoryCreate from './pages/CategoryCreate';import CategoryEdit from './pages/CategoryEdit';
+const Placeholder=({title})=><div className="panel-card p-4"><h2>{title}</h2></div>;
+export default function App(){return <Routes><Route element={<MainLayout/>}><Route path='/' element={<HomePage/>}/><Route path='/catalogo' element={<CatalogPage/>}/><Route path='/catalog' element={<Navigate to='/catalogo' replace/>}/><Route path='/productos/:id' element={<ProductDetailPage/>}/><Route path='/products/:id' element={<Navigate to='/catalogo' replace/>}/><Route path='/carrito' element={<CartPage/>}/><Route path='/cart' element={<Navigate to='/carrito' replace/>}/><Route path='/mis-pedidos' element={<CustomerRoute><OrdersPage/></CustomerRoute>}/><Route path='/mis-pedidos/:id' element={<CustomerRoute><Placeholder title='Detalle pedido'/></CustomerRoute>}/><Route path='/mi-cuenta' element={<ProtectedRoute><ProfilePage/></ProtectedRoute>}/><Route path='/login' element={<LoginPage/>}/><Route path='/registro' element={<RegisterPage/>}/><Route path='/register' element={<Navigate to='/registro' replace/>}/></Route><Route path='/admin' element={<WorkerRoute><AdminLayout/></WorkerRoute>}><Route index element={<Navigate to='dashboard' replace/>}/><Route path='dashboard' element={<AdminRoute><Placeholder title='Dashboard'/></AdminRoute>}/><Route path='productos' element={<AdminProductsPage/>}/><Route path='productos/crear' element={<AdminProductsPage/>}/><Route path='productos/:id/editar' element={<AdminProductsPage/>}/><Route path='categorias' element={<CategoryList/>}/><Route path='categorias/crear' element={<CategoryCreate/>}/><Route path='categorias/:id/editar' element={<CategoryEdit/>}/><Route path='usuarios' element={<AdminRoute><AdminUsersPage/></AdminRoute>}/><Route path='usuarios/:id/editar' element={<AdminRoute><AdminUsersPage/></AdminRoute>}/><Route path='pedidos' element={<AdminOrdersPage/>}/><Route path='pedidos/:id' element={<AdminOrdersPage/>}/><Route path='stock' element={<WorkerRoute><Placeholder title='Stock'/></WorkerRoute>}/><Route path='configuracion' element={<AdminRoute><Placeholder title='Configuración'/></AdminRoute>}/></Route><Route path='*' element={<Navigate to='/' replace/>}/></Routes>}

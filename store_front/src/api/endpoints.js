@@ -6,12 +6,12 @@ export const api = {
   updateProduct: (id, payload) => apiClient.put(`/api/products/${id}/`, payload),
   patchProduct: (id, payload) => apiClient.patch(`/api/products/${id}/`, payload),
   deleteProduct: (id) => apiClient.delete(`/api/products/${id}/`),
-  importProductsExcel: (file) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    return apiClient.post('/api/products/import-excel/', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-  },
-  getCategories: () => apiClient.get('/api/categories/'),
+  getCategories: (params = {}) => apiClient.get('/api/categories/', { params }),
+  getCategory: (id) => apiClient.get(`/api/categories/${id}/`),
+  createCategory: (payload) => apiClient.post('/api/categories/', payload),
+  updateCategory: (id, payload) => apiClient.put(`/api/categories/${id}/`, payload),
+  patchCategory: (id, payload) => apiClient.patch(`/api/categories/${id}/`, payload),
+  deleteCategory: (id) => apiClient.delete(`/api/categories/${id}/`),
 
   productById: (id) => apiClient.get(`/api/products/${id}/`),
   cart: () => apiClient.get('/api/cart/'),
