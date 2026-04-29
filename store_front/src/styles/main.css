@@ -1,53 +1,73 @@
-:root {
-  --brand: #5a48f5;
-  --brand-dark: #3e30b5;
-  --surface: #f8f9ff;
-}
-
 body {
-  background: var(--surface);
-  color: #1d2433;
+  background-color: #0F172A;
+  color: #F1F5F9;
+  font-family: 'Inter', 'Segoe UI', 'Roboto', sans-serif;
 }
 
-.hero-banner {
-  background: linear-gradient(135deg, var(--brand), #7d6dff);
-  border-radius: 1rem;
+a { color: #94A3B8; transition: color 0.25s ease; }
+a:hover { color: #F1F5F9; }
+
+.main-navbar { background-color: rgba(15, 23, 42, 0.95); border-bottom: 1px solid #334155; backdrop-filter: blur(8px); }
+.brand-title { color: #F1F5F9; letter-spacing: 0.03em; }
+.nav-link { color: #94A3B8 !important; font-weight: 500; }
+.nav-link:hover, .nav-link.active { color: #F1F5F9 !important; }
+.role-badge { background: #1E293B; color: #F1F5F9; border: 1px solid #334155; }
+.navbar-toggler { border-color: #334155; }
+.navbar-toggler-icon { filter: invert(1); }
+
+.main-container { min-height: calc(100vh - 220px); }
+.panel-card, .card {
+  background-color: #111827;
+  border: 1px solid #334155;
+  border-radius: 16px;
+  color: #F1F5F9;
 }
 
-.product-card {
-  border: 0;
-  border-radius: 1rem;
-  box-shadow: 0 10px 24px rgba(23, 32, 74, 0.08);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+.form-control, .form-select {
+  background-color: #1E293B;
+  border: 1px solid #334155;
+  color: #F1F5F9;
+}
+.form-control::placeholder { color: #94A3B8; }
+.form-control:focus, .form-select:focus {
+  background-color: #1E293B;
+  border-color: #7C3AED;
+  box-shadow: 0 0 0 0.2rem rgba(124, 58, 237, 0.25);
+  color: #F1F5F9;
 }
 
-.product-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 14px 28px rgba(23, 32, 74, 0.12);
+.btn { border-radius: 10px; transition: all 0.25s ease; }
+.btn-primary { background: #7C3AED; border-color: #7C3AED; }
+.btn-primary:hover { background: #8B5CF6; border-color: #8B5CF6; transform: translateY(-1px); }
+.btn-outline-primary { border-color: #7C3AED; color: #C4B5FD; }
+.btn-outline-primary:hover { background: #7C3AED; color: #fff; }
+.btn-secondary, .btn-outline-secondary { background: #334155; border-color: #475569; color: #F1F5F9; }
+.btn-danger, .btn-outline-danger:hover { background: #EF4444; border-color: #EF4444; }
+
+.product-cover { height: 240px; object-fit: cover; transition: transform 0.3s ease; }
+.product-card { background: #111827; border: 1px solid #334155; border-radius: 16px; box-shadow: 0 8px 25px rgba(2, 6, 23, 0.45); transition: transform 0.25s ease, box-shadow 0.25s ease; overflow: hidden; }
+.product-card:hover { transform: translateY(-6px); box-shadow: 0 14px 30px rgba(2, 6, 23, 0.7); }
+.product-card:hover .product-cover { transform: scale(1.04); }
+.price-highlight { color: #22C55E; font-size: 1.2rem; font-weight: 700; }
+.text-muted, .text-secondary { color: #94A3B8 !important; }
+
+.badge-soft { background: #1E293B; color: #F1F5F9; border: 1px solid #334155; }
+.badge-success { background: rgba(34, 197, 94, 0.2); color: #22C55E; border: 1px solid #22C55E; }
+.badge-warning { background: rgba(245, 158, 11, 0.2); color: #F59E0B; border: 1px solid #F59E0B; }
+.badge-error { background: rgba(239, 68, 68, 0.2); color: #EF4444; border: 1px solid #EF4444; }
+
+.table { color: #F1F5F9; }
+.table thead th { background: #1E293B; color: #F1F5F9; border-color: #334155; }
+.table td { background: #111827; border-color: #334155; }
+.table tbody tr:hover td { background: #1E293B; }
+
+.footer-main { background: #020617; border-top: 1px solid #334155; color: #94A3B8; }
+.footer-main h6 { color: #F1F5F9; }
+.footer-link { color: #94A3B8; text-decoration: none; display: block; margin-bottom: .35rem; }
+.footer-link:hover { color: #F1F5F9; }
+
+@media (max-width: 991px) {
+  .main-navbar .navbar-collapse { background: #0F172A; border: 1px solid #334155; border-radius: 12px; padding: 1rem; margin-top: .75rem; }
 }
 
-.btn-primary {
-  background: var(--brand);
-  border-color: var(--brand);
-}
-
-.btn-primary:hover {
-  background: var(--brand-dark);
-  border-color: var(--brand-dark);
-}
-
-.card,
-.form-control,
-.form-select,
-.btn {
-  border-radius: 0.75rem;
-}
-
-.product-cover {
-  height: 220px;
-  object-fit: cover;
-}
-
-.product-card .badge {
-  border-radius: 999px;
-}
+.footer-bottom{border-color:#334155 !important;}

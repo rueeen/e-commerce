@@ -58,7 +58,7 @@ export default function AdminProductsPage() {
     <h2 className="mb-3">Mantenedor de productos</h2>
     <ExcelImportBox onImport={onImport} result={importResult} />
     <ProductForm form={form} categories={categories} onChange={onChange} onSubmit={submit} submitLabel={editing ? 'Actualizar producto' : 'Crear producto'} onCancel={editing ? () => { setEditing(null); setForm(initialFormState); } : null} />
-    <div className="card p-3 mt-4">
+    <div className="panel-card p-3 mt-4">
       <div className="row g-2 mb-3">
         <div className="col-md-4"><input className="form-control" placeholder="Buscar por nombre" value={filters.q} onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))} /></div>
         <div className="col-md-3"><select className="form-select" value={filters.category} onChange={(e) => setFilters((f) => ({ ...f, category: e.target.value }))}><option value="">Todas las categorías</option>{categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>

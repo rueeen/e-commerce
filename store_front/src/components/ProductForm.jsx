@@ -13,7 +13,7 @@ export { initialFormState };
 
 export default function ProductForm({ form, categories, onChange, onSubmit, onCancel, submitLabel }) {
   return (
-    <form className="card p-3" onSubmit={onSubmit}>
+    <form className="panel-card p-3" onSubmit={onSubmit}>
       <div className="row g-2">
         <div className="col-md-4"><input className="form-control" placeholder="Nombre" value={form.name} onChange={(e) => onChange('name', e.target.value)} required /></div>
         <div className="col-md-4"><input className="form-control" type="number" min="0" step="0.01" placeholder="Precio" value={form.price} onChange={(e) => onChange('price', e.target.value)} required /></div>

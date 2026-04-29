@@ -25,7 +25,8 @@ export default function CatalogPage() {
 
   return <>
     <h2 className="mb-3">Catálogo Magic: The Gathering</h2>
-    <div className="row g-2 mb-4">
+    <p className="text-secondary mb-4">Explora cartas, sellados y accesorios con estética premium para duelistas y coleccionistas.</p>
+    <div className="row g-2 mb-4 panel-card p-3">
       <div className="col-md-4"><input className="form-control" placeholder="Buscar carta/producto" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
       <div className="col-md-3"><select className="form-select" value={type} onChange={(e) => setType(e.target.value)}><option value="">Tipo de producto</option><option value="single">Carta individual</option><option value="sealed">Sellado</option><option value="accessory">Accesorio</option><option value="deck">Mazo</option><option value="bundle">Bundle</option></select></div>
       <div className="col-md-3"><input className="form-control" placeholder="Rareza (common, rare...)" value={rarity} onChange={(e) => setRarity(e.target.value)} /></div>
