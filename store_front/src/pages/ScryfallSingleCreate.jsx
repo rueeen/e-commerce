@@ -109,7 +109,7 @@ export default function ScryfallSingleCreate() {
   };
 
   return <div><h3>Crear single desde Scryfall</h3>
-    <div className="alert alert-info">El single se creará con stock 0. Para aumentar inventario, debe ingresarse mediante una Orden de Compra.</div><div className="input-group mb-3"><input className="form-control" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar: Cloud, Sauron..." /><button className="btn btn-primary" onClick={search} disabled={loading}><i className="bi bi-search" /> Buscar</button></div>
+    <div className="alert alert-info">El stock se ingresa mediante Orden de Compra.</div><div className="input-group mb-3"><input className="form-control" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar: Cloud, Sauron..." /><button className="btn btn-primary" onClick={search} disabled={loading}><i className="bi bi-search" /> Buscar</button></div>
     <div className="row g-3">{results.map((c) => <div className="col-md-3" key={c.id}><div className="card h-100 bg-dark text-light"><img src={getCardImage(c)} className="card-img-top scryfall-card-img" alt={c.name} /><div className="card-body"><h6>{c.name}</h6><small>{c.set?.toUpperCase()} #{c.collector_number} · {c.rarity}</small><button className="btn btn-outline-light btn-sm mt-2 w-100" onClick={() => openCreateModal(c)}>Crear single</button></div></div></div>)}</div>
     {missingSingleCategory && <div className="alert alert-warning d-flex justify-content-between align-items-center">
       <span>No existe la categoría Cartas individuales. Créala antes de publicar singles.</span>

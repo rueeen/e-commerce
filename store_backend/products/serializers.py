@@ -70,10 +70,20 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
 class KardexMovementSerializer(serializers.ModelSerializer):
     producto = serializers.CharField(source="product.name", read_only=True)
     usuario = serializers.CharField(source="created_by.username", read_only=True)
+    reference_display = serializers.SerializerMethodField()
 
     class Meta:
         model = KardexMovement
         fields = "__all__"
+
+    def get_reference_display(self, obj):
+        if obj.reference_label:
+            return obj.reference_label
+        if obj.reference_type and obj.reference_id:
+            return f"{obj.reference_type} #{obj.reference_id}"
+        if obj.reference_type:
+            return obj.reference_type
+        return "Sin referencia"
 
 
 class PricingSettingsSerializer(serializers.ModelSerializer):
