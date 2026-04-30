@@ -99,6 +99,7 @@ class ExchangeRateConfig(models.Model):
     name = models.CharField(max_length=80, default="default")
     usd_to_clp = models.DecimalField(max_digits=12, decimal_places=2)
     is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
 
@@ -117,13 +118,14 @@ class ShippingConfig(models.Model):
 
 
 class PricingSettings(models.Model):
-    name = models.CharField(max_length=80, default="default")
+    name = models.CharField(max_length=120, default="Configuración principal")
     usd_to_clp = models.DecimalField(max_digits=12, decimal_places=2, default=1000)
     import_factor = models.DecimalField(max_digits=5, decimal_places=2, default=1.30)
     risk_factor = models.DecimalField(max_digits=5, decimal_places=2, default=1.10)
     margin_factor = models.DecimalField(max_digits=5, decimal_places=2, default=1.25)
-    round_to = models.PositiveIntegerField(default=100)
+    rounding_to = models.PositiveIntegerField(default=100)
     is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

@@ -24,4 +24,4 @@ admin.site.register(ShippingConfig)
 
 @admin.register(PricingSettings)
 class PricingSettingsAdmin(admin.ModelAdmin):
-    list_display = ("name", "usd_to_clp", "import_factor", "risk_factor", "margin_factor", "round_to", "is_active", "updated_at")
+    list_display = ("name", "usd_to_clp", "import_factor", "risk_factor", "margin_factor", "rounding_to", "is_active", "updated_at")

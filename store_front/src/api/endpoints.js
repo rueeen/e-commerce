@@ -24,6 +24,10 @@ export const api = {
   createCategory: (payload) => apiClient.post('/api/categories/', payload),
   updateCategory: (id, payload) => apiClient.put(`/api/categories/${id}/`, payload),
   patchCategory: (id, payload) => apiClient.patch(`/api/categories/${id}/`, payload),
+  listPricingSettings: () => apiClient.get('/api/pricing-settings/'),
+  getActivePricingSettings: () => apiClient.get('/api/pricing-settings/active/'),
+  updatePricingSettings: (id, payload) => apiClient.patch(`/api/pricing-settings/${id}/`, payload),
+  createPricingSettings: (payload) => apiClient.post('/api/pricing-settings/', payload),
 
   orders: (params = {}) => apiClient.get('/api/orders/', { params }),
   orderById: (id) => apiClient.get(`/api/orders/${id}/`),

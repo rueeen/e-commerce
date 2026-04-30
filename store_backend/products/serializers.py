@@ -36,4 +36,17 @@ class CategorySerializer(serializers.ModelSerializer):
 class PricingSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = PricingSettings
-        fields = ("id", "name", "usd_to_clp", "import_factor", "risk_factor", "margin_factor", "round_to", "is_active", "updated_at")
+        fields = ("id", "name", "usd_to_clp", "import_factor", "risk_factor", "margin_factor", "rounding_to", "is_active", "created_at", "updated_at")
+
+    def validate_usd_to_clp(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("usd_to_clp debe ser mayor que 0")
+        return value
+
+    def validate(self, attrs):
+        for key in ["import_factor", "risk_factor", "margin_factor"]:
+            if key in attrs and attrs[key] < 1:
+                raise serializers.ValidationError({key: "Debe ser mayor o igual a 1"})
+        if "rounding_to" in attrs and attrs["rounding_to"] not in {10, 50, 100, 500, 1000}:
+            raise serializers.ValidationError({"rounding_to": "Debe ser uno de: 10, 50, 100, 500, 1000"})
+        return attrs

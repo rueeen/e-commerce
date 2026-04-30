@@ -204,7 +204,20 @@ class PricingSettingsViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return PricingSettings.objects.order_by("-updated_at")
 
+
+    def _ensure_single_active(self, instance):
+        if instance.is_active:
+            PricingSettings.objects.exclude(pk=instance.pk).update(is_active=False)
+
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        self._ensure_single_active(instance)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        self._ensure_single_active(instance)
+
     @action(detail=False, methods=["get"], url_path="active", permission_classes=[AllowAny])
     def active(self, request):
         active_settings = get_active_pricing_settings()
-        return Response(PricingSettingsSerializer(active_settings).data)
+        return Response({"usd_to_clp": active_settings.usd_to_clp, "import_factor": active_settings.import_factor, "risk_factor": active_settings.risk_factor, "margin_factor": active_settings.margin_factor, "rounding_to": active_settings.rounding_to})
