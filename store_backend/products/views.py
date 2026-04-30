@@ -57,7 +57,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         workbook = load_workbook(excel_file, data_only=True)
         sheet = workbook.active
         headers = [str(c.value or "").strip().lower() for c in next(sheet.iter_rows(min_row=1, max_row=1))]
-        required = {"category", "name", "description", "price", "stock", "image", "product_type", "is_active"}
+        required = {"category", "product_type", "name", "price_clp", "stock", "is_active"}
         if not required.issubset(set(headers)):
             return Response({"detail": "Columnas inválidas", "required": sorted(required)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -69,14 +69,32 @@ class ProductViewSet(viewsets.ModelViewSet):
             try:
                 category_name = str(data.get("category") or "Sin categoría").strip()
                 category, _ = Category.objects.get_or_create(name=category_name, defaults={"slug": category_name.lower().replace(" ", "-")})
+                product_type_raw = str(data.get("product_type") or Product.ProductType.SINGLE).lower().strip()
+                product_type_aliases = {"physical": Product.ProductType.SINGLE, "digital": Product.ProductType.ACCESSORY}
+                product_type = product_type_aliases.get(product_type_raw, product_type_raw)
+                valid_types = {choice for choice, _ in Product.ProductType.choices}
+                if product_type not in valid_types:
+                    product_type = Product.ProductType.SINGLE
+
+                scryfall_id = str(data.get("scryfall_id") or "").strip()
+                mtg_card = MTGCard.objects.filter(scryfall_id=scryfall_id).first() if scryfall_id else None
+                price_clp = int(data.get("price_clp") or 0)
+
                 defaults = {
                     "description": str(data.get("description") or ""),
-                    "price": Decimal(str(data.get("price") or "0")),
+                    "price": Decimal(str(price_clp)),
+                    "price_clp": price_clp,
                     "stock": int(data.get("stock") or 0),
                     "image": str(data.get("image") or ""),
-                    "product_type": str(data.get("product_type") or Product.ProductType.SINGLE),
+                    "product_type": product_type,
+                    "condition": str(data.get("condition") or Product.CardCondition.NM),
+                    "language": str(data.get("language") or "EN"),
+                    "is_foil": str(data.get("is_foil") or "false").lower() in {"true", "1", "yes", "si", "sí"},
+                    "edition": str(data.get("edition") or ""),
+                    "notes": str(data.get("notes") or ""),
                     "is_active": str(data.get("is_active") or "true").lower() in {"true", "1", "yes", "si", "sí"},
                     "category": category,
+                    "mtg_card": mtg_card,
                 }
                 _, was_created = Product.objects.update_or_create(name=str(data["name"]).strip(), defaults=defaults)
                 created += int(was_created)

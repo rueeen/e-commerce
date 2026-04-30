@@ -2,6 +2,7 @@ import apiClient from './client';
 
 export const api = {
   getProducts: (params = {}) => apiClient.get('/api/products/', { params }),
+  searchMtgCards: (q) => apiClient.get('/api/cards/', { params: { search: q } }),
   productById: (id) => apiClient.get(`/api/products/${id}/`),
   createProduct: (payload) => apiClient.post('/api/products/', payload),
   updateProduct: (id, payload) => apiClient.put(`/api/products/${id}/`, payload),
