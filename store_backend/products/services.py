@@ -5,6 +5,8 @@ import json
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
+import requests
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
@@ -125,6 +127,14 @@ def search_cards(query):
 
 def get_card_by_id(scryfall_id):
     return _request_json(f"/cards/{scryfall_id}")
+
+
+def get_scryfall_card_by_id(scryfall_id):
+    url = f"{SCRYFALL_BASE}/cards/{scryfall_id}"
+    response = requests.get(url, timeout=10)
+    if response.status_code != 200:
+        raise ValidationError(f"Scryfall no encontró la carta: {response.text}")
+    return response.json()
 
 
 def import_card(scryfall_id):
