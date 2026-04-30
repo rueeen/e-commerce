@@ -10,11 +10,11 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from accounts.permissions import IsAdminUser, IsAdminOrWorkerUser
-from .models import Category, KardexMovement, MTGCard, PricingSettings, Product
+from .models import Category, KardexMovement, MTGCard, PricingSettings, Product, PurchaseOrder, Supplier
 from .permissions import IsAdminOrReadOnly
-from .serializers import CategorySerializer, KardexMovementSerializer, MTGCardSerializer, PricingSettingsSerializer, ProductSerializer
+from .serializers import CategorySerializer, KardexMovementSerializer, MTGCardSerializer, PricingSettingsSerializer, ProductSerializer, PurchaseOrderSerializer, SupplierSerializer
 from .services import ScryfallServiceError, calculate_price_clp, extract_usd_price, get_active_pricing_settings, get_scryfall_card_by_id, import_card, search_cards
-from .kardex import create_kardex_movement
+from .inventory_services import create_stock_movement, receive_purchase_order
 
 
 logger = logging.getLogger(__name__)
@@ -142,7 +142,7 @@ class ProductViewSet(viewsets.ModelViewSet):
                 price_usd_reference=usd_ref,
                 price_clp_suggested=pricing["clp_sugerido"],
                 price_clp_final=price_clp_final,
-                stock=stock,
+                stock=0,
                 condition=request.data.get("condition"),
                 language=request.data.get("language"),
                 is_foil=is_foil,
@@ -152,7 +152,7 @@ class ProductViewSet(viewsets.ModelViewSet):
                     image=card.image_large or card.image_normal or card.image_small,
                 )
                 if stock > 0:
-                    create_kardex_movement(product=product, movement_type=KardexMovement.MovementType.IN, quantity=stock, created_by=request.user, unit_price_clp=price_clp_final, reference="Creación de single desde Scryfall")
+                    create_stock_movement(product=product, movement_type=KardexMovement.MovementType.MANUAL_IN, quantity=stock, created_by=request.user, unit_price_clp=price_clp_final, reference_type="scryfall_create", reference_label="Stock inicial desde creación Scryfall")
             created = True
         except (ValueError, TypeError):
             return Response({"detail": "price_clp_final y stock deben ser numéricos"}, status=400)
@@ -204,7 +204,7 @@ class KardexViewSet(viewsets.GenericViewSet):
             qty = int(p.get("quantity", 0))
             if qty <= 0:
                 return Response({"detail": "quantity debe ser mayor a 0"}, status=400)
-            movement = create_kardex_movement(product=product, movement_type=p.get("movement_type"), quantity=qty, created_by=request.user, unit_cost_clp=int(p.get("unit_cost_clp", 0) or 0), unit_price_clp=int(p.get("unit_price_clp", 0) or 0), reference=p.get("reference", ""), notes=p.get("notes", ""))
+            movement = create_stock_movement(product=product, movement_type=p.get("movement_type"), quantity=qty, created_by=request.user, unit_cost_clp=int(p.get("unit_cost_clp", 0) or 0), unit_price_clp=int(p.get("unit_price_clp", 0) or 0), reference_label=p.get("reference_label", ""), reference_type=p.get("reference_type", "manual"), reference_id=p.get("reference_id", ""), notes=p.get("notes", ""))
         except (TypeError, ValueError, ValidationError) as exc:
             return Response({"detail": str(exc)}, status=400)
         return Response(self.get_serializer(movement).data, status=201)
@@ -257,3 +257,27 @@ class PricingSettingsViewSet(viewsets.ModelViewSet):
     def active(self, request):
         active_settings = get_active_pricing_settings()
         return Response({"usd_to_clp": active_settings.usd_to_clp, "import_factor": active_settings.import_factor, "risk_factor": active_settings.risk_factor, "margin_factor": active_settings.margin_factor, "rounding_to": active_settings.rounding_to})
+
+
+class SupplierViewSet(viewsets.ModelViewSet):
+    serializer_class = SupplierSerializer
+    permission_classes = [IsAdminOrWorkerUser]
+
+    def get_queryset(self):
+        return Supplier.objects.order_by("name")
+
+
+class PurchaseOrderViewSet(viewsets.ModelViewSet):
+    serializer_class = PurchaseOrderSerializer
+    permission_classes = [IsAdminOrWorkerUser]
+
+    def get_queryset(self):
+        return PurchaseOrder.objects.select_related("supplier", "created_by").prefetch_related("items__product").order_by("-created_at")
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=["post"], url_path="receive")
+    def receive(self, request, pk=None):
+        po = receive_purchase_order(int(pk), request.user)
+        return Response(self.get_serializer(po).data)

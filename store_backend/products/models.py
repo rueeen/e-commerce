@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+from django.core.validators import MinValueValidator
 
 
 class PricingSource(models.TextChoices):
@@ -75,6 +76,9 @@ class Product(models.Model):
     price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     price_clp = models.PositiveIntegerField(default=0)
     stock = models.PositiveIntegerField(default=0)
+    stock_minimum = models.PositiveIntegerField(default=0)
+    average_cost_clp = models.PositiveIntegerField(default=0)
+    last_purchase_cost_clp = models.PositiveIntegerField(default=0)
     image = models.URLField(blank=True)
     is_active = models.BooleanField(default=True)
     condition = models.CharField(max_length=5, choices=CardCondition.choices, default=CardCondition.NM)
@@ -92,11 +96,12 @@ class Product(models.Model):
 
 class KardexMovement(models.Model):
     class MovementType(models.TextChoices):
-        IN = "IN", "Entrada manual"
-        OUT = "OUT", "Salida manual"
+        PURCHASE_IN = "PURCHASE_IN", "Compra ingreso"
+        SALE_OUT = "SALE_OUT", "Venta salida"
+        RETURN_IN = "RETURN_IN", "Devolución ingreso"
+        MANUAL_IN = "MANUAL_IN", "Entrada manual"
+        MANUAL_OUT = "MANUAL_OUT", "Salida manual"
         ADJUSTMENT = "ADJUSTMENT", "Ajuste"
-        SALE = "SALE", "Venta"
-        RETURN = "RETURN", "Devolución"
         CORRECTION = "CORRECTION", "Corrección"
 
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="kardex_movements")
@@ -106,7 +111,9 @@ class KardexMovement(models.Model):
     new_stock = models.PositiveIntegerField()
     unit_cost_clp = models.PositiveIntegerField(default=0)
     unit_price_clp = models.PositiveIntegerField(default=0)
-    reference = models.CharField(max_length=255, blank=True)
+    reference_type = models.CharField(max_length=80, blank=True)
+    reference_id = models.CharField(max_length=80, blank=True)
+    reference_label = models.CharField(max_length=255, blank=True)
     notes = models.TextField(blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="kardex_movements")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -117,8 +124,52 @@ class KardexMovement(models.Model):
 
 class Supplier(models.Model):
     name = models.CharField(max_length=120, unique=True)
-    website_url = models.URLField(blank=True)
+    rut = models.CharField(max_length=20, blank=True)
+    contact_name = models.CharField(max_length=120, blank=True)
+    email = models.EmailField(blank=True)
+    phone = models.CharField(max_length=40, blank=True)
+    address = models.CharField(max_length=255, blank=True)
+    country = models.CharField(max_length=80, blank=True)
+    website = models.URLField(blank=True)
+    notes = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+
+class PurchaseOrder(models.Model):
+    class Status(models.TextChoices):
+        DRAFT = "DRAFT", "Borrador"
+        SENT = "SENT", "Enviada"
+        RECEIVED = "RECEIVED", "Recibida"
+        CANCELLED = "CANCELLED", "Cancelada"
+
+    supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT, related_name="purchase_orders")
+    order_number = models.CharField(max_length=50, unique=True)
+    external_reference = models.CharField(max_length=120, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+    subtotal_clp = models.PositiveIntegerField(default=0)
+    shipping_clp = models.PositiveIntegerField(default=0)
+    import_fees_clp = models.PositiveIntegerField(default=0)
+    taxes_clp = models.PositiveIntegerField(default=0)
+    total_clp = models.PositiveIntegerField(default=0)
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="purchase_orders_created")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    received_at = models.DateTimeField(null=True, blank=True)
+
+
+class PurchaseOrderItem(models.Model):
+    purchase_order = models.ForeignKey(PurchaseOrder, on_delete=models.CASCADE, related_name="items")
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="purchase_order_items")
+    quantity_ordered = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    quantity_received = models.PositiveIntegerField(default=0)
+    unit_cost_clp = models.PositiveIntegerField(default=0)
+    subtotal_clp = models.PositiveIntegerField(default=0)
 
 
 class ExchangeRateConfig(models.Model):

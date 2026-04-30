@@ -32,6 +32,12 @@ export const api = {
   createKardexMovement: (payload) => apiClient.post('/api/kardex/movement/', payload),
   productKardex: (id) => apiClient.get(`/api/products/${id}/kardex/`),
 
+  getSuppliers: () => apiClient.get('/api/suppliers/'),
+  createSupplier: (payload) => apiClient.post('/api/suppliers/', payload),
+  getPurchaseOrders: () => apiClient.get('/api/purchase-orders/'),
+  createPurchaseOrder: (payload) => apiClient.post('/api/purchase-orders/', payload),
+  receivePurchaseOrder: (id) => apiClient.post(`/api/purchase-orders/${id}/receive/`),
+
   orders: (params = {}) => apiClient.get('/api/orders/', { params }),
   orderById: (id) => apiClient.get(`/api/orders/${id}/`),
   updateOrderStatus: (id, status) => apiClient.patch(`/api/orders/${id}/status/`, { status }),
