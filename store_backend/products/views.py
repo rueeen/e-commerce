@@ -2,7 +2,7 @@ from django.db.models import Count
 from openpyxl import load_workbook
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.parsers import MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
@@ -64,7 +64,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["name", "description", "mtg_card__name"]
     ordering_fields = ["price", "price_clp", "created_at", "name", "stock"]
-    parser_classes = [MultiPartParser]
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def get_queryset(self):
         q = Product.objects.select_related("mtg_card", "category").all()
@@ -81,7 +81,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="create-single-from-scryfall", permission_classes=[IsAdminUser])
     def create_single_from_scryfall(self, request):
-        required_fields = ["scryfall_id", "category_id", "stock"]
+        required_fields = ["scryfall_id", "category_id", "price_clp_final", "stock", "condition", "language"]
         missing = [field for field in required_fields if request.data.get(field) in (None, "")]
         if missing:
             return Response({"detail": f"Faltan campos: {', '.join(missing)}"}, status=400)
@@ -108,8 +108,8 @@ class ProductViewSet(viewsets.ModelViewSet):
                 "price_usd_reference": usd_ref,
                 "price_clp_suggested": pricing["clp_sugerido"],
                 "stock": stock,
-                "condition": request.data.get("condition", Product.CardCondition.NM),
-                "language": request.data.get("language", "EN"),
+                "condition": request.data.get("condition"),
+                "language": request.data.get("language"),
                 "is_foil": is_foil,
                 "edition": request.data.get("edition", ""),
                 "notes": request.data.get("notes", ""),
