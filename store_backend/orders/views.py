@@ -33,9 +33,11 @@ class AssistedPurchaseOrderViewSet(viewsets.ModelViewSet):
         valid = {s[0] for s in AssistedPurchaseOrder.Status.choices}
         if new_status not in valid:
             return Response({"detail": "Estado inválido"}, status=status.HTTP_400_BAD_REQUEST)
-        order.status = new_status
-        order.save(update_fields=["status", "updated_at"])
         if old_status != new_status and new_status in {AssistedPurchaseOrder.Status.PAID, AssistedPurchaseOrder.Status.APPROVED}:
+            for item in order.items.select_related("product"):
+                if item.product.product_type == "single" and int(item.product.stock or 0) <= 0:
+                    return Response({"detail": f"Sin stock para single: {item.product.name}"}, status=status.HTTP_400_BAD_REQUEST)
+            
             for item in order.items.select_related("product"):
                 create_stock_movement(
                     product=item.product,
@@ -43,9 +45,11 @@ class AssistedPurchaseOrderViewSet(viewsets.ModelViewSet):
                     quantity=item.quantity,
                     created_by=request.user,
                     unit_price_clp=int(item.product.price_clp_final or item.product.price_clp or 0),
-                    reference_type="sale_order",
+                    reference_type="SALE",
                     reference_id=order.id,
                     reference_label=f"Orden #{order.id}",
                     notes="Salida automática por confirmación/pago de orden",
                 )
+        order.status = new_status
+        order.save(update_fields=["status", "updated_at"])
         return Response(self.get_serializer(order).data)

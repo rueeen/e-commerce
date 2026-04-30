@@ -37,6 +37,7 @@ export const api = {
   getPurchaseOrders: () => apiClient.get('/api/purchase-orders/'),
   createPurchaseOrder: (payload) => apiClient.post('/api/purchase-orders/', payload),
   receivePurchaseOrder: (id) => apiClient.post(`/api/purchase-orders/${id}/receive/`),
+  inventoryDashboard: () => apiClient.get('/api/inventory/dashboard/'),
 
   orders: (params = {}) => apiClient.get('/api/orders/', { params }),
   orderById: (id) => apiClient.get(`/api/orders/${id}/`),

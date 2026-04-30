@@ -342,20 +342,18 @@ class InventoryDashboardView(APIView):
     permission_classes = [IsAdminOrWorkerUser]
 
     def get(self, request):
-        total_products = Product.objects.count()
         products = Product.objects.all()
         inventory_value_avg_cost = sum(int(p.stock or 0) * int(p.average_cost_clp or 0) for p in products)
-        out_of_stock = Product.objects.filter(stock=0).count()
-        low_stock = Product.objects.filter(stock__lte=models.F("stock_minimum")).exclude(stock_minimum=0).count()
+        out_of_stock = Product.objects.filter(stock=0)[:50]
+        low_stock = Product.objects.filter(stock__lte=models.F("stock_minimum")).exclude(stock_minimum=0)[:50]
         latest_in = KardexMovement.objects.filter(movement_type=KardexMovement.MovementType.PURCHASE_IN)[:10]
         latest_out = KardexMovement.objects.filter(movement_type=KardexMovement.MovementType.SALE_OUT)[:10]
-        pending_po = PurchaseOrder.objects.filter(status__in=[PurchaseOrder.Status.DRAFT, PurchaseOrder.Status.SENT]).count()
+        pending_po = PurchaseOrder.objects.filter(status__in=[PurchaseOrder.Status.DRAFT, PurchaseOrder.Status.SENT]).order_by("-created_at")[:20]
         return Response({
-            "total_products": total_products,
             "inventory_value_avg_cost_clp": inventory_value_avg_cost,
-            "products_without_stock": out_of_stock,
-            "products_below_minimum_stock": low_stock,
+            "products_without_stock": ProductSerializer(out_of_stock, many=True).data,
+            "products_below_minimum_stock": ProductSerializer(low_stock, many=True).data,
             "latest_entries": KardexMovementSerializer(latest_in, many=True).data,
             "latest_exits": KardexMovementSerializer(latest_out, many=True).data,
-            "purchase_orders_pending_receipt": pending_po,
+            "purchase_orders_pending_receipt": PurchaseOrderSerializer(pending_po, many=True).data,
         })
