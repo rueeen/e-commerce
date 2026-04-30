@@ -1,22 +1,5 @@
+import { PRODUCT_TYPE_OPTIONS } from './ProductForm';
+const typeLabel = Object.fromEntries(PRODUCT_TYPE_OPTIONS.map((o) => [o.value, o.label]));
 export default function ProductTable({ products, onEdit, onToggleActive, onDelete }) {
-  return (
-    <div className="table-responsive">
-      <table className="table align-middle">
-        <thead><tr><th>ID</th><th>Nombre</th><th>Categoría</th><th>Tipo</th><th>Precio</th><th>Stock</th><th>Estado</th><th>Acciones</th></tr></thead>
-        <tbody>
-          {products.map((p) => (
-            <tr key={p.id}>
-              <td>{p.id}</td><td>{p.name}</td><td>{p.category?.name || '-'}</td><td>{p.product_type}</td><td>${p.price}</td><td>{p.stock}</td>
-              <td><span className={`badge ${p.is_active ? 'badge-success' : 'badge-soft'}`}>{p.is_active ? 'Activo' : 'Inactivo'}</span></td>
-              <td className="d-flex gap-2">
-                <button className="btn btn-outline-primary btn-sm" onClick={() => onEdit(p)}>Editar</button>
-                <button className="btn btn-warning btn-sm" onClick={() => onToggleActive(p)}>{p.is_active ? 'Desactivar' : 'Activar'}</button>
-                <button className="btn btn-outline-danger btn-sm" onClick={() => onDelete(p)}>Eliminar</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+  return <div className="table-responsive"><table className="table align-middle"><thead><tr><th>ID</th><th>Imagen</th><th>Nombre</th><th>Categoría</th><th>Tipo</th><th>Condición</th><th>Foil</th><th>Idioma</th><th>Precio CLP</th><th>Stock</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{products.map((p) => <tr key={p.id}><td>{p.id}</td><td>{p.image ? <img src={p.image} alt={p.name} width="42" /> : '-'}</td><td>{p.name}</td><td>{p.category || '-'}</td><td>{typeLabel[p.product_type] || p.product_type}</td><td>{p.condition || '-'}</td><td>{p.is_foil ? 'Sí' : 'No'}</td><td>{p.language || '-'}</td><td>${p.price_clp}</td><td>{p.stock}</td><td><span className={`badge ${p.is_active ? 'badge-success' : 'badge-soft'}`}>{p.is_active ? 'Activo' : 'Inactivo'}</span></td><td className="d-flex gap-2"><button className="btn btn-outline-primary btn-sm" onClick={() => onEdit(p)}>Editar</button><button className="btn btn-warning btn-sm" onClick={() => onToggleActive(p)}>{p.is_active ? 'Desactivar' : 'Activar'}</button><button className="btn btn-outline-danger btn-sm" onClick={() => onDelete(p)}>Eliminar</button></td></tr>)}</tbody></table></div>
 }

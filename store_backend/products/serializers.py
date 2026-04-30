@@ -12,8 +12,8 @@ class MTGCardSerializer(serializers.ModelSerializer):
 class ProductSerializer(serializers.ModelSerializer):
     mtg_card = MTGCardSerializer(read_only=True)
     category = serializers.StringRelatedField(read_only=True)
-    category_id = serializers.PrimaryKeyRelatedField(source="category", queryset=Category.objects.all(), write_only=True, required=False, allow_null=True)
-    mtg_card_id = serializers.PrimaryKeyRelatedField(source="mtg_card", queryset=MTGCard.objects.all(), write_only=True, required=False, allow_null=True)
+    category_id = serializers.PrimaryKeyRelatedField(source="category", queryset=Category.objects.all(), required=False, allow_null=True)
+    mtg_card_id = serializers.PrimaryKeyRelatedField(source="mtg_card", queryset=MTGCard.objects.all(), required=False, allow_null=True)
 
     class Meta:
         model = Product

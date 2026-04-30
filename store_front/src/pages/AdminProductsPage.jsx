@@ -2,70 +2,19 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/endpoints';
 import { notyf } from '../api/notifier';
 import ExcelImportBox from '../components/ExcelImportBox';
-import ProductForm, { initialFormState } from '../components/ProductForm';
+import ProductForm, { CONDITION_OPTIONS, LANGUAGE_OPTIONS, PRODUCT_TYPE_OPTIONS, initialFormState } from '../components/ProductForm';
 import ProductTable from '../components/ProductTable';
 
 export default function AdminProductsPage() {
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(initialFormState);
-  const [importResult, setImportResult] = useState(null);
-  const [filters, setFilters] = useState({ q: '', category: '', type: '', active: '' });
-
-  const load = async () => {
-    const [{ data: p }, { data: c }] = await Promise.all([api.getProducts(), api.getCategories()]);
-    setProducts(p.results || p);
-    setCategories(c.results || c);
-  };
-
-  useEffect(() => { load(); }, []);
-  const onChange = (k, v) => setForm((prev) => ({ ...prev, [k]: v }));
-
-  const submit = async (e) => {
-    e.preventDefault();
-    try {
-      const payload = { ...form, price: Number(form.price), stock: Number(form.stock), category_id: Number(form.category_id) };
-      if (editing) await api.updateProduct(editing.id, payload); else await api.createProduct(payload);
-      notyf.success(editing ? 'Producto actualizado' : 'Producto creado');
-      setEditing(null); setForm(initialFormState); load();
-    } catch { notyf.error('No fue posible guardar el producto'); }
-  };
-
-  const onEdit = (p) => {
-    setEditing(p);
-    setForm({ ...initialFormState, ...p, category_id: String(p.category?.id || '') });
-  };
-
-  const onImport = async (file) => {
-    try {
-      const { data } = await api.importProductsExcel(file);
-      setImportResult(data);
-      notyf.success('Importación completada');
-      load();
-    } catch { notyf.error('Falló la importación del archivo'); }
-  };
-
-  const filtered = useMemo(() => products.filter((p) => {
-    const matchQ = p.name.toLowerCase().includes(filters.q.toLowerCase());
-    const matchC = !filters.category || String(p.category?.id) === filters.category;
-    const matchT = !filters.type || p.product_type === filters.type;
-    const matchA = !filters.active || String(p.is_active) === filters.active;
-    return matchQ && matchC && matchT && matchA;
-  }), [products, filters]);
-
-  return (<>
-    <h2 className="mb-3">Mantenedor de productos</h2>
-    <ExcelImportBox onImport={onImport} result={importResult} />
-    <ProductForm form={form} categories={categories} onChange={onChange} onSubmit={submit} submitLabel={editing ? 'Actualizar producto' : 'Crear producto'} onCancel={editing ? () => { setEditing(null); setForm(initialFormState); } : null} />
-    <div className="panel-card p-3 mt-4">
-      <div className="row g-2 mb-3">
-        <div className="col-md-4"><input className="form-control" placeholder="Buscar por nombre" value={filters.q} onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))} /></div>
-        <div className="col-md-3"><select className="form-select" value={filters.category} onChange={(e) => setFilters((f) => ({ ...f, category: e.target.value }))}><option value="">Todas las categorías</option>{categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-        <div className="col-md-3"><select className="form-select" value={filters.type} onChange={(e) => setFilters((f) => ({ ...f, type: e.target.value }))}><option value="">Todos los tipos</option><option value="physical">Físico</option><option value="digital">Digital</option></select></div>
-        <div className="col-md-2"><select className="form-select" value={filters.active} onChange={(e) => setFilters((f) => ({ ...f, active: e.target.value }))}><option value="">Todos</option><option value="true">Activos</option><option value="false">Inactivos</option></select></div>
-      </div>
-      <ProductTable products={filtered} onEdit={onEdit} onToggleActive={(p) => api.patchProduct(p.id, { is_active: !p.is_active }).then(load)} onDelete={(p) => api.deleteProduct(p.id).then(load)} />
-    </div>
-  </>);
+  const [products, setProducts] = useState([]); const [categories, setCategories] = useState([]); const [editing, setEditing] = useState(null); const [form, setForm] = useState(initialFormState); const [importResult, setImportResult] = useState(null); const [cards, setCards] = useState([]); const [cardQuery, setCardQuery] = useState('');
+  const [filters, setFilters] = useState({ q: '', category: '', type: '', active: '', condition: '', is_foil: '', language: '' });
+  const load = async () => { const [{ data: p }, { data: c }] = await Promise.all([api.getProducts(), api.getCategories()]); setProducts(p.results || p); setCategories(c.results || c); };
+  useEffect(() => { load(); }, []); const onChange = (k, v) => setForm((prev) => ({ ...prev, [k]: v }));
+  const submit = async (e) => { e.preventDefault(); try { const payload = { ...form, category_id: form.category_id ? Number(form.category_id) : null, mtg_card_id: form.mtg_card_id ? Number(form.mtg_card_id) : null, price_clp: Number(form.price_clp || 0), price: Number(form.price_clp || 0), stock: Number(form.stock || 0) }; if (editing) await api.updateProduct(editing.id, payload); else await api.createProduct(payload); notyf.success(editing ? 'Producto actualizado' : 'Producto creado'); setEditing(null); setForm(initialFormState); setCards([]); setCardQuery(''); load(); } catch { notyf.error('No fue posible guardar el producto'); } };
+  const onEdit = (p) => { setEditing(p); setForm({ ...initialFormState, ...p, category_id: String(p.category_id || ''), mtg_card_id: String(p.mtg_card?.id || ''), price_clp: String(p.price_clp || 0), stock: String(p.stock || 0) }); };
+  const searchCards = async () => { if (!cardQuery.trim()) return; try { const { data } = await api.searchMtgCards(cardQuery); setCards(data.results || data); } catch { notyf.error('Error al buscar cartas MTG'); } };
+  const selectCard = (card) => { onChange('mtg_card_id', String(card.id)); onChange('name', card.name || form.name); onChange('image', card.image_normal || card.image_small || form.image); onChange('edition', card.set_name || form.edition); onChange('description', card.oracle_text || form.description); };
+  const onImport = async (file) => { try { const { data } = await api.importProductsExcel(file); setImportResult(data); notyf.success('Importación completada'); load(); } catch { notyf.error('Falló la importación del archivo'); } };
+  const filtered = useMemo(() => products.filter((p) => p.name.toLowerCase().includes(filters.q.toLowerCase()) && (!filters.category || String(p.category_id) === filters.category) && (!filters.type || p.product_type === filters.type) && (!filters.active || String(p.is_active) === filters.active) && (!filters.condition || p.condition === filters.condition) && (!filters.is_foil || String(p.is_foil) === filters.is_foil) && (!filters.language || p.language === filters.language)), [products, filters]);
+  return <><h2 className="mb-3">Mantenedor de productos MTG</h2><ExcelImportBox onImport={onImport} result={importResult} /><ProductForm form={form} categories={categories} cards={cards} cardQuery={cardQuery} setCardQuery={setCardQuery} onCardSearch={searchCards} onCardSelect={selectCard} onChange={onChange} onSubmit={submit} submitLabel={editing ? 'Actualizar producto' : 'Crear producto'} onCancel={editing ? () => { setEditing(null); setForm(initialFormState); } : null} /><div className="panel-card p-3 mt-4"><div className="row g-2 mb-3"><div className="col-md-3"><input className="form-control" placeholder="Buscar por nombre" value={filters.q} onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))} /></div><div className="col-md-2"><select className="form-select" value={filters.category} onChange={(e) => setFilters((f) => ({ ...f, category: e.target.value }))}><option value="">Categorías</option>{categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div><div className="col-md-2"><select className="form-select" value={filters.type} onChange={(e) => setFilters((f) => ({ ...f, type: e.target.value }))}><option value="">Tipos</option>{PRODUCT_TYPE_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select></div><div className="col-md-2"><select className="form-select" value={filters.active} onChange={(e) => setFilters((f) => ({ ...f, active: e.target.value }))}><option value="">Estado</option><option value="true">Activos</option><option value="false">Inactivos</option></select></div><div className="col-md-1"><select className="form-select" value={filters.condition} onChange={(e) => setFilters((f) => ({ ...f, condition: e.target.value }))}><option value="">Cond.</option>{CONDITION_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}</select></div><div className="col-md-1"><select className="form-select" value={filters.is_foil} onChange={(e) => setFilters((f) => ({ ...f, is_foil: e.target.value }))}><option value="">Foil</option><option value="true">Sí</option><option value="false">No</option></select></div><div className="col-md-1"><select className="form-select" value={filters.language} onChange={(e) => setFilters((f) => ({ ...f, language: e.target.value }))}><option value="">Idioma</option>{LANGUAGE_OPTIONS.map((l) => <option key={l} value={l}>{l}</option>)}</select></div></div><ProductTable products={filtered} onEdit={onEdit} onToggleActive={(p) => api.patchProduct(p.id, { is_active: !p.is_active }).then(load)} onDelete={(p) => api.deleteProduct(p.id).then(load)} /></div></>;
 }
