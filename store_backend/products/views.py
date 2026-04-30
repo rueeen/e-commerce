@@ -13,6 +13,14 @@ from .serializers import CategorySerializer, MTGCardSerializer, ProductSerialize
 from .services import ScryfallServiceError, create_or_update_single_product, import_card, search_cards
 
 
+def _to_bool(value, default=False):
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 class CardViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = MTGCard.objects.all()
     serializer_class = MTGCardSerializer
@@ -74,7 +82,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], url_path="create-single-from-scryfall", permission_classes=[IsAdminUser])
     def create_single_from_scryfall(self, request):
         required_fields = ["scryfall_id", "category_id", "price_clp", "stock"]
-        missing = [field for field in required_fields if field not in request.data]
+        missing = [field for field in required_fields if request.data.get(field) in (None, "")]
         if missing:
             return Response({"detail": f"Faltan campos: {', '.join(missing)}"}, status=400)
 
@@ -83,17 +91,24 @@ class ProductViewSet(viewsets.ModelViewSet):
             return Response({"detail": "category_id inválido"}, status=400)
 
         try:
+            price_clp = int(request.data.get("price_clp", 0))
+            stock = int(request.data.get("stock", 0))
+            if price_clp <= 0:
+                return Response({"detail": "price_clp debe ser mayor a 0"}, status=400)
+            if stock < 0:
+                return Response({"detail": "stock no puede ser menor a 0"}, status=400)
+
             card = import_card(request.data["scryfall_id"])
             product, created = create_or_update_single_product(card, {
                 "category": category,
-                "price_clp": int(request.data.get("price_clp", 0)),
-                "stock": int(request.data.get("stock", 0)),
+                "price_clp": price_clp,
+                "stock": stock,
                 "condition": request.data.get("condition", Product.CardCondition.NM),
                 "language": request.data.get("language", "EN"),
-                "is_foil": bool(request.data.get("is_foil", False)),
+                "is_foil": _to_bool(request.data.get("is_foil", False)),
                 "edition": request.data.get("edition", ""),
                 "notes": request.data.get("notes", ""),
-                "is_active": bool(request.data.get("is_active", True)),
+                "is_active": _to_bool(request.data.get("is_active", True), default=True),
             })
         except (ValueError, TypeError):
             return Response({"detail": "price_clp y stock deben ser numéricos"}, status=400)

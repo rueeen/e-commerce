@@ -149,7 +149,7 @@ def create_or_update_single_product(card: MTGCard, payload):
         "edition": edition,
         "notes": payload.get("notes", ""),
         "is_active": payload.get("is_active", True),
-        "image": card.image_normal or card.image_small,
+        "image": card.image_large or card.image_normal or card.image_small,
         "description": f"{card.type_line}\nRareza: {card.rarity}\nSet: {card.set_name} ({card.set_code.upper()})\n\n{card.oracle_text}",
     }
 
