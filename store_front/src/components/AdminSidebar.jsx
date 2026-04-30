@@ -11,6 +11,8 @@ const items = [
   ['/admin/scryfall-single', 'bi-stars', 'Crear single desde Scryfall'],
   ['/admin/pricing-settings', 'bi-cash-stack', 'Configuración de precios'],
   ['/admin/kardex', 'bi-journal-text', 'Kardex'],
+  ['/admin/suppliers', 'bi-truck', 'Proveedores'],
+  ['/admin/purchase-orders', 'bi-bag-check', 'Órdenes de compra'],
 ];
 
 export default function AdminSidebar({ open, onClose }) {

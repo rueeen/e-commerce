@@ -4,7 +4,7 @@ from rest_framework.response import Response
 
 from accounts.permissions import is_admin_user, is_worker_user
 from products.models import KardexMovement
-from products.kardex import create_kardex_movement
+from products.inventory_services import create_stock_movement
 from .models import AssistedPurchaseOrder
 from .serializers import AssistedPurchaseOrderSerializer
 
@@ -37,13 +37,15 @@ class AssistedPurchaseOrderViewSet(viewsets.ModelViewSet):
         order.save(update_fields=["status", "updated_at"])
         if old_status != new_status and new_status in {AssistedPurchaseOrder.Status.PAID, AssistedPurchaseOrder.Status.APPROVED}:
             for item in order.items.select_related("product"):
-                create_kardex_movement(
+                create_stock_movement(
                     product=item.product,
-                    movement_type=KardexMovement.MovementType.SALE,
+                    movement_type=KardexMovement.MovementType.SALE_OUT,
                     quantity=item.quantity,
                     created_by=request.user,
                     unit_price_clp=int(item.product.price_clp_final or item.product.price_clp or 0),
-                    reference=f"Orden #{order.id}",
+                    reference_type="sale_order",
+                    reference_id=order.id,
+                    reference_label=f"Orden #{order.id}",
                     notes="Salida automática por confirmación/pago de orden",
                 )
         return Response(self.get_serializer(order).data)
