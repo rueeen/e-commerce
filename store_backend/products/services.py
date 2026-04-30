@@ -88,7 +88,7 @@ def get_active_pricing_settings():
         import_factor=Decimal("1.30"),
         risk_factor=Decimal("1.10"),
         margin_factor=Decimal("1.25"),
-        round_to=100,
+        rounding_to=100,
     )
 
 
@@ -96,7 +96,7 @@ def calculate_price_clp(usd_price, is_foil=False):
     usd = _to_decimal(usd_price)
     settings = get_active_pricing_settings()
     raw_clp = usd * settings.usd_to_clp * settings.import_factor * settings.risk_factor * settings.margin_factor
-    round_to = max(int(settings.round_to or 100), 1)
+    round_to = max(int(settings.rounding_to or 100), 1)
     suggested = int((raw_clp / Decimal(round_to)).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * Decimal(round_to)) if raw_clp > 0 else 0
 
     return {
@@ -108,7 +108,7 @@ def calculate_price_clp(usd_price, is_foil=False):
             "factor_importacion": float(settings.import_factor),
             "factor_riesgo": float(settings.risk_factor),
             "margen": float(settings.margin_factor),
-            "round_to": round_to,
+            "rounding_to": round_to,
         },
     }
 

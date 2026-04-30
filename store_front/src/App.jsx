@@ -19,6 +19,7 @@ import ProductDetailPage from './pages/ProductDetailPage';
 import ProfilePage from './pages/ProfilePage';
 import RegisterPage from './pages/RegisterPage';
 import ScryfallSingleCreate from './pages/ScryfallSingleCreate';
+import PricingSettingsPage from './pages/PricingSettingsPage';
 
 export default function App() {
   return <Routes>
@@ -43,6 +44,7 @@ export default function App() {
       <Route path="importar-excel" element={<AdminProductsPage />} />
       <Route path="usuarios" element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
       <Route path="scryfall-single" element={<AdminRoute><ScryfallSingleCreate /></AdminRoute>} />
+      <Route path="pricing-settings" element={<AdminRoute><PricingSettingsPage /></AdminRoute>} />
     </Route>
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes>;
