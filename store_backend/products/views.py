@@ -7,10 +7,10 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from accounts.permissions import IsAdminUser, IsAdminOrWorkerUser
-from .models import Category, MTGCard, Product
+from .models import Category, MTGCard, PricingSettings, Product
 from .permissions import IsAdminOrReadOnly
-from .serializers import CategorySerializer, MTGCardSerializer, ProductSerializer
-from .services import ScryfallServiceError, create_or_update_single_product, import_card, search_cards
+from .serializers import CategorySerializer, MTGCardSerializer, PricingSettingsSerializer, ProductSerializer
+from .services import ScryfallServiceError, calculate_price_clp, create_or_update_single_product, extract_usd_price, get_active_pricing_settings, import_card, search_cards
 
 
 def _to_bool(value, default=False):
@@ -81,7 +81,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="create-single-from-scryfall", permission_classes=[IsAdminUser])
     def create_single_from_scryfall(self, request):
-        required_fields = ["scryfall_id", "category_id", "price_clp", "stock"]
+        required_fields = ["scryfall_id", "category_id", "stock"]
         missing = [field for field in required_fields if request.data.get(field) in (None, "")]
         if missing:
             return Response({"detail": f"Faltan campos: {', '.join(missing)}"}, status=400)
@@ -91,32 +91,37 @@ class ProductViewSet(viewsets.ModelViewSet):
             return Response({"detail": "category_id inválido"}, status=400)
 
         try:
-            price_clp = int(request.data.get("price_clp", 0))
             stock = int(request.data.get("stock", 0))
-            if price_clp <= 0:
-                return Response({"detail": "price_clp debe ser mayor a 0"}, status=400)
             if stock < 0:
                 return Response({"detail": "stock no puede ser menor a 0"}, status=400)
 
-            card = import_card(request.data["scryfall_id"])
+            is_foil = _to_bool(request.data.get("is_foil", False))
+            card, card_data = import_card(request.data["scryfall_id"])
+            usd_ref = extract_usd_price(card_data, is_foil=is_foil)
+            pricing = calculate_price_clp(usd_ref, is_foil=is_foil)
+            price_clp_final = int(request.data.get("price_clp_final", pricing["clp_sugerido"] or 0))
+            if price_clp_final < 0:
+                return Response({"detail": "price_clp_final no puede ser menor a 0"}, status=400)
             product, created = create_or_update_single_product(card, {
                 "category": category,
-                "price_clp": price_clp,
+                "price_clp_final": price_clp_final,
+                "price_usd_reference": usd_ref,
+                "price_clp_suggested": pricing["clp_sugerido"],
                 "stock": stock,
                 "condition": request.data.get("condition", Product.CardCondition.NM),
                 "language": request.data.get("language", "EN"),
-                "is_foil": _to_bool(request.data.get("is_foil", False)),
+                "is_foil": is_foil,
                 "edition": request.data.get("edition", ""),
                 "notes": request.data.get("notes", ""),
                 "is_active": _to_bool(request.data.get("is_active", True), default=True),
             })
         except (ValueError, TypeError):
-            return Response({"detail": "price_clp y stock deben ser numéricos"}, status=400)
+            return Response({"detail": "price_clp_final y stock deben ser numéricos"}, status=400)
         except ScryfallServiceError as exc:
             return Response({"detail": str(exc)}, status=502)
 
         code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
-        return Response({"created": created, "product": ProductSerializer(product).data}, status=code)
+        return Response({"created": created, "pricing": pricing, "product": ProductSerializer(product).data}, status=code)
 
     @action(detail=False, methods=["post"], url_path="import-excel")
     def import_excel(self, request):
@@ -140,3 +145,16 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return Category.objects.annotate(products_count=Count("products")).order_by("name")
+
+
+class PricingSettingsViewSet(viewsets.ModelViewSet):
+    serializer_class = PricingSettingsSerializer
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        return PricingSettings.objects.order_by("-updated_at")
+
+    @action(detail=False, methods=["get"], url_path="active", permission_classes=[AllowAny])
+    def active(self, request):
+        active_settings = get_active_pricing_settings()
+        return Response(PricingSettingsSerializer(active_settings).data)

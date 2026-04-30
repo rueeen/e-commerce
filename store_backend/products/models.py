@@ -2,6 +2,11 @@ from django.db import models
 from django.utils import timezone
 
 
+class PricingSource(models.TextChoices):
+    SCRYFALL = "SCRYFALL", "Scryfall"
+    MANUAL = "MANUAL", "Manual"
+
+
 class Category(models.Model):
     name = models.CharField(max_length=120, unique=True)
     slug = models.SlugField(unique=True)
@@ -76,6 +81,11 @@ class Product(models.Model):
     is_foil = models.BooleanField(default=False)
     edition = models.CharField(max_length=120, blank=True)
     notes = models.TextField(blank=True)
+    price_usd_reference = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    price_clp_suggested = models.PositiveIntegerField(default=0)
+    price_clp_final = models.PositiveIntegerField(default=0)
+    pricing_source = models.CharField(max_length=20, choices=PricingSource.choices, default=PricingSource.MANUAL)
+    pricing_last_update = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
 
@@ -104,3 +114,21 @@ class ShippingConfig(models.Model):
     base_clp = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     per_item_clp = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     is_active = models.BooleanField(default=True)
+
+
+class PricingSettings(models.Model):
+    name = models.CharField(max_length=80, default="default")
+    usd_to_clp = models.DecimalField(max_digits=12, decimal_places=2, default=1000)
+    import_factor = models.DecimalField(max_digits=5, decimal_places=2, default=1.30)
+    risk_factor = models.DecimalField(max_digits=5, decimal_places=2, default=1.10)
+    margin_factor = models.DecimalField(max_digits=5, decimal_places=2, default=1.25)
+    round_to = models.PositiveIntegerField(default=100)
+    is_active = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Configuración de precios"
+        verbose_name_plural = "Configuraciones de precios"
+
+    def __str__(self):
+        return self.name
