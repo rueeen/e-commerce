@@ -8,10 +8,12 @@ export default function ProductDetailPage() {
   const { id } = useParams();
   const [product, setProduct] = useState(null);
   const [quantity, setQuantity] = useState(1);
+  const [kardex, setKardex] = useState([]);
   const { addItem } = useCart();
 
   useEffect(() => {
     api.productById(id).then(({ data }) => setProduct(data));
+    api.productKardex(id).then(({ data }) => setKardex(data || [])).catch(() => setKardex([]));
   }, [id]);
 
   if (!product) return <LoadingSpinner />;
@@ -31,6 +33,7 @@ export default function ProductDetailPage() {
           <div className="mb-3 col-6"><label className="form-label">Cantidad</label><input type="number" min="1" max={Math.max(1, Number(product.stock || 1))} className="form-control" value={quantity} onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))} /></div>
           <button className="btn btn-primary" onClick={() => addItem(product, quantity)} disabled={Number(product.stock || 0) <= 0}><i className="bi bi-cart-plus me-2" />Agregar al carrito</button>
         </div>
+        {kardex.length > 0 && <div className="panel-card p-4 mt-3"><h5>Kardex</h5><p><strong>Stock actual:</strong> {product.stock}</p><ul className="mb-0">{kardex.slice(0, 8).map((m) => <li key={m.id}>{m.movement_type} · {m.quantity} · {new Date(m.created_at).toLocaleString('es-CL')} (Stock: {m.previous_stock} → {m.new_stock})</li>)}</ul></div>}
       </div>
     </div>
   );
