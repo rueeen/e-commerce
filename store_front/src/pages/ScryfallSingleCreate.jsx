@@ -16,7 +16,7 @@ export default function ScryfallSingleCreate() {
     setLoading(true);
     try {
       const { data } = await api.searchScryfallCards(q.trim());
-      setResults(data.results || []);
+      setResults(data?.data || data?.results || []);
     } catch {
       notyf.error('No se pudo buscar en Scryfall');
     } finally { setLoading(false); }

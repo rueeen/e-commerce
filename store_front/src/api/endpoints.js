@@ -1,9 +1,12 @@
 import apiClient from './client';
+import axios from 'axios';
+
+const SCRYFALL_API_BASE_URL = 'https://api.scryfall.com';
 
 export const api = {
   getProducts: (params = {}) => apiClient.get('/api/products/', { params }),
   searchMtgCards: (q) => apiClient.get('/api/cards/', { params: { search: q } }),
-  searchScryfallCards: (q) => apiClient.get('/api/mtg/cards/search/', { params: { q } }),
+  searchScryfallCards: (q) => axios.get(`${SCRYFALL_API_BASE_URL}/cards/search`, { params: { q } }),
   importScryfallCard: (scryfall_id) => apiClient.post('/api/mtg/cards/import/', { scryfall_id }),
   createSingleFromScryfall: (payload) => apiClient.post('/api/products/create-single-from-scryfall/', payload),
   productById: (id) => apiClient.get(`/api/products/${id}/`),
