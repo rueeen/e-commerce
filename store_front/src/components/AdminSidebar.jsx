@@ -8,6 +8,7 @@ const items = [
   ['/admin/usuarios', 'bi-people', 'Usuarios'],
   ['/admin/pedidos', 'bi-receipt', 'Pedidos'],
   ['/admin/importar-excel', 'bi-file-earmark-excel', 'Importar productos Excel'],
+  ['/admin/scryfall-single', 'bi-stars', 'Crear single desde Scryfall'],
 ];
 
 export default function AdminSidebar({ open, onClose }) {

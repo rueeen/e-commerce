@@ -3,6 +3,9 @@ import apiClient from './client';
 export const api = {
   getProducts: (params = {}) => apiClient.get('/api/products/', { params }),
   searchMtgCards: (q) => apiClient.get('/api/cards/', { params: { search: q } }),
+  searchScryfallCards: (q) => apiClient.get('/api/mtg/cards/search/', { params: { q } }),
+  importScryfallCard: (scryfall_id) => apiClient.post('/api/mtg/cards/import/', { scryfall_id }),
+  createSingleFromScryfall: (payload) => apiClient.post('/api/products/create-single-from-scryfall/', payload),
   productById: (id) => apiClient.get(`/api/products/${id}/`),
   createProduct: (payload) => apiClient.post('/api/products/', payload),
   updateProduct: (id, payload) => apiClient.put(`/api/products/${id}/`, payload),
