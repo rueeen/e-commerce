@@ -38,21 +38,40 @@ export default function ScryfallSingleCreate() {
   const [pricingPreview, setPricingPreview] = useState(null);
   const [missingSingleCategory, setMissingSingleCategory] = useState(false);
 
+  const normalizeCategories = (data) => {
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.results)) return data.results;
+    if (Array.isArray(data?.data)) return data.data;
+    return [];
+  };
+
+  const findSingleCategory = (list) => list.find((cat) => cat?.name?.trim()?.toLowerCase() === 'cartas individuales');
+
+  const loadCategories = async () => {
+    const { data } = await api.getCategories();
+    const loaded = normalizeCategories(data);
+    setCategories(loaded);
+    const singleCategory = findSingleCategory(loaded);
+    setMissingSingleCategory(!singleCategory);
+    if (singleCategory) {
+      setForm((prev) => ({ ...prev, category_id: Number(singleCategory.id) }));
+    }
+  };
+
   useEffect(() => {
-    api.getCategories()
-      .then(({ data }) => {
-        const loaded = data?.results || data || [];
-        setCategories(loaded);
-        const singleCategory = loaded.find((cat) => cat.name === 'Cartas individuales');
-        setMissingSingleCategory(!singleCategory);
-        if (!singleCategory) {
-          notyf.error('No existe la categoría Cartas individuales. Créala antes de publicar singles.');
-          return;
-        }
-        setForm((prev) => ({ ...prev, category_id: Number(singleCategory.id) }));
-      })
+    loadCategories()
       .catch(() => notyf.error('No se pudieron cargar categorías'));
   }, []);
+
+  const createSingleCategory = async () => {
+    setSaving(true);
+    api.getCategories()
+      .then(() => api.createCategory({ name: 'Cartas individuales' }))
+      .then(() => loadCategories())
+      .then(() => notyf.success('Categoría Cartas individuales creada correctamente'))
+      .catch((e) => notyf.error(e?.response?.data?.detail || 'No se pudo crear la categoría'))
+      .finally(() => setSaving(false));
+  };
 
   const selectedImage = useMemo(() => getCardImage(selected), [selected]);
 
@@ -94,7 +113,13 @@ export default function ScryfallSingleCreate() {
   return <div><h3>Crear single desde Scryfall</h3>
     <div className="input-group mb-3"><input className="form-control" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar: Cloud, Sauron..." /><button className="btn btn-primary" onClick={search} disabled={loading}><i className="bi bi-search" /> Buscar</button></div>
     <div className="row g-3">{results.map((c) => <div className="col-md-3" key={c.id}><div className="card h-100 bg-dark text-light"><img src={getCardImage(c)} className="card-img-top scryfall-card-img" alt={c.name} /><div className="card-body"><h6>{c.name}</h6><small>{c.set?.toUpperCase()} #{c.collector_number} · {c.rarity}</small><button className="btn btn-outline-light btn-sm mt-2 w-100" onClick={() => openCreateModal(c)}>Crear single</button></div></div></div>)}</div>
-    {missingSingleCategory && <div className="alert alert-warning">No existe la categoría Cartas individuales. Créala antes de publicar singles.</div>}
+    {missingSingleCategory && <div className="alert alert-warning d-flex justify-content-between align-items-center">
+      <span>No existe la categoría Cartas individuales. Créala antes de publicar singles.</span>
+      <button className="btn btn-sm btn-outline-warning" type="button" onClick={createSingleCategory} disabled={saving}>
+        <i className="bi bi-plus-circle me-1" />
+        Crear categoría Cartas individuales
+      </button>
+    </div>}
     {selected && <div className="modal d-block" tabIndex="-1" role="dialog"><div className="modal-dialog modal-lg modal-dialog-centered" role="document"><div className="modal-content bg-dark text-light"><div className="modal-header"><h5 className="modal-title">Crear single: {selected.name}</h5><button type="button" className="btn-close btn-close-white" aria-label="Close" onClick={() => setSelected(null)} /></div><div className="modal-body"><div className="row g-3"><div className="col-md-4">{selectedImage && <img src={selectedImage} className="img-fluid scryfall-card-img" alt={selected.name} />}</div><div className="col-md-8"><div className="row g-2">
       <div className="col-md-6"><label className="form-label">Categoría</label><select className="form-select" value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}><option value="">Selecciona categoría</option>{categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select></div>
       <div className="col-12"><div className="alert alert-info"><strong>Precio base:</strong> ${pricingPreview?.usd || 0} USD<br /><strong>Precio sugerido:</strong> ${Number(pricingPreview?.suggested || 0).toLocaleString('es-CL')} CLP <span title="Este precio considera costos de importación, tipo de cambio y margen del negocio">ⓘ</span><br /><small>Tipo cambio: 1000 · Importación: +30% · Riesgo: +10% · Margen: +25%</small></div></div>
