@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Category, MTGCard, Product
+from .models import Category, MTGCard, PricingSettings, Product
 
 
 class MTGCardSerializer(serializers.ModelSerializer):
@@ -19,7 +19,7 @@ class ProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = (
             "id", "name", "description", "product_type", "price", "price_clp", "stock", "image", "is_active", "condition",
-            "language", "is_foil", "edition", "notes", "created_at", "mtg_card", "mtg_card_id", "category", "category_id",
+            "language", "is_foil", "edition", "notes", "price_usd_reference", "price_clp_suggested", "price_clp_final", "pricing_source", "pricing_last_update", "created_at", "mtg_card", "mtg_card_id", "category", "category_id",
         )
         read_only_fields = ("created_at",)
 
@@ -31,3 +31,9 @@ class CategorySerializer(serializers.ModelSerializer):
         model = Category
         fields = ("id", "name", "slug", "description", "is_active", "products_count", "created_at", "updated_at")
         read_only_fields = ("created_at", "updated_at")
+
+
+class PricingSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PricingSettings
+        fields = ("id", "name", "usd_to_clp", "import_factor", "risk_factor", "margin_factor", "round_to", "is_active", "updated_at")
