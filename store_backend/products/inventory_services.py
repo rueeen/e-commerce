@@ -44,10 +44,12 @@ def receive_purchase_order(purchase_order_id, user):
     po = PurchaseOrder.objects.select_for_update().prefetch_related("items__product").get(pk=purchase_order_id)
     if po.status == PurchaseOrder.Status.RECEIVED:
         raise ValidationError("La orden ya fue recibida")
+    if po.status == PurchaseOrder.Status.CANCELLED:
+        raise ValidationError("No se puede recibir una orden cancelada")
     for item in po.items.all():
         qty = item.quantity_ordered - item.quantity_received
         if qty > 0:
-            create_stock_movement(product=item.product, movement_type=KardexMovement.MovementType.PURCHASE_IN, quantity=qty, created_by=user, unit_cost_clp=item.unit_cost_clp, reference_type="purchase_order", reference_id=po.id, reference_label=po.order_number, notes="Ingreso por recepción de orden de compra")
+            create_stock_movement(product=item.product, movement_type=KardexMovement.MovementType.PURCHASE_IN, quantity=qty, created_by=user, unit_cost_clp=item.unit_cost_clp, reference_type="PURCHASE_ORDER", reference_id=po.id, reference_label=po.order_number, notes="Ingreso por recepción de orden de compra")
             item.quantity_received = item.quantity_ordered
             item.subtotal_clp = item.quantity_ordered * item.unit_cost_clp
             item.save(update_fields=["quantity_received", "subtotal_clp"])

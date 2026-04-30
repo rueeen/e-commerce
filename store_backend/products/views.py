@@ -1,5 +1,6 @@
 from django.db import transaction
 from django.db.models import Count
+from django.db import models
 from django.core.exceptions import ValidationError
 import logging
 from openpyxl import load_workbook
@@ -8,6 +9,7 @@ from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from accounts.permissions import IsAdminUser, IsAdminOrWorkerUser
 from .models import Category, KardexMovement, MTGCard, PricingSettings, Product, PurchaseOrder, Supplier
@@ -90,7 +92,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="create-single-from-scryfall", permission_classes=[IsAdminUser])
     def create_single_from_scryfall(self, request):
-        required_fields = ["scryfall_id", "category_id", "price_clp_final", "stock", "condition", "language"]
+        required_fields = ["scryfall_id", "category_id", "price_clp_final", "condition", "language"]
         errors = {}
         payload = request.data or {}
         for field in required_fields:
@@ -101,7 +103,6 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         try:
             category_id = int(payload.get("category_id"))
-            stock = int(payload.get("stock", 0))
             price_clp_final = int(payload.get("price_clp_final", 0))
             is_foil = _to_bool(payload.get("is_foil", False))
             is_active = _to_bool(payload.get("is_active", True), default=True)
@@ -110,7 +111,7 @@ class ProductViewSet(viewsets.ModelViewSet):
             notes = str(payload.get("notes", "") or "").strip()
             scryfall_id = str(payload.get("scryfall_id", "")).strip()
         except (TypeError, ValueError):
-            return Response({"detail": "category_id, price_clp_final y stock deben ser numéricos válidos"}, status=400)
+            return Response({"detail": "category_id y price_clp_final deben ser numéricos válidos"}, status=400)
 
         category = Category.objects.filter(pk=category_id).first()
         if not category:
@@ -122,8 +123,6 @@ class ProductViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Payload inválido", "errors": {"condition": "Este campo es obligatorio."}}, status=400)
         if not language:
             return Response({"detail": "Payload inválido", "errors": {"language": "Este campo es obligatorio."}}, status=400)
-        if stock < 0:
-            return Response({"detail": "stock no puede ser menor a 0", "errors": {"stock": "Debe ser mayor o igual a 0."}}, status=400)
         if price_clp_final < 0:
             return Response({"detail": "price_clp_final no puede ser menor a 0", "errors": {"price_clp_final": "Debe ser mayor o igual a 0."}}, status=400)
 
@@ -192,8 +191,6 @@ class ProductViewSet(viewsets.ModelViewSet):
                     product_type=Product.ProductType.SINGLE,
                     image=card.image_large or card.image_normal or card.image_small,
                 )
-                if stock > 0:
-                    create_stock_movement(product=product, movement_type=KardexMovement.MovementType.MANUAL_IN, quantity=stock, created_by=request.user, unit_price_clp=price_clp_final, reference_type="scryfall_create", reference_label="Stock inicial desde creación Scryfall")
         except ValidationError as exc:
             url = f"https://api.scryfall.com/cards/{scryfall_id}"
             logger.error("Error consultando Scryfall URL=%s status=400 response=%s", url, exc, exc_info=True)
@@ -238,6 +235,15 @@ class KardexViewSet(viewsets.GenericViewSet):
         mt = self.request.query_params.get("movement_type")
         if mt:
             qs = qs.filter(movement_type=mt)
+        date_from = self.request.query_params.get("date_from")
+        date_to = self.request.query_params.get("date_to")
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+        supplier_id = self.request.query_params.get("supplier_id")
+        if supplier_id:
+            qs = qs.filter(reference_type="PURCHASE_ORDER", reference_id__in=PurchaseOrder.objects.filter(supplier_id=supplier_id).values_list("id", flat=True))
         return qs
 
     def list(self, request):
@@ -330,3 +336,26 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
     def receive(self, request, pk=None):
         po = receive_purchase_order(int(pk), request.user)
         return Response(self.get_serializer(po).data)
+
+
+class InventoryDashboardView(APIView):
+    permission_classes = [IsAdminOrWorkerUser]
+
+    def get(self, request):
+        total_products = Product.objects.count()
+        products = Product.objects.all()
+        inventory_value_avg_cost = sum(int(p.stock or 0) * int(p.average_cost_clp or 0) for p in products)
+        out_of_stock = Product.objects.filter(stock=0).count()
+        low_stock = Product.objects.filter(stock__lte=models.F("stock_minimum")).exclude(stock_minimum=0).count()
+        latest_in = KardexMovement.objects.filter(movement_type=KardexMovement.MovementType.PURCHASE_IN)[:10]
+        latest_out = KardexMovement.objects.filter(movement_type=KardexMovement.MovementType.SALE_OUT)[:10]
+        pending_po = PurchaseOrder.objects.filter(status__in=[PurchaseOrder.Status.DRAFT, PurchaseOrder.Status.SENT]).count()
+        return Response({
+            "total_products": total_products,
+            "inventory_value_avg_cost_clp": inventory_value_avg_cost,
+            "products_without_stock": out_of_stock,
+            "products_below_minimum_stock": low_stock,
+            "latest_entries": KardexMovementSerializer(latest_in, many=True).data,
+            "latest_exits": KardexMovementSerializer(latest_out, many=True).data,
+            "purchase_orders_pending_receipt": pending_po,
+        })

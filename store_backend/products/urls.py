@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .views import CardViewSet, CategoryViewSet, KardexViewSet, MTGScryfallViewSet, PricingSettingsViewSet, ProductViewSet, PurchaseOrderViewSet, SupplierViewSet
+from .views import CardViewSet, CategoryViewSet, InventoryDashboardView, KardexViewSet, MTGScryfallViewSet, PricingSettingsViewSet, ProductViewSet, PurchaseOrderViewSet, SupplierViewSet
 
 router = DefaultRouter()
 router.register('cards', CardViewSet, basename='card')
@@ -13,4 +13,4 @@ router.register('kardex', KardexViewSet, basename='kardex')
 router.register('suppliers', SupplierViewSet, basename='supplier')
 router.register('purchase-orders', PurchaseOrderViewSet, basename='purchase-order')
 
-urlpatterns = [path('', include(router.urls))]
+urlpatterns = [path('', include(router.urls)), path('inventory/dashboard/', InventoryDashboardView.as_view(), name='inventory-dashboard')]
