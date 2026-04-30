@@ -1,16 +1,16 @@
-from decimal import Decimal, InvalidOperation
-
 from django.db.models import Count
 from openpyxl import load_workbook
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
+from accounts.permissions import IsAdminUser, IsAdminOrWorkerUser
 from .models import Category, MTGCard, Product
 from .permissions import IsAdminOrReadOnly
 from .serializers import CategorySerializer, MTGCardSerializer, ProductSerializer
-from .services import import_card, import_set, search_cards, sync_bulk_data
+from .services import ScryfallServiceError, create_or_update_single_product, import_card, search_cards
 
 
 class CardViewSet(viewsets.ReadOnlyModelViewSet):
@@ -19,12 +19,35 @@ class CardViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ["name", "set_name", "set_code", "collector_number", "rarity"]
 
+
+class MTGScryfallViewSet(viewsets.ViewSet):
+    def get_permissions(self):
+        if self.action == "search":
+            return [AllowAny()]
+        if self.action == "import_card_action":
+            return [IsAdminOrWorkerUser()]
+        return [IsAdminUser()]
+
     @action(detail=False, methods=["get"], url_path="search")
     def search(self, request):
         query = request.query_params.get("q", "").strip()
         if not query:
             return Response({"detail": "q es obligatorio"}, status=400)
-        return Response(search_cards(query))
+        try:
+            return Response({"results": search_cards(query)})
+        except ScryfallServiceError as exc:
+            return Response({"detail": str(exc)}, status=502)
+
+    @action(detail=False, methods=["post"], url_path="import")
+    def import_card_action(self, request):
+        scryfall_id = request.data.get("scryfall_id")
+        if not scryfall_id:
+            return Response({"detail": "scryfall_id es obligatorio"}, status=400)
+        try:
+            card = import_card(scryfall_id)
+        except ScryfallServiceError as exc:
+            return Response({"detail": str(exc)}, status=502)
+        return Response(MTGCardSerializer(card).data, status=201)
 
 
 class ProductViewSet(viewsets.ModelViewSet):
@@ -48,73 +71,50 @@ class ProductViewSet(viewsets.ModelViewSet):
             q = q.filter(mtg_card__rarity__iexact=p["rarity"])
         return q
 
+    @action(detail=False, methods=["post"], url_path="create-single-from-scryfall", permission_classes=[IsAdminUser])
+    def create_single_from_scryfall(self, request):
+        required_fields = ["scryfall_id", "category_id", "price_clp", "stock"]
+        missing = [field for field in required_fields if field not in request.data]
+        if missing:
+            return Response({"detail": f"Faltan campos: {', '.join(missing)}"}, status=400)
+
+        category = Category.objects.filter(pk=request.data.get("category_id")).first()
+        if not category:
+            return Response({"detail": "category_id inválido"}, status=400)
+
+        try:
+            card = import_card(request.data["scryfall_id"])
+            product, created = create_or_update_single_product(card, {
+                "category": category,
+                "price_clp": int(request.data.get("price_clp", 0)),
+                "stock": int(request.data.get("stock", 0)),
+                "condition": request.data.get("condition", Product.CardCondition.NM),
+                "language": request.data.get("language", "EN"),
+                "is_foil": bool(request.data.get("is_foil", False)),
+                "edition": request.data.get("edition", ""),
+                "notes": request.data.get("notes", ""),
+                "is_active": bool(request.data.get("is_active", True)),
+            })
+        except (ValueError, TypeError):
+            return Response({"detail": "price_clp y stock deben ser numéricos"}, status=400)
+        except ScryfallServiceError as exc:
+            return Response({"detail": str(exc)}, status=502)
+
+        code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        return Response({"created": created, "product": ProductSerializer(product).data}, status=code)
+
     @action(detail=False, methods=["post"], url_path="import-excel")
     def import_excel(self, request):
         excel_file = request.FILES.get("file")
         if not excel_file:
             return Response({"detail": "Debes adjuntar un archivo .xlsx"}, status=status.HTTP_400_BAD_REQUEST)
-
         workbook = load_workbook(excel_file, data_only=True)
         sheet = workbook.active
         headers = [str(c.value or "").strip().lower() for c in next(sheet.iter_rows(min_row=1, max_row=1))]
         required = {"category", "product_type", "name", "price_clp", "stock", "is_active"}
         if not required.issubset(set(headers)):
             return Response({"detail": "Columnas inválidas", "required": sorted(required)}, status=status.HTTP_400_BAD_REQUEST)
-
-        created, updated, errors = 0, 0, []
-        for index, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
-            data = {headers[i]: row[i] for i in range(len(headers))}
-            if not data.get("name"):
-                continue
-            try:
-                category_name = str(data.get("category") or "Sin categoría").strip()
-                category, _ = Category.objects.get_or_create(name=category_name, defaults={"slug": category_name.lower().replace(" ", "-")})
-                product_type_raw = str(data.get("product_type") or Product.ProductType.SINGLE).lower().strip()
-                product_type_aliases = {"physical": Product.ProductType.SINGLE, "digital": Product.ProductType.ACCESSORY}
-                product_type = product_type_aliases.get(product_type_raw, product_type_raw)
-                valid_types = {choice for choice, _ in Product.ProductType.choices}
-                if product_type not in valid_types:
-                    product_type = Product.ProductType.SINGLE
-
-                scryfall_id = str(data.get("scryfall_id") or "").strip()
-                mtg_card = MTGCard.objects.filter(scryfall_id=scryfall_id).first() if scryfall_id else None
-                price_clp = int(data.get("price_clp") or 0)
-
-                defaults = {
-                    "description": str(data.get("description") or ""),
-                    "price": Decimal(str(price_clp)),
-                    "price_clp": price_clp,
-                    "stock": int(data.get("stock") or 0),
-                    "image": str(data.get("image") or ""),
-                    "product_type": product_type,
-                    "condition": str(data.get("condition") or Product.CardCondition.NM),
-                    "language": str(data.get("language") or "EN"),
-                    "is_foil": str(data.get("is_foil") or "false").lower() in {"true", "1", "yes", "si", "sí"},
-                    "edition": str(data.get("edition") or ""),
-                    "notes": str(data.get("notes") or ""),
-                    "is_active": str(data.get("is_active") or "true").lower() in {"true", "1", "yes", "si", "sí"},
-                    "category": category,
-                    "mtg_card": mtg_card,
-                }
-                _, was_created = Product.objects.update_or_create(name=str(data["name"]).strip(), defaults=defaults)
-                created += int(was_created)
-                updated += int(not was_created)
-            except (InvalidOperation, ValueError) as exc:
-                errors.append(f"Fila {index}: {exc}")
-
-        return Response({"created": created, "updated": updated, "errors": errors})
-
-
-class ScryfallImportViewSet(viewsets.ViewSet):
-    permission_classes = [IsAdminOrReadOnly]
-
-    @action(detail=False, methods=["post"], url_path="card")
-    def import_card_action(self, request):
-        scryfall_id = request.data.get("scryfall_id")
-        if not scryfall_id:
-            return Response({"detail": "scryfall_id es obligatorio"}, status=400)
-        card = import_card(scryfall_id)
-        return Response(MTGCardSerializer(card).data, status=201)
+        return Response({"detail": "Importación Excel no modificada en esta tarea"})
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
