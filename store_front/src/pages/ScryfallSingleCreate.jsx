@@ -80,6 +80,7 @@ export default function ScryfallSingleCreate() {
     if (Number(form.stock) < 0) return notyf.error('El stock no puede ser menor a 0');
     setSaving(true);
     try {
+      console.log('Creando single con Scryfall ID:', selected.id);
       await api.createSingleFromScryfall({ ...form, scryfall_id: selected.id, category_id: Number(form.category_id), stock: Number(form.stock), price_clp_final: Number(form.price_clp_final) });
       notyf.success('Single creado/actualizado correctamente');
       setSelected(null);

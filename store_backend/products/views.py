@@ -1,4 +1,6 @@
 from django.db.models import Count
+from django.core.exceptions import ValidationError
+import logging
 from openpyxl import load_workbook
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
@@ -10,7 +12,10 @@ from accounts.permissions import IsAdminUser, IsAdminOrWorkerUser
 from .models import Category, MTGCard, PricingSettings, Product
 from .permissions import IsAdminOrReadOnly
 from .serializers import CategorySerializer, MTGCardSerializer, PricingSettingsSerializer, ProductSerializer
-from .services import ScryfallServiceError, calculate_price_clp, create_or_update_single_product, extract_usd_price, get_active_pricing_settings, import_card, search_cards
+from .services import ScryfallServiceError, calculate_price_clp, extract_usd_price, get_active_pricing_settings, get_scryfall_card_by_id, import_card, search_cards
+
+
+logger = logging.getLogger(__name__)
 
 
 def _to_bool(value, default=False):
@@ -95,33 +100,78 @@ class ProductViewSet(viewsets.ModelViewSet):
             if stock < 0:
                 return Response({"detail": "stock no puede ser menor a 0"}, status=400)
 
+            scryfall_id = str(request.data.get("scryfall_id", "")).strip()
+            if not scryfall_id:
+                return Response({"detail": "scryfall_id es obligatorio"}, status=400)
+
             is_foil = _to_bool(request.data.get("is_foil", False))
-            card, card_data = import_card(request.data["scryfall_id"])
+            card_data = get_scryfall_card_by_id(scryfall_id)
+            image_uris = card_data.get("image_uris") or {}
+            faces = card_data.get("card_faces") or []
+            image_large = image_uris.get("large")
+            if not image_large and faces and faces[0].get("image_uris"):
+                image_large = (
+                    faces[0]["image_uris"].get("large")
+                    or faces[0]["image_uris"].get("normal")
+                    or faces[0]["image_uris"].get("small")
+                )
+
+            card, _ = MTGCard.objects.update_or_create(
+                scryfall_id=card_data["id"],
+                defaults={
+                    "name": card_data.get("name", ""),
+                    "set_code": card_data.get("set", ""),
+                    "set_name": card_data.get("set_name", ""),
+                    "collector_number": card_data.get("collector_number", ""),
+                    "rarity": card_data.get("rarity", ""),
+                    "type_line": card_data.get("type_line", ""),
+                    "oracle_text": card_data.get("oracle_text", ""),
+                    "image_large": image_large or "",
+                    "raw_data": card_data,
+                },
+            )
+
             usd_ref = extract_usd_price(card_data, is_foil=is_foil)
             pricing = calculate_price_clp(usd_ref, is_foil=is_foil)
             price_clp_final = int(request.data.get("price_clp_final", pricing["clp_sugerido"] or 0))
             if price_clp_final < 0:
                 return Response({"detail": "price_clp_final no puede ser menor a 0"}, status=400)
-            product, created = create_or_update_single_product(card, {
-                "category": category,
-                "price_clp_final": price_clp_final,
-                "price_usd_reference": usd_ref,
-                "price_clp_suggested": pricing["clp_sugerido"],
-                "stock": stock,
-                "condition": request.data.get("condition"),
-                "language": request.data.get("language"),
-                "is_foil": is_foil,
-                "edition": request.data.get("edition", ""),
-                "notes": request.data.get("notes", ""),
-                "is_active": _to_bool(request.data.get("is_active", True), default=True),
-            })
+
+            product = Product.objects.create(
+                mtg_card=card,
+                category=category,
+                name=f"{card.name} - {card.set_code.upper()} #{card.collector_number}",
+                description=f"{card.type_line}\nRareza: {card.rarity}\nSet: {card.set_name} ({card.set_code.upper()})\n\n{card.oracle_text}",
+                price_clp=price_clp_final,
+                price=price_clp_final,
+                price_usd_reference=usd_ref,
+                price_clp_suggested=pricing["clp_sugerido"],
+                price_clp_final=price_clp_final,
+                stock=stock,
+                condition=request.data.get("condition"),
+                language=request.data.get("language"),
+                is_foil=is_foil,
+                notes=request.data.get("notes", ""),
+                is_active=_to_bool(request.data.get("is_active", True), default=True),
+                product_type=Product.ProductType.SINGLE,
+                image=card.image_large or card.image_normal or card.image_small,
+            )
+            created = True
         except (ValueError, TypeError):
             return Response({"detail": "price_clp_final y stock deben ser numéricos"}, status=400)
+        except ValidationError as exc:
+            scryfall_id = str(request.data.get("scryfall_id", "")).strip()
+            url = f"https://api.scryfall.com/cards/{scryfall_id}"
+            logger.error("Error consultando Scryfall URL=%s status=400 response=%s", url, exc, exc_info=True)
+            return Response({
+                "detail": "No se pudo obtener la carta desde Scryfall usando el ID recibido.",
+                "scryfall_id": scryfall_id,
+                "scryfall_response": str(exc),
+            }, status=502)
         except ScryfallServiceError as exc:
             return Response({"detail": str(exc)}, status=502)
 
-        code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
-        return Response({"created": created, "pricing": pricing, "product": ProductSerializer(product).data}, status=code)
+        return Response(ProductSerializer(product).data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=["post"], url_path="import-excel")
     def import_excel(self, request):
