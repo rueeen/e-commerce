@@ -35,13 +35,13 @@ class AddCartItemView(APIView):
         if not product.is_active:
             return Response({"detail": "No se puede comprar un producto inactivo."}, status=status.HTTP_400_BAD_REQUEST)
 
-        if product.product_type == product.ProductType.PHYSICAL and product.stock < quantity:
-            return Response({"detail": "Stock insuficiente para el producto físico."}, status=status.HTTP_400_BAD_REQUEST)
+        if product.stock < quantity:
+            return Response({"detail": "Stock insuficiente para el producto."}, status=status.HTTP_400_BAD_REQUEST)
 
         item, created = CartItem.objects.get_or_create(cart=cart, product=product, defaults={"quantity": quantity})
         if not created:
             new_quantity = item.quantity + quantity
-            if product.product_type == product.ProductType.PHYSICAL and product.stock < new_quantity:
+            if product.stock < new_quantity:
                 return Response({"detail": "Stock insuficiente para actualizar la cantidad."}, status=status.HTTP_400_BAD_REQUEST)
             item.quantity = new_quantity
             item.save(update_fields=["quantity"])
@@ -65,8 +65,8 @@ class UpdateCartItemView(APIView):
 
         quantity = serializer.validated_data["quantity"]
         product = item.product
-        if product.product_type == product.ProductType.PHYSICAL and product.stock < quantity:
-            return Response({"detail": "Stock insuficiente para el producto físico."}, status=status.HTTP_400_BAD_REQUEST)
+        if product.stock < quantity:
+            return Response({"detail": "Stock insuficiente para el producto."}, status=status.HTTP_400_BAD_REQUEST)
 
         item.quantity = quantity
         item.save(update_fields=["quantity"])
