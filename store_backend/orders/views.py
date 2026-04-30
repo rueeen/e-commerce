@@ -3,6 +3,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from accounts.permissions import is_admin_user, is_worker_user
+from products.models import KardexMovement
+from products.kardex import create_kardex_movement
 from .models import AssistedPurchaseOrder
 from .serializers import AssistedPurchaseOrderSerializer
 
@@ -26,10 +28,22 @@ class AssistedPurchaseOrderViewSet(viewsets.ModelViewSet):
             return Response({"detail": "No autorizado"}, status=status.HTTP_403_FORBIDDEN)
 
         order = self.get_object()
+        old_status = order.status
         new_status = request.data.get("status")
         valid = {s[0] for s in AssistedPurchaseOrder.Status.choices}
         if new_status not in valid:
             return Response({"detail": "Estado inválido"}, status=status.HTTP_400_BAD_REQUEST)
         order.status = new_status
         order.save(update_fields=["status", "updated_at"])
+        if old_status != new_status and new_status in {AssistedPurchaseOrder.Status.PAID, AssistedPurchaseOrder.Status.APPROVED}:
+            for item in order.items.select_related("product"):
+                create_kardex_movement(
+                    product=item.product,
+                    movement_type=KardexMovement.MovementType.SALE,
+                    quantity=item.quantity,
+                    created_by=request.user,
+                    unit_price_clp=int(item.product.price_clp_final or item.product.price_clp or 0),
+                    reference=f"Orden #{order.id}",
+                    notes="Salida automática por confirmación/pago de orden",
+                )
         return Response(self.get_serializer(order).data)

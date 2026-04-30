@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import Count
 from django.core.exceptions import ValidationError
 import logging
@@ -9,21 +10,14 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from accounts.permissions import IsAdminUser, IsAdminOrWorkerUser
-from .models import Category, MTGCard, PricingSettings, Product
+from .models import Category, KardexMovement, MTGCard, PricingSettings, Product
 from .permissions import IsAdminOrReadOnly
-from .serializers import CategorySerializer, MTGCardSerializer, PricingSettingsSerializer, ProductSerializer
+from .serializers import CategorySerializer, KardexMovementSerializer, MTGCardSerializer, PricingSettingsSerializer, ProductSerializer
 from .services import ScryfallServiceError, calculate_price_clp, extract_usd_price, get_active_pricing_settings, get_scryfall_card_by_id, import_card, search_cards
+from .kardex import create_kardex_movement
 
 
 logger = logging.getLogger(__name__)
-
-
-def _to_bool(value, default=False):
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 class CardViewSet(viewsets.ReadOnlyModelViewSet):
@@ -137,7 +131,8 @@ class ProductViewSet(viewsets.ModelViewSet):
             if price_clp_final < 0:
                 return Response({"detail": "price_clp_final no puede ser menor a 0"}, status=400)
 
-            product = Product.objects.create(
+            with transaction.atomic():
+                product = Product.objects.create(
                 mtg_card=card,
                 category=category,
                 name=f"{card.name} - {card.set_code.upper()} #{card.collector_number}",
@@ -154,8 +149,10 @@ class ProductViewSet(viewsets.ModelViewSet):
                 notes=request.data.get("notes", ""),
                 is_active=_to_bool(request.data.get("is_active", True), default=True),
                 product_type=Product.ProductType.SINGLE,
-                image=card.image_large or card.image_normal or card.image_small,
-            )
+                    image=card.image_large or card.image_normal or card.image_small,
+                )
+                if stock > 0:
+                    create_kardex_movement(product=product, movement_type=KardexMovement.MovementType.IN, quantity=stock, created_by=request.user, unit_price_clp=price_clp_final, reference="Creación de single desde Scryfall")
             created = True
         except (ValueError, TypeError):
             return Response({"detail": "price_clp_final y stock deben ser numéricos"}, status=400)
@@ -172,6 +169,45 @@ class ProductViewSet(viewsets.ModelViewSet):
             return Response({"detail": str(exc)}, status=502)
 
         return Response(ProductSerializer(product).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get"], url_path="kardex", permission_classes=[IsAdminOrWorkerUser])
+    def kardex(self, request, pk=None):
+        product = self.get_object()
+        movements = product.kardex_movements.all()[:50]
+        return Response(KardexMovementSerializer(movements, many=True).data)
+
+
+class KardexViewSet(viewsets.GenericViewSet):
+    serializer_class = KardexMovementSerializer
+    permission_classes = [IsAdminOrWorkerUser]
+
+    def get_queryset(self):
+        qs = KardexMovement.objects.select_related("product", "created_by")
+        product_id = self.request.query_params.get("product_id")
+        if product_id:
+            qs = qs.filter(product_id=product_id)
+        mt = self.request.query_params.get("movement_type")
+        if mt:
+            qs = qs.filter(movement_type=mt)
+        return qs
+
+    def list(self, request):
+        return Response(self.get_serializer(self.get_queryset()[:200], many=True).data)
+
+    @action(detail=False, methods=["post"], url_path="movement")
+    def movement(self, request):
+        p = request.data
+        product = Product.objects.filter(pk=p.get("product")).first()
+        if not product:
+            return Response({"detail": "product inválido"}, status=400)
+        try:
+            qty = int(p.get("quantity", 0))
+            if qty <= 0:
+                return Response({"detail": "quantity debe ser mayor a 0"}, status=400)
+            movement = create_kardex_movement(product=product, movement_type=p.get("movement_type"), quantity=qty, created_by=request.user, unit_cost_clp=int(p.get("unit_cost_clp", 0) or 0), unit_price_clp=int(p.get("unit_price_clp", 0) or 0), reference=p.get("reference", ""), notes=p.get("notes", ""))
+        except (TypeError, ValueError, ValidationError) as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response(self.get_serializer(movement).data, status=201)
 
     @action(detail=False, methods=["post"], url_path="import-excel")
     def import_excel(self, request):

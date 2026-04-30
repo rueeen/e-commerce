@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
@@ -87,6 +88,31 @@ class Product(models.Model):
     pricing_source = models.CharField(max_length=20, choices=PricingSource.choices, default=PricingSource.MANUAL)
     pricing_last_update = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class KardexMovement(models.Model):
+    class MovementType(models.TextChoices):
+        IN = "IN", "Entrada manual"
+        OUT = "OUT", "Salida manual"
+        ADJUSTMENT = "ADJUSTMENT", "Ajuste"
+        SALE = "SALE", "Venta"
+        RETURN = "RETURN", "Devolución"
+        CORRECTION = "CORRECTION", "Corrección"
+
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="kardex_movements")
+    movement_type = models.CharField(max_length=20, choices=MovementType.choices)
+    quantity = models.PositiveIntegerField()
+    previous_stock = models.PositiveIntegerField()
+    new_stock = models.PositiveIntegerField()
+    unit_cost_clp = models.PositiveIntegerField(default=0)
+    unit_price_clp = models.PositiveIntegerField(default=0)
+    reference = models.CharField(max_length=255, blank=True)
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="kardex_movements")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
 
 
 class Supplier(models.Model):

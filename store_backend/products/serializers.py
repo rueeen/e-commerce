@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Category, MTGCard, PricingSettings, Product
+from .models import Category, KardexMovement, MTGCard, PricingSettings, Product
 
 
 class MTGCardSerializer(serializers.ModelSerializer):
@@ -50,3 +50,23 @@ class PricingSettingsSerializer(serializers.ModelSerializer):
         if "rounding_to" in attrs and attrs["rounding_to"] not in {10, 50, 100, 500, 1000}:
             raise serializers.ValidationError({"rounding_to": "Debe ser uno de: 10, 50, 100, 500, 1000"})
         return attrs
+
+
+class KardexMovementSerializer(serializers.ModelSerializer):
+    producto = serializers.CharField(source="product.name", read_only=True)
+    tipo_movimiento = serializers.CharField(source="movement_type", read_only=True)
+    stock_anterior = serializers.IntegerField(source="previous_stock", read_only=True)
+    stock_nuevo = serializers.IntegerField(source="new_stock", read_only=True)
+    costo_unitario = serializers.IntegerField(source="unit_cost_clp", read_only=True)
+    precio_unitario = serializers.IntegerField(source="unit_price_clp", read_only=True)
+    usuario = serializers.CharField(source="created_by.username", read_only=True)
+    fecha = serializers.DateTimeField(source="created_at", read_only=True)
+
+    class Meta:
+        model = KardexMovement
+        fields = (
+            "id", "product", "producto", "movement_type", "tipo_movimiento", "quantity", "stock_anterior", "stock_nuevo",
+            "costo_unitario", "precio_unitario", "reference", "notes", "usuario", "fecha",
+            "previous_stock", "new_stock", "unit_cost_clp", "unit_price_clp", "created_by", "created_at",
+        )
+        read_only_fields = ("previous_stock", "new_stock", "created_by", "created_at")

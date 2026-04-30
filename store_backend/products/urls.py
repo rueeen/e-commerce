@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .views import CardViewSet, CategoryViewSet, MTGScryfallViewSet, PricingSettingsViewSet, ProductViewSet
+from .views import CardViewSet, CategoryViewSet, KardexViewSet, MTGScryfallViewSet, PricingSettingsViewSet, ProductViewSet
 
 router = DefaultRouter()
 router.register('cards', CardViewSet, basename='card')
@@ -9,5 +9,6 @@ router.register('products', ProductViewSet, basename='product')
 router.register('categories', CategoryViewSet, basename='category')
 router.register('mtg/cards', MTGScryfallViewSet, basename='mtg-cards')
 router.register('pricing-settings', PricingSettingsViewSet, basename='pricing-settings')
+router.register('kardex', KardexViewSet, basename='kardex')
 
 urlpatterns = [path('', include(router.urls))]

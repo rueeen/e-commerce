@@ -10,6 +10,7 @@ const items = [
   ['/admin/importar-excel', 'bi-file-earmark-excel', 'Importar productos Excel'],
   ['/admin/scryfall-single', 'bi-stars', 'Crear single desde Scryfall'],
   ['/admin/pricing-settings', 'bi-cash-stack', 'Configuración de precios'],
+  ['/admin/kardex', 'bi-journal-text', 'Kardex'],
 ];
 
 export default function AdminSidebar({ open, onClose }) {

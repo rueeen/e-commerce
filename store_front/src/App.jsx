@@ -20,6 +20,7 @@ import ProfilePage from './pages/ProfilePage';
 import RegisterPage from './pages/RegisterPage';
 import ScryfallSingleCreate from './pages/ScryfallSingleCreate';
 import PricingSettingsPage from './pages/PricingSettingsPage';
+import AdminKardexPage from './pages/AdminKardexPage';
 
 export default function App() {
   return <Routes>
@@ -45,6 +46,7 @@ export default function App() {
       <Route path="usuarios" element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
       <Route path="scryfall-single" element={<AdminRoute><ScryfallSingleCreate /></AdminRoute>} />
       <Route path="pricing-settings" element={<AdminRoute><PricingSettingsPage /></AdminRoute>} />
+      <Route path="kardex" element={<WorkerRoute><AdminKardexPage /></WorkerRoute>} />
     </Route>
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes>;

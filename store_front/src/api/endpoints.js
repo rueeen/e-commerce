@@ -28,6 +28,9 @@ export const api = {
   getActivePricingSettings: () => apiClient.get('/api/pricing-settings/active/'),
   updatePricingSettings: (id, payload) => apiClient.patch(`/api/pricing-settings/${id}/`, payload),
   createPricingSettings: (payload) => apiClient.post('/api/pricing-settings/', payload),
+  getKardex: (params = {}) => apiClient.get('/api/kardex/', { params }),
+  createKardexMovement: (payload) => apiClient.post('/api/kardex/movement/', payload),
+  productKardex: (id) => apiClient.get(`/api/products/${id}/kardex/`),
 
   orders: (params = {}) => apiClient.get('/api/orders/', { params }),
   orderById: (id) => apiClient.get(`/api/orders/${id}/`),
