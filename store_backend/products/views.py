@@ -12,7 +12,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.permissions import IsAdminUser, IsAdminOrWorkerUser
-from .models import Category, KardexMovement, MTGCard, PricingSettings, Product, PurchaseOrder, Supplier
+from .models import Category, KardexMovement, MTGCard, PricingSettings, Product, PurchaseOrder, SingleCard, Supplier
 from .permissions import IsAdminOrReadOnly
 from .serializers import CategorySerializer, KardexMovementSerializer, MTGCardSerializer, PricingSettingsSerializer, ProductSerializer, PurchaseOrderSerializer, SupplierSerializer
 from .services import ScryfallServiceError, calculate_price_clp, calculate_suggested_sale_price, extract_usd_price, get_active_pricing_settings, get_scryfall_card_by_id, import_card, import_product_row, search_cards
@@ -92,7 +92,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="create-single-from-scryfall", permission_classes=[IsAdminUser])
     def create_single_from_scryfall(self, request):
-        required_fields = ["scryfall_id", "category_id", "price_clp_final", "condition", "language"]
+        required_fields = ["scryfall_id", "category_id", "price_clp", "condition", "language"]
         errors = {}
         payload = request.data or {}
         for field in required_fields:
@@ -103,7 +103,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         try:
             category_id = int(payload.get("category_id"))
-            price_clp_final = int(payload.get("price_clp_final", 0))
+            price_clp = int(payload.get("price_clp", 0))
             is_foil = _to_bool(payload.get("is_foil", False))
             is_active = _to_bool(payload.get("is_active", True), default=True)
             condition = str(payload.get("condition", "")).strip()
@@ -111,7 +111,7 @@ class ProductViewSet(viewsets.ModelViewSet):
             notes = str(payload.get("notes", "") or "").strip()
             scryfall_id = str(payload.get("scryfall_id", "")).strip()
         except (TypeError, ValueError):
-            return Response({"detail": "category_id y price_clp_final deben ser numéricos válidos"}, status=400)
+            return Response({"detail": "category_id y price_clp deben ser numéricos válidos"}, status=400)
 
         category = Category.objects.filter(pk=category_id).first()
         if not category:
@@ -123,8 +123,8 @@ class ProductViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Payload inválido", "errors": {"condition": "Este campo es obligatorio."}}, status=400)
         if not language:
             return Response({"detail": "Payload inválido", "errors": {"language": "Este campo es obligatorio."}}, status=400)
-        if price_clp_final < 0:
-            return Response({"detail": "price_clp_final no puede ser menor a 0", "errors": {"price_clp_final": "Debe ser mayor o igual a 0."}}, status=400)
+        if price_clp < 0:
+            return Response({"detail": "price_clp no puede ser menor a 0", "errors": {"price_clp": "Debe ser mayor o igual a 0."}}, status=400)
 
         try:
             card_data = get_scryfall_card_by_id(scryfall_id)
@@ -167,29 +167,27 @@ class ProductViewSet(viewsets.ModelViewSet):
             )
 
             usd_ref = extract_usd_price(card_data, is_foil=is_foil)
-            pricing = calculate_price_clp(usd_ref, is_foil=is_foil)
-            if price_clp_final == 0 and pricing.get("clp_sugerido"):
-                price_clp_final = int(pricing["clp_sugerido"])
 
             with transaction.atomic():
                 product = Product.objects.create(
-                    mtg_card=card,
                     category=category,
                     name=f"{card.name} - {card.set_code.upper()} #{card.collector_number}",
                     description=f"{card.type_line}\nRareza: {card.rarity}\nSet: {card.set_name} ({card.set_code.upper()})\n\n{card.oracle_text}",
-                    price_clp=price_clp_final,
-                    price=price_clp_final,
-                    price_usd_reference=usd_ref,
-                    price_clp_suggested=pricing["clp_sugerido"],
-                    price_clp_final=price_clp_final,
-                    stock=0,
-                    condition=condition,
-                    language=language,
-                    is_foil=is_foil,
+                    price_clp=price_clp,
+                    stock=int(payload.get("stock", 0) or 0),
                     notes=notes,
                     is_active=is_active,
                     product_type=Product.ProductType.SINGLE,
                     image=card.image_large or card.image_normal or card.image_small,
+                )
+                SingleCard.objects.create(
+                    product=product,
+                    mtg_card=card,
+                    condition=condition,
+                    language=language,
+                    is_foil=is_foil,
+                    edition=card.set_name,
+                    price_usd_reference=usd_ref,
                 )
         except ValidationError as exc:
             url = f"https://api.scryfall.com/cards/{scryfall_id}"
@@ -209,9 +207,9 @@ class ProductViewSet(viewsets.ModelViewSet):
         return Response({
             "id": product.id,
             "name": product.name,
-            "price_clp_final": product.price_clp_final,
+            "price_clp": product.price_clp,
             "stock": product.stock,
-            "mtg_card": product.mtg_card_id,
+            "mtg_card": product.single_card.mtg_card_id,
             "image": product.image,
             "category": product.category_id,
         }, status=status.HTTP_201_CREATED)
