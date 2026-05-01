@@ -2,7 +2,6 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 from .models import KardexMovement, PricingSettings, Product, PurchaseOrder
-from .services import calculate_suggested_sale_price
 
 PURCHASE_IN_TYPES = {KardexMovement.MovementType.PURCHASE_IN, KardexMovement.MovementType.MANUAL_IN, KardexMovement.MovementType.RETURN_IN}
 OUT_TYPES = {KardexMovement.MovementType.SALE_OUT, KardexMovement.MovementType.MANUAL_OUT}
@@ -83,6 +82,7 @@ def receive_purchase_order(purchase_order_id, user):
             if unit_cost_real_clp <= 0:
                 raise ValidationError(f"Costo unitario CLP no válido (0) para {item.product.name}")
             item.unit_cost_clp = unit_cost_real_clp
+            from .services import calculate_suggested_sale_price
             suggested_payload = calculate_suggested_sale_price(item.product, unit_cost_real_clp)
             suggested = int(suggested_payload.get("suggested_price_clp") or 0)
             min_allowed = int(suggested_payload.get("min_price_clp") or 0)
