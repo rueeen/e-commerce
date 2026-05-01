@@ -17,7 +17,11 @@ export const api = {
   importCatalogXlsx: (file) => {
     const formData = new FormData();
     formData.append('file', file);
-    return apiClient.post('/api/products/import-catalog-xlsx/', formData);
+    return apiClient.post('/api/products/import-catalog-xlsx/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
   },
   importPurchaseOrderXlsx: (file, purchase_order_id = null) => {
     const formData = new FormData();
