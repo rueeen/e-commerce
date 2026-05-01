@@ -4,7 +4,7 @@ import { api } from '../api/endpoints';
 import { notyf } from '../api/notifier';
 import ProductAutocomplete from '../components/ProductAutocomplete';
 
-const emptyForm = { supplier: '', notes: '', shipping_clp: '', import_fees_clp: '', taxes_clp: '', status: 'DRAFT', update_prices_on_receive: false, items: [] };
+const emptyForm = { supplier: '', order_number: '', notes: '', shipping_clp: '', import_fees_clp: '', taxes_clp: '', status: 'DRAFT', update_prices_on_receive: false, items: [] };
 
 export default function AdminPurchaseOrdersPage() {
   const [search] = useSearchParams();
@@ -13,6 +13,7 @@ export default function AdminPurchaseOrdersPage() {
   const [products, setProducts] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [isSaving, setIsSaving] = useState(false);
 
   const load = async () => {
     const [{ data: od }, { data: sd }, { data: pd }] = await Promise.all([api.getPurchaseOrders(), api.getSuppliers(), api.getProducts()]);
@@ -65,10 +66,16 @@ export default function AdminPurchaseOrdersPage() {
   };
 
   const save = async (status) => {
+    if (isSaving) return;
     if (!form.supplier || form.items.length === 0) return notyf.error('Proveedor e items son obligatorios');
+    if (form.order_number && !form.order_number.trim()) return notyf.error('El número de orden no puede estar vacío.');
+    if (!form.items.every((it) => Number(it.quantity_ordered || 0) > 0)) return notyf.error('La cantidad de cada item debe ser mayor a 0.');
+    if (!form.items.every((it) => Number(it.unit_cost_clp || 0) >= 0)) return notyf.error('El costo unitario debe ser mayor o igual a 0.');
     try {
+      setIsSaving(true);
       await api.createPurchaseOrder({
         ...form,
+        order_number: form.order_number?.trim() || '',
         supplier: Number(form.supplier),
         status,
         shipping_clp: Number(form.shipping_clp || 0),
@@ -82,6 +89,8 @@ export default function AdminPurchaseOrdersPage() {
       load();
     } catch {
       notyf.error('No se pudo crear la orden');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -94,8 +103,9 @@ export default function AdminPurchaseOrdersPage() {
     {showForm ? <div className="card card-body mb-4">
       <h5>Nueva orden de compra</h5>
       <div className="row g-2 mb-3">
-        <div className="col-md-6"><label className="form-label">Proveedor</label><select className="form-select" value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })}><option value="">Seleccione proveedor</option>{suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
-        <div className="col-md-6"><label className="form-label">Notas</label><input className="form-control" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
+        <div className="col-md-4"><label className="form-label">Proveedor</label><select className="form-select" value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })}><option value="">Seleccione proveedor</option>{suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+        <div className="col-md-4"><label className="form-label">Número de orden (opcional)</label><input className="form-control" placeholder="PO-20260501-0001" value={form.order_number} onChange={(e) => setForm({ ...form, order_number: e.target.value })} /></div>
+        <div className="col-md-4"><label className="form-label">Notas</label><input className="form-control" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
       </div>
       <label className="form-label">Agregar productos</label>
       <ProductAutocomplete products={products} onSelect={addItem} placeholder="Buscar por nombre de producto..." />
@@ -119,7 +129,7 @@ export default function AdminPurchaseOrdersPage() {
       }}>Usar precio sugerido</button><button className="btn btn-outline-danger btn-sm" onClick={() => setForm((f) => ({ ...f, items: f.items.filter((_, i) => i !== idx) }))}>Eliminar</button></div></td></tr>)}</tbody></table>
       <div className="form-check mb-2"><input className="form-check-input" type="checkbox" id="update-prices-on-receive" checked={form.update_prices_on_receive} onChange={(e) => setForm({ ...form, update_prices_on_receive: e.target.checked })} /><label className="form-check-label" htmlFor="update-prices-on-receive">Actualizar precios de venta al recibir orden</label></div>
       <div className="row g-2 mt-2"><div className="col-md-2"><label className="form-label">Costo envío</label><input type="number" className="form-control" placeholder="0" value={form.shipping_clp} onChange={(e) => setForm({ ...form, shipping_clp: e.target.value })} /></div><div className="col-md-2"><label className="form-label">Importación</label><input type="number" className="form-control" placeholder="0" value={form.import_fees_clp} onChange={(e) => setForm({ ...form, import_fees_clp: e.target.value })} /></div><div className="col-md-2"><label className="form-label">Impuestos</label><input type="number" className="form-control" placeholder="0" value={form.taxes_clp} onChange={(e) => setForm({ ...form, taxes_clp: e.target.value })} /></div><div className="col-md-6"><div className="alert alert-light border mt-4 mb-0">Subtotal: ${subtotal} | Total final: <strong>${total}</strong></div></div></div>
-      <div className="d-flex gap-2 mt-3"><button className="btn btn-outline-secondary" onClick={() => save('DRAFT')}>Guardar borrador</button><button className="btn btn-success" onClick={() => save('SENT')}>Guardar y enviar</button></div>
+      <div className="d-flex gap-2 mt-3"><button className="btn btn-outline-secondary" disabled={isSaving} onClick={() => save('DRAFT')}>{isSaving ? 'Guardando orden...' : 'Guardar borrador'}</button><button className="btn btn-success" disabled={isSaving} onClick={() => save('SENT')}>{isSaving ? 'Guardando orden...' : 'Guardar y enviar'}</button></div>
     </div> : null}
 
     <table className="table"><thead><tr><th>Número</th><th>Proveedor</th><th>Estado</th><th>Total</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody>{orders.map((o) => <tr key={o.id}><td>{o.order_number}</td><td>{o.supplier_name || o.supplier}</td><td><span className="badge text-bg-secondary">{o.status}</span></td><td>${o.total_clp}</td><td>{new Date(o.created_at).toLocaleDateString('es-CL')}</td><td className="d-flex gap-2"><button className="btn btn-outline-primary btn-sm" onClick={() => window.alert(`Detalle: ${o.order_number}`)}>Ver detalle</button>{o.status !== 'RECEIVED' ? <button className="btn btn-sm btn-success" onClick={() => receive(o.id)}>Marcar como recibida</button> : null}</td></tr>)}</tbody></table>
