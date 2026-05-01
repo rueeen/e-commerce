@@ -17,7 +17,7 @@ export const api = {
   importProductsExcel: (file) => {
     const formData = new FormData();
     formData.append('file', file);
-    return apiClient.post('/api/products/import-excel/', formData);
+    return apiClient.post('/api/kardex/import-excel/', formData);
   },
 
   getCategories: (params = {}) => apiClient.get('/api/categories/', { params }),
