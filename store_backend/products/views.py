@@ -15,7 +15,7 @@ from accounts.permissions import IsAdminUser, IsAdminOrWorkerUser
 from .models import Category, KardexMovement, MTGCard, PricingSettings, Product, PurchaseOrder, Supplier
 from .permissions import IsAdminOrReadOnly
 from .serializers import CategorySerializer, KardexMovementSerializer, MTGCardSerializer, PricingSettingsSerializer, ProductSerializer, PurchaseOrderSerializer, SupplierSerializer
-from .services import ScryfallServiceError, calculate_price_clp, extract_usd_price, get_active_pricing_settings, get_scryfall_card_by_id, import_card, search_cards
+from .services import ScryfallServiceError, calculate_price_clp, calculate_suggested_sale_price, extract_usd_price, get_active_pricing_settings, get_scryfall_card_by_id, import_card, search_cards
 from .inventory_services import create_stock_movement, receive_purchase_order
 
 
@@ -215,6 +215,16 @@ class ProductViewSet(viewsets.ModelViewSet):
             "image": product.image,
             "category": product.category_id,
         }, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get"], url_path="suggested-price", permission_classes=[IsAdminUser])
+    def suggested_price(self, request, pk=None):
+        product = self.get_object()
+        unit_cost_clp = request.query_params.get("unit_cost_clp", 0)
+        try:
+            unit_cost_clp = int(float(unit_cost_clp or 0))
+        except (TypeError, ValueError):
+            return Response({"detail": "unit_cost_clp inválido"}, status=400)
+        return Response(calculate_suggested_sale_price(product, unit_cost_clp=unit_cost_clp))
 
     @action(detail=True, methods=["get"], url_path="kardex", permission_classes=[IsAdminOrWorkerUser])
     def kardex(self, request, pk=None):

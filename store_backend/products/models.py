@@ -170,6 +170,7 @@ class PurchaseOrder(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     received_at = models.DateTimeField(null=True, blank=True)
+    update_prices_on_receive = models.BooleanField(default=False)
 
 
 class PurchaseOrderItem(models.Model):

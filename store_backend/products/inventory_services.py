@@ -2,6 +2,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 from .models import KardexMovement, PricingSettings, Product, PurchaseOrder
+from .services import calculate_suggested_sale_price
 
 PURCHASE_IN_TYPES = {KardexMovement.MovementType.PURCHASE_IN, KardexMovement.MovementType.MANUAL_IN, KardexMovement.MovementType.RETURN_IN}
 OUT_TYPES = {KardexMovement.MovementType.SALE_OUT, KardexMovement.MovementType.MANUAL_OUT}
@@ -82,15 +83,20 @@ def receive_purchase_order(purchase_order_id, user):
             if unit_cost_real_clp <= 0:
                 raise ValidationError(f"Costo unitario CLP no válido (0) para {item.product.name}")
             item.unit_cost_clp = unit_cost_real_clp
-            suggested = unit_cost_real_clp * float(settings.default_margin or 1)
-            suggested = suggested * (float(settings.usd_to_clp_store or 1) / float(settings.usd_to_clp_real or 1))
-            suggested = _round_to(suggested, settings.rounding_to)
-            min_allowed = unit_cost_real_clp * float(settings.min_margin or 1)
-            if item.product.price_clp_final and item.product.price_clp_final < int(min_allowed):
+            suggested_payload = calculate_suggested_sale_price(item.product, unit_cost_real_clp)
+            suggested = int(suggested_payload.get("suggested_price_clp") or 0)
+            min_allowed = int(suggested_payload.get("min_price_clp") or 0)
+            if item.product.price_clp_final and item.product.price_clp_final < min_allowed:
                 raise ValidationError(f"Precio por debajo del margen mínimo para {item.product.name}")
             create_stock_movement(product=item.product, movement_type=KardexMovement.MovementType.PURCHASE_IN, quantity=qty, created_by=user, unit_cost_clp=unit_cost_real_clp, reference_type="PURCHASE_ORDER", reference_id=po.id, reference_label=po.order_number, notes="Ingreso por recepción de orden de compra")
             item.product.price_clp_suggested = int(suggested)
-            item.product.save(update_fields=["price_clp_suggested"])
+            if po.update_prices_on_receive and suggested > 0:
+                item.product.price_clp_final = int(suggested)
+                item.product.price_clp = int(suggested)
+                item.product.price = int(suggested)
+                item.product.save(update_fields=["price_clp_suggested", "price_clp_final", "price_clp", "price"])
+            else:
+                item.product.save(update_fields=["price_clp_suggested"])
             item.quantity_received = item.quantity_ordered
             item.subtotal_clp = item.quantity_ordered * item.unit_cost_clp
             item.save(update_fields=["quantity_received", "subtotal_clp", "unit_cost_clp"])
