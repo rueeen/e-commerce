@@ -69,20 +69,47 @@ def receive_purchase_order(purchase_order_id, user):
     if not any((item.quantity_ordered - item.quantity_received) > 0 for item in items):
         raise ValidationError("No hay cantidades pendientes por recibir")
 
-    total_usd_items = sum(float(item.unit_cost_usd or 0) * int(item.quantity_ordered) for item in items)
+    total_usd_items = sum(float(item.unit_cost_usd or 0) * int(item.quantity_ordered) for item in items if float(item.unit_cost_usd or 0) > 0)
     po.subtotal_usd = round(total_usd_items, 2)
     po.exchange_rate = po.exchange_rate or settings.usd_to_clp_real or settings.usd_to_clp
     total_usd_paid = float(po.subtotal_usd) + float(po.shipping_usd or 0) + float(po.payment_fee_usd or 0)
     po.total_paid_clp = int(round(total_usd_paid * float(po.exchange_rate or 0)))
     po.total_real_clp = int(po.total_paid_clp + int(po.customs_clp or 0) + int(po.handling_clp or 0) + int(po.other_costs_clp or 0))
 
+    use_usd_allocation = total_usd_items > 0
+
     for item in items:
         qty = item.quantity_ordered - item.quantity_received
         if qty > 0:
-            item_total_usd = float(item.unit_cost_usd or 0) * int(item.quantity_ordered)
-            weight = (item_total_usd / total_usd_items) if total_usd_items > 0 else 0
-            allocated_cost = int(round(weight * po.total_real_clp))
-            unit_cost_real_clp = int(round(allocated_cost / item.quantity_ordered))
+            unit_cost_usd = float(item.unit_cost_usd or 0)
+            unit_cost_clp_base = int(item.unit_cost_clp or 0)
+            if unit_cost_usd <= 0 and unit_cost_clp_base <= 0:
+                raise ValidationError(f"Costo unitario inválido para {item.product.name}: requiere unit_cost_clp > 0 o unit_cost_usd > 0")
+
+            if use_usd_allocation and unit_cost_usd > 0:
+                item_total_usd = unit_cost_usd * int(item.quantity_ordered)
+                weight = item_total_usd / total_usd_items
+                allocated_cost = int(round(weight * po.total_real_clp))
+                unit_cost_real_clp = int(round(allocated_cost / item.quantity_ordered))
+                calc_mode = "usd_allocation"
+            else:
+                unit_cost_real_clp = unit_cost_clp_base
+                calc_mode = "clp_fallback"
+
+            logger.info(
+                "PO receive item pricing po_id=%s item_id=%s product_id=%s mode=%s qty=%s unit_cost_usd=%s unit_cost_clp_input=%s total_usd_items=%s total_real_clp=%s unit_cost_real_clp=%s",
+                po.pk,
+                item.pk,
+                item.product_id,
+                calc_mode,
+                item.quantity_ordered,
+                unit_cost_usd,
+                unit_cost_clp_base,
+                total_usd_items,
+                po.total_real_clp,
+                unit_cost_real_clp,
+            )
+
             if unit_cost_real_clp <= 0:
                 raise ValidationError(f"Costo unitario CLP no válido (0) para {item.product.name}")
             item.unit_cost_clp = unit_cost_real_clp

@@ -127,3 +127,50 @@ class ImportTests(TestCase):
         self.assertEqual(po.total_clp, 4700)
         item = po.items.get(product=product)
         self.assertEqual(item.subtotal_clp, 3000)
+
+class PurchaseOrderReceiveTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = get_user_model().objects.create_user(username='worker', password='x', role='admin', is_staff=True)
+        self.client.force_authenticate(self.user)
+
+    def test_receive_purchase_order_uses_clp_when_usd_not_present(self):
+        product = Product.objects.create(name='Producto CLP', product_type='sealed', price_clp=1000, stock=0)
+        po = PurchaseOrder.objects.create(status=PurchaseOrder.Status.DRAFT, created_by=self.user, order_number='PO-CLP-1')
+        item = PurchaseOrderItem.objects.create(
+            purchase_order=po,
+            product=product,
+            quantity_ordered=3,
+            quantity_received=0,
+            unit_cost_usd=0,
+            unit_cost_clp=1500,
+            subtotal_clp=4500,
+        )
+
+        res = self.client.post(f'/api/purchase-orders/{po.id}/receive/')
+        self.assertEqual(res.status_code, 200)
+
+        item.refresh_from_db()
+        product.refresh_from_db()
+        po.refresh_from_db()
+        self.assertEqual(item.unit_cost_clp, 1500)
+        self.assertEqual(item.quantity_received, 3)
+        self.assertEqual(product.stock, 3)
+        self.assertEqual(po.status, PurchaseOrder.Status.RECEIVED)
+
+    def test_receive_purchase_order_requires_positive_cost_in_clp_or_usd(self):
+        product = Product.objects.create(name='Producto Inválido', product_type='sealed', price_clp=1000, stock=0)
+        po = PurchaseOrder.objects.create(status=PurchaseOrder.Status.DRAFT, created_by=self.user, order_number='PO-INVALID-1')
+        PurchaseOrderItem.objects.create(
+            purchase_order=po,
+            product=product,
+            quantity_ordered=2,
+            quantity_received=0,
+            unit_cost_usd=0,
+            unit_cost_clp=0,
+            subtotal_clp=0,
+        )
+
+        res = self.client.post(f'/api/purchase-orders/{po.id}/receive/')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('Costo unitario inválido', str(res.data))
