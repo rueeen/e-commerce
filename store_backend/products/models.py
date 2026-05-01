@@ -86,6 +86,28 @@ class Product(models.Model):
             return self.bundle.total_price_clp
         return self.price_clp
 
+    @property
+    def cost_real_clp(self):
+        lot = self.lots.filter(quantity_remaining__gt=0).order_by("-received_at", "-id").first()
+        if lot:
+            return int(lot.unit_cost_clp or 0)
+        return int(self.last_purchase_cost_clp or self.average_cost_clp or 0)
+
+    @property
+    def margin_clp(self):
+        return int(self.price_clp or 0) - int(self.cost_real_clp or 0)
+
+    @property
+    def margin_percentage(self):
+        cost = int(self.cost_real_clp or 0)
+        if cost <= 0:
+            return 0
+        return round((self.margin_clp / cost) * 100, 2)
+
+    @property
+    def suggested_price_clp(self):
+        return int(round(int(self.cost_real_clp or 0) * 1.3))
+
 
 class SingleCard(models.Model):
     product = models.OneToOneField(Product, on_delete=models.CASCADE, related_name="single_card")
@@ -271,6 +293,7 @@ class PricingSettings(models.Model):
     import_factor = models.DecimalField(max_digits=5, decimal_places=2, default=1.30)
     risk_factor = models.DecimalField(max_digits=5, decimal_places=2, default=1.10)
     margin_factor = models.DecimalField(max_digits=5, decimal_places=2, default=1.25)
+    vat_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=19)
     rounding_to = models.PositiveIntegerField(default=100)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

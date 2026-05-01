@@ -211,3 +211,48 @@ class PurchaseOrderReceiveTests(TestCase):
         res = self.client.post(f'/api/purchase-orders/{po.id}/receive/')
         self.assertEqual(res.status_code, 400)
         self.assertIn('Costo unitario inválido', str(res.data))
+
+    def test_create_purchase_order_auto_calculates_vat_when_empty(self):
+        supplier = Supplier.objects.create(name="VAT Supplier")
+        product = Product.objects.create(name="Producto VAT", product_type="sealed", price_clp=1000, stock=0)
+        payload = {
+            "supplier": supplier.id,
+            "status": "DRAFT",
+            "shipping_clp": 40000,
+            "import_fees_clp": 50000,
+            "taxes_clp": 0,
+            "items": [{"product": product.id, "quantity_ordered": 1, "unit_cost_clp": 100000, "quantity_received": 0}],
+        }
+        res = self.client.post("/api/purchase-orders/", payload, format="json")
+        self.assertEqual(res.status_code, 201)
+        po = PurchaseOrder.objects.get(id=res.data["id"])
+        self.assertEqual(po.taxes_clp, 36100)
+        self.assertEqual(po.total_clp, 226100)
+
+    def test_create_purchase_order_manual_vat_override_is_respected(self):
+        supplier = Supplier.objects.create(name="VAT Override")
+        product = Product.objects.create(name="Producto VAT 2", product_type="sealed", price_clp=1000, stock=0)
+        payload = {
+            "supplier": supplier.id,
+            "status": "DRAFT",
+            "shipping_clp": 1000,
+            "import_fees_clp": 1000,
+            "taxes_clp": 1234,
+            "items": [{"product": product.id, "quantity_ordered": 1, "unit_cost_clp": 10000, "quantity_received": 0}],
+        }
+        res = self.client.post("/api/purchase-orders/", payload, format="json")
+        self.assertEqual(res.status_code, 201)
+        po = PurchaseOrder.objects.get(id=res.data["id"])
+        self.assertEqual(po.taxes_clp, 1234)
+
+    def test_product_margin_and_negative_margin(self):
+        product = Product.objects.create(
+            name="Producto Margen",
+            product_type="sealed",
+            price_clp=500,
+            stock=0,
+            last_purchase_cost_clp=1045,
+        )
+        self.assertEqual(product.cost_real_clp, 1045)
+        self.assertEqual(product.margin_clp, -545)
+        self.assertLess(product.margin_percentage, 0)
