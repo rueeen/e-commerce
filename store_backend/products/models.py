@@ -49,15 +49,12 @@ class MTGCard(models.Model):
     class Meta:
         ordering = ["name", "set_code", "collector_number"]
 
-    def __str__(self):
-        return f"{self.name} [{self.set_code.upper()} #{self.collector_number}]" if self.set_code else self.name
-
 
 class Product(models.Model):
     class ProductType(models.TextChoices):
         SINGLE = "single", "Carta individual"
+        SEALED = "sealed", "Sellado"
         BUNDLE = "bundle", "Bundle"
-        OTHER = "other", "Otro"
 
     class CardCondition(models.TextChoices):
         NM = "NM", "Near Mint"
@@ -67,11 +64,9 @@ class Product(models.Model):
         DMG = "DMG", "Damaged"
 
     category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name="products", null=True, blank=True)
-    mtg_card = models.ForeignKey(MTGCard, on_delete=models.SET_NULL, related_name="products", null=True, blank=True)
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     product_type = models.CharField(max_length=20, choices=ProductType.choices, default=ProductType.SINGLE, db_index=True)
-    price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     price_clp = models.PositiveIntegerField(default=0)
     stock = models.PositiveIntegerField(default=0)
     stock_minimum = models.PositiveIntegerField(default=0)
@@ -79,18 +74,62 @@ class Product(models.Model):
     last_purchase_cost_clp = models.PositiveIntegerField(default=0)
     image = models.URLField(blank=True)
     is_active = models.BooleanField(default=True)
-    condition = models.CharField(max_length=5, choices=CardCondition.choices, default=CardCondition.NM)
-    language = models.CharField(max_length=40, default="EN")
-    is_foil = models.BooleanField(default=False)
-    edition = models.CharField(max_length=120, blank=True)
     notes = models.TextField(blank=True)
-    price_usd_reference = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     price_clp_suggested = models.PositiveIntegerField(default=0)
-    price_clp_final = models.PositiveIntegerField(default=0)
     pricing_source = models.CharField(max_length=20, choices=PricingSource.choices, default=PricingSource.MANUAL)
     pricing_last_update = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    @property
+    def computed_price_clp(self):
+        if self.product_type == self.ProductType.BUNDLE and hasattr(self, "bundle"):
+            return self.bundle.total_price_clp
+        return self.price_clp
+
+
+class SingleCard(models.Model):
+    product = models.OneToOneField(Product, on_delete=models.CASCADE, related_name="single_card")
+    mtg_card = models.ForeignKey(MTGCard, on_delete=models.PROTECT, related_name="single_products")
+    condition = models.CharField(max_length=5, choices=Product.CardCondition.choices, default=Product.CardCondition.NM)
+    language = models.CharField(max_length=40, default="EN")
+    is_foil = models.BooleanField(default=False)
+    edition = models.CharField(max_length=120, blank=True)
+    price_usd_reference = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+
+class SealedProduct(models.Model):
+    class SealedKind(models.TextChoices):
+        PRECON = "precon", "Precon"
+        BOOSTER = "booster", "Booster"
+        BUNDLE = "bundle", "Bundle"
+        OTHER = "other", "Otro"
+
+    product = models.OneToOneField(Product, on_delete=models.CASCADE, related_name="sealed_product")
+    sealed_kind = models.CharField(max_length=20, choices=SealedKind.choices, default=SealedKind.OTHER)
+    set_code = models.CharField(max_length=20, blank=True)
+
+
+class BundleItem(models.Model):
+    bundle = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="bundle_items", limit_choices_to={"product_type": Product.ProductType.BUNDLE})
+    item = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="part_of_bundles")
+    quantity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
+
+    class Meta:
+        unique_together = ("bundle", "item")
+
+
+Product.add_to_class("bundle", property(lambda self: _BundleProxy(self)))
+
+
+class _BundleProxy:
+    def __init__(self, product):
+        self.product = product
+
+    @property
+    def total_price_clp(self):
+        return sum(i.quantity * i.item.computed_price_clp for i in self.product.bundle_items.select_related("item"))
+
+# keep rest unchanged
 
 class KardexMovement(models.Model):
     class MovementType(models.TextChoices):

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Category, KardexMovement, MTGCard, PricingSettings, Product, PurchaseOrder, PurchaseOrderItem, Supplier
+from .models import BundleItem, Category, KardexMovement, MTGCard, PricingSettings, Product, PurchaseOrder, PurchaseOrderItem, SealedProduct, SingleCard, Supplier
 
 
 class MTGCardSerializer(serializers.ModelSerializer):
@@ -9,20 +9,39 @@ class MTGCardSerializer(serializers.ModelSerializer):
         exclude = ("raw_data",)
 
 
-class ProductSerializer(serializers.ModelSerializer):
+class SingleCardSerializer(serializers.ModelSerializer):
     mtg_card = MTGCardSerializer(read_only=True)
+
+    class Meta:
+        model = SingleCard
+        fields = ("mtg_card", "condition", "language", "is_foil", "edition", "price_usd_reference")
+
+
+class SealedProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SealedProduct
+        fields = ("sealed_kind", "set_code")
+
+
+class BundleItemSerializer(serializers.ModelSerializer):
+    item_name = serializers.CharField(source="item.name", read_only=True)
+
+    class Meta:
+        model = BundleItem
+        fields = ("id", "item", "item_name", "quantity")
+
+
+class ProductSerializer(serializers.ModelSerializer):
     category = serializers.StringRelatedField(read_only=True)
     category_id = serializers.PrimaryKeyRelatedField(source="category", queryset=Category.objects.all(), required=False, allow_null=True)
-    mtg_card_id = serializers.PrimaryKeyRelatedField(source="mtg_card", queryset=MTGCard.objects.all(), required=False, allow_null=True)
+    single_card = SingleCardSerializer(read_only=True)
+    sealed_product = SealedProductSerializer(read_only=True)
+    bundle_items = BundleItemSerializer(many=True, required=False)
+    computed_price_clp = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Product
-        fields = (
-            "id", "name", "description", "product_type", "price", "price_clp", "stock", "stock_minimum", "average_cost_clp", "last_purchase_cost_clp", "image", "is_active", "condition",
-            "language", "is_foil", "edition", "notes", "price_usd_reference", "price_clp_suggested", "price_clp_final", "pricing_source", "pricing_last_update", "created_at", "mtg_card", "mtg_card_id", "category", "category_id",
-        )
-        read_only_fields = ("created_at", "stock", "average_cost_clp", "last_purchase_cost_clp")
-        extra_kwargs = {"product_type": {"required": True}}
+        fields = "__all__"
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -54,40 +73,11 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
         fields = "__all__"
         read_only_fields = ("created_by", "received_at")
 
-    def create(self, validated_data):
-        items = validated_data.pop("items", [])
-        po = PurchaseOrder.objects.create(**validated_data)
-        subtotal_clp = 0
-        subtotal_usd = 0
-        for item in items:
-            item["subtotal_clp"] = int(item["quantity_ordered"]) * int(item.get("unit_cost_clp", 0))
-            subtotal_clp += item["subtotal_clp"]
-            subtotal_usd += float(item.get("unit_cost_usd", 0)) * int(item["quantity_ordered"])
-            PurchaseOrderItem.objects.create(purchase_order=po, **item)
-        po.subtotal_clp = subtotal_clp
-        po.subtotal_usd = subtotal_usd
-        po.total_clp = subtotal_clp + po.shipping_clp + po.import_fees_clp + po.taxes_clp
-        po.save(update_fields=["subtotal_clp", "subtotal_usd", "total_clp"])
-        return po
-
 
 class KardexMovementSerializer(serializers.ModelSerializer):
-    producto = serializers.CharField(source="product.name", read_only=True)
-    usuario = serializers.CharField(source="created_by.username", read_only=True)
-    reference_display = serializers.SerializerMethodField()
-
     class Meta:
         model = KardexMovement
         fields = "__all__"
-
-    def get_reference_display(self, obj):
-        if obj.reference_label:
-            return obj.reference_label
-        if obj.reference_type and obj.reference_id:
-            return f"{obj.reference_type} #{obj.reference_id}"
-        if obj.reference_type:
-            return obj.reference_type
-        return "Sin referencia"
 
 
 class PricingSettingsSerializer(serializers.ModelSerializer):
