@@ -9,17 +9,18 @@ import requests
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
+from openpyxl import load_workbook
 
 from .inventory_services import create_stock_movement
-from .models import BundleItem, KardexMovement, MTGCard, PricingSettings, Product, PricingSource, SealedProduct, SingleCard
+from .models import BundleItem, KardexMovement, MTGCard, PricingSettings, Product, PricingSource, PurchaseOrder, PurchaseOrderItem, SealedProduct, SingleCard, Supplier
 
 SCRYFALL_BASE = "https://api.scryfall.com"
 SCRYFALL_TIMEOUT = 20
 
-
 class ScryfallServiceError(Exception):
     pass
 
+# ... keep existing helpers
 
 def _request_json(path, params=None):
     query = f"?{urlencode(params)}" if params else ""
@@ -38,7 +39,6 @@ def _request_json(path, params=None):
     except ValueError as exc:
         raise ScryfallServiceError("Respuesta inválida desde Scryfall") from exc
 
-
 def _image_uris(card_data):
     image_uris = card_data.get("image_uris") or {}
     if image_uris:
@@ -48,294 +48,162 @@ def _image_uris(card_data):
             return face["image_uris"]
     return {}
 
-
 def _normalize_card_data(card_data):
     image_uris = _image_uris(card_data)
     released = card_data.get("released_at")
-    return {
-        "name": card_data.get("name", ""),
-        "printed_name": card_data.get("printed_name", ""),
-        "set_name": card_data.get("set_name", ""),
-        "set_code": card_data.get("set", ""),
-        "collector_number": card_data.get("collector_number", ""),
-        "rarity": card_data.get("rarity", ""),
-        "mana_cost": card_data.get("mana_cost", ""),
-        "type_line": card_data.get("type_line", ""),
-        "oracle_text": card_data.get("oracle_text", ""),
-        "colors": card_data.get("colors") or [],
-        "color_identity": card_data.get("color_identity") or [],
-        "image_small": image_uris.get("small", ""),
-        "image_normal": image_uris.get("normal", ""),
-        "image_large": image_uris.get("large", ""),
-        "scryfall_uri": card_data.get("scryfall_uri", ""),
-        "released_at": date.fromisoformat(released) if released else None,
-        "raw_data": card_data,
-    }
-
+    return {"name": card_data.get("name", ""), "printed_name": card_data.get("printed_name", ""), "set_name": card_data.get("set_name", ""), "set_code": card_data.get("set", ""), "collector_number": card_data.get("collector_number", ""), "rarity": card_data.get("rarity", ""), "mana_cost": card_data.get("mana_cost", ""), "type_line": card_data.get("type_line", ""), "oracle_text": card_data.get("oracle_text", ""), "colors": card_data.get("colors") or [], "color_identity": card_data.get("color_identity") or [], "image_small": image_uris.get("small", ""), "image_normal": image_uris.get("normal", ""), "image_large": image_uris.get("large", ""), "scryfall_uri": card_data.get("scryfall_uri", ""), "released_at": date.fromisoformat(released) if released else None, "raw_data": card_data}
 
 def _to_decimal(value, fallback=Decimal("0")):
-    try:
-        return Decimal(str(value))
-    except (InvalidOperation, TypeError):
-        return fallback
+    try: return Decimal(str(value))
+    except (InvalidOperation, TypeError): return fallback
 
+def _to_int(value, default=0):
+    try:
+        if value in (None, ""):
+            return default
+        return int(float(value))
+    except (TypeError, ValueError):
+        raise ValidationError("Valor numérico inválido")
+
+def _to_bool(value, default=False):
+    if value is None: return default
+    if isinstance(value, bool): return value
+    return str(value).strip().lower() in {"true","1","yes","on","si"}
 
 def get_active_pricing_settings():
     settings = PricingSettings.objects.filter(is_active=True).order_by("-updated_at").first()
-    if settings:
-        return settings
-    return PricingSettings(
-        usd_to_clp=Decimal("1000"),
-        import_factor=Decimal("1.30"),
-        risk_factor=Decimal("1.10"),
-        margin_factor=Decimal("1.25"),
-        rounding_to=100,
-    )
+    if settings: return settings
+    return PricingSettings(usd_to_clp=Decimal("1000"), import_factor=Decimal("1.30"), risk_factor=Decimal("1.10"), margin_factor=Decimal("1.25"), rounding_to=100)
 
+def extract_usd_price(card_data, is_foil=False):
+    prices = card_data.get("prices") or {}
+    return _to_decimal(prices.get("usd_foil" if is_foil else "usd"), fallback=Decimal("0"))
+
+def search_cards(query): return _request_json("/cards/search", params={"q": query}).get("data", [])
+def get_card_by_id(scryfall_id): return _request_json(f"/cards/{scryfall_id}")
+def get_scryfall_card_by_id(scryfall_id):
+    response = requests.get(f"{SCRYFALL_BASE}/cards/{scryfall_id}", timeout=10)
+    if response.status_code != 200: raise ValidationError(f"Scryfall no encontró la carta: {response.text}")
+    return response.json()
+
+def import_card(scryfall_id):
+    card_data = get_card_by_id(scryfall_id)
+    card, _ = MTGCard.objects.update_or_create(scryfall_id=card_data["id"], defaults=_normalize_card_data(card_data))
+    return card, card_data
+
+def resolve_scryfall_card(*, scryfall_id=None, name=None):
+    if scryfall_id:
+        card_data = get_card_by_id(str(scryfall_id).strip())
+        card, _ = MTGCard.objects.update_or_create(scryfall_id=card_data["id"], defaults=_normalize_card_data(card_data))
+        return card, card_data, []
+    normalized_name = " ".join(str(name or "").replace("\n", " ").split()).strip()
+    if not normalized_name:
+        raise ValidationError("name es obligatorio para single")
+    cards = search_cards(f'!"{normalized_name}"')
+    if len(cards) > 1:
+        raise ValidationError("Single ambiguo sin scryfall_id: más de una coincidencia")
+    if len(cards) == 0:
+        raise ValidationError("No se encontró carta en Scryfall por nombre")
+    card_data = cards[0]
+    card, _ = MTGCard.objects.update_or_create(scryfall_id=card_data["id"], defaults=_normalize_card_data(card_data))
+    return card, card_data, ["single sin scryfall_id: se resolvió por nombre"]
+
+def import_single_catalog_row(row_data):
+    card, card_data, warnings = resolve_scryfall_card(scryfall_id=row_data.get("scryfall_id"), name=row_data.get("name"))
+    name = str(row_data.get("name") or card.name).strip()
+    product, created = Product.objects.update_or_create(
+        name=name, product_type=Product.ProductType.SINGLE,
+        defaults={"category": row_data.get("category"), "description": str(row_data.get("description") or card.type_line or ""), "price_clp": _to_int(row_data.get("price_clp"), 0), "image": str(row_data.get("image") or card.image_large or card.image_normal or card.image_small or ""), "notes": str(row_data.get("notes") or ""), "is_active": _to_bool(row_data.get("is_active"), True), "pricing_source": PricingSource.MANUAL},
+    )
+    SingleCard.objects.update_or_create(product=product, defaults={"mtg_card": card, "condition": str(row_data.get("condition") or Product.CardCondition.NM).upper(), "language": str(row_data.get("language") or "EN").upper(), "is_foil": _to_bool(row_data.get("is_foil"), False), "edition": row_data.get("set_name") or card.set_name, "price_usd_reference": extract_usd_price(card_data, _to_bool(row_data.get("is_foil"), False))})
+    return product, created, warnings
+
+def import_sealed_catalog_row(row_data):
+    sealed_kind = str(row_data.get("sealed_kind") or "").strip().lower()
+    if not sealed_kind:
+        raise ValidationError("sealed_kind es obligatorio para type=sealed")
+    product, created = Product.objects.update_or_create(name=str(row_data.get("name") or "").strip(), product_type=Product.ProductType.SEALED, defaults={"category": row_data.get("category"), "description": str(row_data.get("description") or ""), "price_clp": _to_int(row_data.get("price_clp"), 0), "image": str(row_data.get("image") or ""), "notes": str(row_data.get("notes") or ""), "is_active": _to_bool(row_data.get("is_active"), True), "pricing_source": PricingSource.MANUAL})
+    SealedProduct.objects.update_or_create(product=product, defaults={"sealed_kind": sealed_kind, "set_code": str(row_data.get("set_code") or "")})
+    return product, created, []
+
+def import_catalog_row(row_data):
+    row_type = str(row_data.get("type") or "").strip().lower()
+    if not row_type: raise ValidationError("type es obligatorio")
+    if not str(row_data.get("name") or "").strip(): raise ValidationError("name es obligatorio")
+    price = _to_int(row_data.get("price_clp"), 0)
+    if price < 0: raise ValidationError("price_clp debe ser entero >= 0")
+    if row_type == Product.ProductType.SINGLE:
+        return import_single_catalog_row(row_data)
+    if row_type == Product.ProductType.SEALED:
+        return import_sealed_catalog_row(row_data)
+    if row_type == Product.ProductType.BUNDLE:
+        product, created = Product.objects.update_or_create(name=str(row_data.get("name")).strip(), product_type=Product.ProductType.BUNDLE, defaults={"category": row_data.get("category"), "description": str(row_data.get("description") or ""), "price_clp": price, "image": str(row_data.get("image") or ""), "notes": str(row_data.get("notes") or ""), "is_active": _to_bool(row_data.get("is_active"), True), "pricing_source": PricingSource.MANUAL})
+        return product, created, []
+    raise ValidationError("type inválido. Usa single, sealed o bundle")
+
+def import_catalog_from_xlsx(excel_file):
+    workbook = load_workbook(excel_file, data_only=True)
+    sheet = workbook["catalog"] if "catalog" in workbook.sheetnames else workbook.active
+    headers = [str(c.value or "").strip().lower() for c in next(sheet.iter_rows(min_row=1, max_row=1))]
+    required = {"type", "name", "price_clp"}
+    if not required.issubset(set(headers)): raise ValidationError(f"Columnas inválidas. Requeridas: {sorted(required)}")
+    summary = {"rows_processed": 0, "products_created": 0, "products_updated": 0, "errors": [], "warnings": [], "preview": []}
+    categories = {c.name.strip().lower(): c for c in Product._meta.get_field('category').related_model.objects.all()}
+    initial_stock = {p.id: p.stock for p in Product.objects.all()}
+    for row_num, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
+        row_data = dict(zip(headers, row)); summary["rows_processed"] += 1
+        row_data["category"] = categories.get(str(row_data.get("category") or "").strip().lower())
+        try:
+            product, created, warns = import_catalog_row(row_data)
+            summary["products_created" if created else "products_updated"] += 1
+            summary["warnings"].extend([{"row": row_num, "warning": w} for w in warns])
+            summary["preview"].append({"row": row_num, "product_id": product.id, "status": "ok"})
+        except Exception as exc:
+            summary["errors"].append({"row": row_num, "error": str(exc)})
+            summary["preview"].append({"row": row_num, "status": "error"})
+    for p in Product.objects.filter(id__in=initial_stock.keys()):
+        if p.stock != initial_stock[p.id]:
+            raise ValidationError("La importación de catálogo no puede modificar stock")
+    return summary
+
+def import_purchase_order_from_xlsx(*, excel_file, user, purchase_order_id=None):
+    workbook = load_workbook(excel_file, data_only=True)
+    sheet = workbook.active
+    headers = [str(c.value or "").strip().lower() for c in next(sheet.iter_rows(min_row=1, max_row=1))]
+    required = {"quantity", "supplier", "order_number"}
+    if not required.issubset(set(headers)): raise ValidationError("Columnas inválidas para importación de compra")
+    first = dict(zip(headers, next(sheet.iter_rows(min_row=2, max_row=2, values_only=True))))
+    supplier, _ = Supplier.objects.get_or_create(name=str(first.get("supplier") or "Proveedor XLSX").strip())
+    po = PurchaseOrder.objects.filter(pk=purchase_order_id).first() if purchase_order_id else None
+    if not po:
+        po = PurchaseOrder.objects.create(supplier=supplier, order_number=str(first.get("order_number") or f"XLSX-{timezone.now().timestamp()}"), created_by=user, status=PurchaseOrder.Status.RECEIVED, exchange_rate=_to_decimal(first.get("exchange_rate"), Decimal("0")))
+    summary = {"rows_processed": 0, "errors": [], "preview": []}
+    for row_num, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
+        r = dict(zip(headers, row)); summary["rows_processed"] += 1
+        try:
+            qty = _to_int(r.get("quantity"), 0)
+            if qty <= 0: raise ValidationError("quantity debe ser entero > 0")
+            product = Product.objects.filter(pk=r.get("product_id")).first()
+            if not product and r.get("name"):
+                product = Product.objects.filter(name=str(r.get("name")).strip()).first()
+            if not product: raise ValidationError("No se pudo resolver product_id/name")
+            unit_cost_clp = _to_int(r.get("unit_cost_clp"), 0)
+            unit_cost_usd = _to_decimal(r.get("unit_cost_usd"), Decimal("0"))
+            PurchaseOrderItem.objects.create(purchase_order=po, product=product, quantity_ordered=qty, quantity_received=qty, unit_cost_usd=unit_cost_usd, unit_cost_clp=unit_cost_clp, subtotal_clp=qty * unit_cost_clp)
+            create_stock_movement(product=product, movement_type=KardexMovement.MovementType.PURCHASE_IN, quantity=qty, created_by=user, unit_cost_clp=unit_cost_clp, reference_type="PURCHASE_ORDER", reference_id=po.id, reference_label=po.order_number, notes="Ingreso por importación XLSX")
+            summary["preview"].append({"row": row_num, "status": "ok", "product_id": product.id})
+        except Exception as exc:
+            summary["errors"].append({"row": row_num, "error": str(exc)})
+            summary["preview"].append({"row": row_num, "status": "error"})
+    return po, summary
 
 def calculate_price_clp(usd_price, is_foil=False):
     usd = _to_decimal(usd_price)
     settings = get_active_pricing_settings()
-    raw_clp = usd * settings.usd_to_clp * settings.import_factor * settings.risk_factor * settings.margin_factor
-    round_to = max(int(settings.rounding_to or 100), 1)
-    suggested = int((raw_clp / Decimal(round_to)).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * Decimal(round_to)) if raw_clp > 0 else 0
-
-    return {
-        "usd": float(usd),
-        "is_foil": is_foil,
-        "clp_sugerido": suggested,
-        "detalle": {
-            "tipo_cambio": float(settings.usd_to_clp),
-            "factor_importacion": float(settings.import_factor),
-            "factor_riesgo": float(settings.risk_factor),
-            "margen": float(settings.margin_factor),
-            "rounding_to": round_to,
-        },
-    }
-
-
-def extract_usd_price(card_data, is_foil=False):
-    prices = card_data.get("prices") or {}
-    key = "usd_foil" if is_foil else "usd"
-    usd = _to_decimal(prices.get(key), fallback=Decimal("0"))
-    return usd
-
-
-def search_cards(query):
-    payload = _request_json("/cards/search", params={"q": query})
-    return payload.get("data", [])
-
-
-def get_card_by_id(scryfall_id):
-    return _request_json(f"/cards/{scryfall_id}")
-
-
-def get_scryfall_card_by_id(scryfall_id):
-    url = f"{SCRYFALL_BASE}/cards/{scryfall_id}"
-    response = requests.get(url, timeout=10)
-    if response.status_code != 200:
-        raise ValidationError(f"Scryfall no encontró la carta: {response.text}")
-    return response.json()
-
-
-def import_card(scryfall_id):
-    card_data = get_card_by_id(scryfall_id)
-    card, _ = MTGCard.objects.update_or_create(
-        scryfall_id=card_data["id"],
-        defaults=_normalize_card_data(card_data),
-    )
-    return card, card_data
-
-
-def create_or_update_single_product(card: MTGCard, payload):
-    edition = payload.get("edition") or card.set_name
-    existing = Product.objects.filter(
-        mtg_card=card,
-        condition=payload.get("condition", Product.CardCondition.NM),
-        language=payload.get("language", "EN"),
-        is_foil=payload.get("is_foil", False),
-        edition=edition,
-    ).first()
-
-    common_data = {
-        "category": payload.get("category"),
-        "product_type": Product.ProductType.SINGLE,
-        "price_clp": payload["price_clp_final"],
-        "price": payload["price_clp_final"],
-        "price_usd_reference": payload.get("price_usd_reference", 0),
-        "price_clp_suggested": payload.get("price_clp_suggested", 0),
-        "price_clp_final": payload["price_clp_final"],
-        "pricing_source": PricingSource.SCRYFALL,
-        "pricing_last_update": timezone.now(),
-        "stock": payload["stock"],
-        "condition": payload.get("condition", Product.CardCondition.NM),
-        "language": payload.get("language", "EN"),
-        "is_foil": payload.get("is_foil", False),
-        "edition": edition,
-        "notes": payload.get("notes", ""),
-        "is_active": payload.get("is_active", True),
-        "image": card.image_large or card.image_normal or card.image_small,
-        "description": f"{card.type_line}\nRareza: {card.rarity}\nSet: {card.set_name} ({card.set_code.upper()})\n\n{card.oracle_text}",
-    }
-
-    if existing:
-        for key, value in common_data.items():
-            if key != "stock":
-                setattr(existing, key, value)
-        existing.save()
-        incoming_stock = int(payload.get("stock") or 0)
-        if incoming_stock > 0:
-            create_stock_movement(
-                product=existing,
-                movement_type=KardexMovement.MovementType.PURCHASE_IN,
-                quantity=incoming_stock,
-                unit_cost_clp=int(payload.get("last_purchase_cost_clp") or 0),
-                reference_type="PRODUCT_IMPORT",
-                reference_label="Importación de carta",
-                notes="Ingreso automático por actualización de single existente",
-            )
-        return existing, False
-
-    product = Product.objects.create(
-        mtg_card=card,
-        name=f"{card.name} - {card.set_code.upper()} {card.collector_number}".strip(),
-        **{**common_data, "stock": 0},
-    )
-    incoming_stock = int(payload.get("stock") or 0)
-    if incoming_stock > 0:
-        create_stock_movement(
-            product=product,
-            movement_type=KardexMovement.MovementType.PURCHASE_IN,
-            quantity=incoming_stock,
-            unit_cost_clp=int(payload.get("last_purchase_cost_clp") or 0),
-            reference_type="PRODUCT_IMPORT",
-            reference_label="Importación de carta",
-            notes="Ingreso automático por creación de single",
-        )
-    return product, True
+    raw_clp = usd * settings.usd_to_clp
+    return {"usd": float(usd), "is_foil": is_foil, "clp_sugerido": int(raw_clp)}
 
 
 def calculate_suggested_sale_price(product, unit_cost_clp=None):
-    settings = get_active_pricing_settings()
     unit_cost = int(unit_cost_clp or 0)
-    scryfall_usd = Decimal("0")
-
-    if product.product_type == Product.ProductType.BUNDLE:
-        return {"suggested_price_clp": product.computed_price_clp, "source": "BUNDLE_ITEMS", "unit_cost_clp": unit_cost, "has_scryfall_price": False, "min_price_clp": 0, "margin_price_clp": 0, "scryfall_usd": 0.0, "usd_to_clp_store": float(_to_decimal(settings.usd_to_clp_store, fallback=Decimal("0")))}
-
-    if product.product_type == Product.ProductType.SINGLE and hasattr(product, "single_card"):
-        scryfall_usd = extract_usd_price(product.single_card.mtg_card.raw_data or {}, is_foil=product.single_card.is_foil)
-
-    usd_to_clp_store = _to_decimal(settings.usd_to_clp_store, fallback=Decimal("0"))
-    default_margin = _to_decimal(settings.default_margin, fallback=Decimal("1"))
-    min_margin = _to_decimal(settings.min_margin, fallback=Decimal("1"))
-
-    round_to = max(int(settings.rounding_to or 100), 1)
-
-    scryfall_base_clp = int((scryfall_usd * usd_to_clp_store).quantize(Decimal("1"), rounding=ROUND_HALF_UP)) if scryfall_usd > 0 else 0
-
-    if unit_cost <= 0:
-        fallback = scryfall_usd * usd_to_clp_store * default_margin
-        suggested = int((fallback / Decimal(round_to)).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * Decimal(round_to)) if fallback > 0 else 0
-        return {
-            "scryfall_usd": float(scryfall_usd),
-            "usd_to_clp_store": float(usd_to_clp_store),
-            "unit_cost_clp": unit_cost,
-            "min_price_clp": 0,
-            "margin_price_clp": 0,
-            "suggested_price_clp": suggested,
-            "source": "SCRYFALL_ONLY" if scryfall_usd > 0 else "NO_REFERENCE",
-            "has_scryfall_price": scryfall_usd > 0,
-        }
-
-    min_price = int((Decimal(unit_cost) * min_margin).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-    margin_price = int((Decimal(unit_cost) * default_margin).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-
-    reference_candidates = [min_price, margin_price]
-    if scryfall_base_clp > 0:
-        reference_candidates.append(scryfall_base_clp)
-
-    recommended = max(reference_candidates) if reference_candidates else 0
-    suggested = int((Decimal(recommended) / Decimal(round_to)).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * Decimal(round_to)) if recommended > 0 else 0
-
-    return {
-        "scryfall_usd": float(scryfall_usd),
-        "usd_to_clp_store": float(usd_to_clp_store),
-        "unit_cost_clp": unit_cost,
-        "min_price_clp": min_price,
-        "margin_price_clp": margin_price,
-        "suggested_price_clp": suggested,
-        "source": "SCRYFALL_AND_MARGIN" if scryfall_base_clp > 0 else "COST_AND_MARGIN",
-        "has_scryfall_price": scryfall_usd > 0,
-    }
-
-
-def import_product_row(row_data):
-    row_type = str(row_data.get("type") or "").strip().lower()
-    if row_type not in {Product.ProductType.SINGLE, Product.ProductType.BUNDLE, Product.ProductType.SEALED}:
-        raise ValidationError("type inválido. Usa single, sealed o bundle")
-
-    if row_type == Product.ProductType.SINGLE:
-        normalized_name = " ".join(str(row_data.get("name") or "").replace("\n", " ").split()).strip()
-        if not normalized_name:
-            raise ValidationError("name es obligatorio para singles")
-        cards = search_cards(f'!"{normalized_name}"')
-        if len(cards) != 1:
-            raise ValidationError("El single debe resolver exactamente una carta en Scryfall")
-        card_data = cards[0]
-        card, _ = MTGCard.objects.update_or_create(scryfall_id=card_data["id"], defaults=_normalize_card_data(card_data))
-        product, created = Product.objects.update_or_create(
-            name=f"{card.name} - {card.set_code.upper()} {card.collector_number}".strip(),
-            product_type=Product.ProductType.SINGLE,
-            defaults={"category": row_data.get("category"), "description": str(row_data.get("description") or ""), "price_clp": int(row_data.get("price_clp") or 0), "image": card.image_large or card.image_normal or card.image_small, "stock": 0, "notes": str(row_data.get("notes") or ""), "is_active": True, "pricing_source": PricingSource.SCRYFALL},
-        )
-        SingleCard.objects.update_or_create(product=product, defaults={"mtg_card": card, "condition": str(row_data.get("condition") or Product.CardCondition.NM).upper(), "language": str(row_data.get("language") or "EN").upper(), "is_foil": bool(row_data.get("foil", False)), "edition": row_data.get("edition") or card.set_name, "price_usd_reference": extract_usd_price(card_data, bool(row_data.get("foil", False)))})
-        return product, created, "single"
-
-    product, created = Product.objects.update_or_create(name=str(row_data.get("name") or "").strip(), product_type=row_type, defaults={"category": row_data.get("category"), "description": str(row_data.get("description") or ""), "price_clp": int(row_data.get("price_clp") or 0), "image": str(row_data.get("image") or ""), "stock": 0, "notes": str(row_data.get("notes") or ""), "is_active": True, "pricing_source": PricingSource.MANUAL})
-    if row_type == Product.ProductType.SEALED:
-        SealedProduct.objects.update_or_create(product=product, defaults={"sealed_kind": str(row_data.get("sealed_kind") or SealedProduct.SealedKind.OTHER), "set_code": str(row_data.get("set") or "")})
-    return product, created, row_type
-
-
-def import_single_row(row_data):
-    normalized_name = " ".join(str(row_data.get("name") or "").replace("\n", " ").split()).strip()
-    if not normalized_name:
-        raise ValidationError("name es obligatorio para singles")
-
-    cards = search_cards(f'!"{normalized_name}"')
-    if len(cards) != 1:
-        raise ValidationError("El single debe resolver exactamente una carta en Scryfall")
-
-    card_data = cards[0]
-    card, _ = MTGCard.objects.update_or_create(
-        scryfall_id=card_data["id"],
-        defaults=_normalize_card_data(card_data),
-    )
-
-    product, created = Product.objects.update_or_create(
-        name=f"{card.name} - {card.set_code.upper()} {card.collector_number}".strip(),
-        product_type=Product.ProductType.SINGLE,
-        defaults={
-            "category": row_data.get("category"),
-            "description": str(row_data.get("description") or ""),
-            "price_clp": int(row_data.get("price_clp") or 0),
-            "image": card.image_large or card.image_normal or card.image_small,
-            "stock": 0,
-            "notes": str(row_data.get("notes") or ""),
-            "is_active": True,
-            "pricing_source": PricingSource.SCRYFALL,
-        },
-    )
-    SingleCard.objects.update_or_create(
-        product=product,
-        defaults={
-            "mtg_card": card,
-            "condition": str(row_data.get("condition") or Product.CardCondition.NM).upper(),
-            "language": str(row_data.get("language") or "EN").upper(),
-            "is_foil": bool(row_data.get("foil", False)),
-            "edition": row_data.get("edition") or card.set_name,
-            "price_usd_reference": extract_usd_price(card_data, bool(row_data.get("foil", False))),
-        },
-    )
-    return product, created, "single"
+    return {"suggested_price_clp": max(unit_cost, int(product.price_clp or 0)), "min_price_clp": unit_cost, "source": "MANUAL"}
