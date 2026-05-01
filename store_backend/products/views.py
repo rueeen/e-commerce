@@ -32,10 +32,10 @@ def _to_bool(value, default=False):
     return bool(value)
 
 def format_exception(exc):
-    if hasattr(exc, "messages"):
-        return exc.messages
     if hasattr(exc, "message_dict"):
         return exc.message_dict
+    if hasattr(exc, "messages"):
+        return exc.messages
     return str(exc)
 
 
