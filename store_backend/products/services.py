@@ -25,6 +25,9 @@ COLUMN_ALIASES = {
     "price_clp": ["price_clp", "precio", "price"],
 }
 
+CATALOG_REQUIRED_HEADERS = ["name", "type", "price_clp"]
+SINGLE_PURCHASE_REQUIRED_HEADERS = ["name", "condition", "qty", "price_usd", "total_usd", "foil"]
+
 
 def _normalize_header(value):
     return str(value or "").strip().lower().replace(" ", "_")
@@ -45,7 +48,7 @@ def _resolve_catalog_headers(raw_headers):
         if canonical not in header_map:
             header_map[canonical] = header
 
-    expected = ["name", "type", "price_clp"]
+    expected = CATALOG_REQUIRED_HEADERS
     missing = [column for column in expected if column not in header_map]
     if missing:
         raise ValidationError({
@@ -55,6 +58,43 @@ def _resolve_catalog_headers(raw_headers):
         })
 
     return normalized_headers, header_map
+
+
+
+def _detect_xlsx_format(normalized_headers):
+    header_set = set(normalized_headers)
+    if set(CATALOG_REQUIRED_HEADERS).issubset(header_set):
+        return "catalog"
+    if set(SINGLE_PURCHASE_REQUIRED_HEADERS).issubset(header_set):
+        return "single_purchase_items"
+    raise ValidationError({
+        "detail": "Formato XLSX no reconocido",
+        "received_headers": normalized_headers,
+        "valid_formats": {
+            "catalog": CATALOG_REQUIRED_HEADERS,
+            "single_purchase_items": SINGLE_PURCHASE_REQUIRED_HEADERS,
+        },
+    })
+
+
+def import_single_purchase_catalog_row(row_data):
+    card, card_data, _ = resolve_scryfall_card(name=row_data.get("name"))
+    product, created = Product.objects.update_or_create(
+        name=str(row_data.get("name") or card.name).strip(),
+        product_type=Product.ProductType.SINGLE,
+        defaults={"price_clp": 0, "description": card.type_line or "", "image": card.image_large or card.image_normal or card.image_small or "", "is_active": True},
+    )
+    SingleCard.objects.update_or_create(
+        product=product,
+        defaults={
+            "mtg_card": card,
+            "condition": str(row_data.get("condition") or Product.CardCondition.NM).upper(),
+            "is_foil": _to_bool(row_data.get("foil"), False),
+            "edition": card.set_name,
+            "price_usd_reference": _to_decimal(row_data.get("price_usd"), Decimal("0")) or extract_usd_price(card_data, _to_bool(row_data.get("foil"), False)),
+        },
+    )
+    return product, created, []
 
 class ScryfallServiceError(Exception):
     pass
@@ -184,8 +224,12 @@ def import_catalog_from_xlsx(excel_file):
     workbook = load_workbook(excel_file, data_only=True)
     sheet = workbook["catalog"] if "catalog" in workbook.sheetnames else workbook.active
     raw_headers = [c.value for c in next(sheet.iter_rows(min_row=1, max_row=1))]
-    normalized_headers, header_map = _resolve_catalog_headers(raw_headers)
-    summary = {"created": 0, "updated": 0, "errors": [], "warnings": [], "preview": []}
+    normalized_headers = [_normalize_header(h) for h in raw_headers]
+    detected_format = _detect_xlsx_format(normalized_headers)
+    header_map = {h: h for h in normalized_headers}
+    if detected_format == "catalog":
+        _, header_map = _resolve_catalog_headers(raw_headers)
+    summary = {"created": 0, "updated": 0, "errors": [], "warnings": [], "preview": [], "detected_format": detected_format}
     categories = {c.name.strip().lower(): c for c in Product._meta.get_field('category').related_model.objects.all()}
     initial_stock = {p.id: p.stock for p in Product.objects.all()}
     for row_num, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
@@ -194,7 +238,10 @@ def import_catalog_from_xlsx(excel_file):
         row_data["category"] = categories.get(str(row_data.get("category") or "").strip().lower())
         try:
             logger.info("Procesando fila %s", row_num)
-            product, created, warns = import_catalog_row(row_data)
+            if detected_format == "single_purchase_items":
+                product, created, warns = import_single_purchase_catalog_row(row_data)
+            else:
+                product, created, warns = import_catalog_row(row_data)
             summary["created" if created else "updated"] += 1
             summary["warnings"].extend([{"row": row_num, "warning": w} for w in warns])
             summary["preview"].append({"row": row_num, "product_id": product.id, "status": "ok"})
@@ -227,13 +274,15 @@ def import_purchase_order_from_xlsx(*, excel_file, user, purchase_order_id=None)
     workbook = load_workbook(excel_file, data_only=True)
     sheet = _get_xlsx_sheet(workbook, preferred_sheet="purchase_orders")
     headers = _sheet_headers(sheet)
-    required = {"quantity", "supplier", "order_number"}
-    if not required.issubset(set(headers)): raise ValidationError("Columnas inválidas para importación de compra")
+    detected_format = _detect_xlsx_format(headers)
+    if detected_format == "catalog":
+        raise ValidationError("Este archivo corresponde a catálogo. Usa /api/products/import-catalog-xlsx/")
     first_row = next(sheet.iter_rows(min_row=2, max_row=2, values_only=True), None)
     if not first_row:
         raise ValidationError("El XLSX no contiene filas de detalle")
     first = dict(zip(headers, first_row))
-    supplier, _ = Supplier.objects.get_or_create(name=str(first.get("supplier") or "Proveedor XLSX").strip())
+    supplier_name = str(first.get("supplier") or "Proveedor XLSX Singles").strip()
+    supplier, _ = Supplier.objects.get_or_create(name=supplier_name)
     with transaction.atomic():
         po = PurchaseOrder.objects.filter(pk=purchase_order_id).first() if purchase_order_id else None
         if not po:
@@ -242,14 +291,16 @@ def import_purchase_order_from_xlsx(*, excel_file, user, purchase_order_id=None)
         for row_num, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
             r = dict(zip(headers, row)); summary["rows_processed"] += 1
             try:
-                qty = _to_int(r.get("quantity"), 0)
-                if qty <= 0: raise ValidationError("quantity debe ser entero > 0")
+                qty = _to_int(r.get("quantity") if detected_format == "catalog" else r.get("qty"), 0)
+                if qty <= 0: raise ValidationError("quantity/qty debe ser entero > 0")
                 product = Product.objects.filter(pk=r.get("product_id")).first()
                 if not product and r.get("name"):
                     product = Product.objects.filter(name=str(r.get("name")).strip()).first()
+                if not product and detected_format == "single_purchase_items":
+                    product, _, _ = import_single_purchase_catalog_row(r)
                 if not product: raise ValidationError("No se pudo resolver product_id/name")
                 unit_cost_clp = _to_int(r.get("unit_cost_clp"), 0)
-                unit_cost_usd = _to_decimal(r.get("unit_cost_usd"), Decimal("0"))
+                unit_cost_usd = _to_decimal(r.get("unit_cost_usd") if detected_format == "catalog" else r.get("price_usd"), Decimal("0"))
                 PurchaseOrderItem.objects.create(purchase_order=po, product=product, quantity_ordered=qty, quantity_received=0, unit_cost_usd=unit_cost_usd, unit_cost_clp=unit_cost_clp, subtotal_clp=qty * unit_cost_clp)
                 summary["preview"].append({"row": row_num, "status": "ok", "product_id": product.id})
             except Exception as exc:

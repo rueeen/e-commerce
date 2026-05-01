@@ -44,8 +44,7 @@ class ImportTests(TestCase):
         self.assertEqual(res.status_code, 400)
         self.assertEqual(res.data["detail"], "Error procesando archivo")
         self.assertIn("error", res.data)
-        self.assertIsInstance(res.data["error"], list)
-        self.assertTrue(any("Columnas inválidas" in message for message in res.data["error"]))
+        self.assertEqual(res.data["error"]["detail"], "Formato XLSX no reconocido")
 
     def test_import_catalog_xlsx_with_column_aliases(self):
         f = make_xlsx([" Tipo ", "Nombre", "Precio"], [["sealed", "Deck", 12000]])
@@ -76,6 +75,30 @@ class ImportTests(TestCase):
         p.refresh_from_db(); self.assertEqual(p.stock, 0)
         self.assertFalse(KardexMovement.objects.filter(product=p, movement_type='PURCHASE_IN').exists())
         self.assertTrue(PurchaseOrderItem.objects.exists())
+
+
+    @patch('products.services.search_cards')
+    def test_import_single_purchase_headers_creates_single_without_price_clp(self, mock_search):
+        mock_search.return_value = [{"id":"abc","name":"Lightning Bolt","set":"lea","set_name":"Alpha","collector_number":"1","prices":{"usd":"2.5"}}]
+        f = make_xlsx(["name", "condition", "qty", "price_usd", "total_usd", "foil"], [["Lightning Bolt", "NM", 4, 2.5, 10, True]])
+        res = self.client.post('/api/products/import-catalog-xlsx/', {'file': f}, format='multipart')
+        self.assertEqual(res.status_code, 200)
+        p = Product.objects.get(name='Lightning Bolt', product_type='single')
+        self.assertEqual(p.price_clp, 0)
+        self.assertEqual(p.stock, 0)
+        self.assertEqual(SingleCard.objects.filter(product=p, condition='NM').count(), 1)
+
+    @patch('products.services.search_cards')
+    def test_import_po_with_single_purchase_headers_creates_po_items_without_stock_change(self, mock_search):
+        mock_search.return_value = [{"id":"abc","name":"Counterspell","set":"2ed","set_name":"Unlimited","collector_number":"55","prices":{"usd":"1.2"}}]
+        f = make_xlsx(["name", "condition", "qty", "price_usd", "total_usd", "foil"], [["Counterspell", "LP", 3, 1.2, 3.6, False]])
+        res = self.client.post('/api/purchase-orders/import-xlsx/', {'file': f}, format='multipart')
+        self.assertEqual(res.status_code, 201)
+        p = Product.objects.get(name='Counterspell', product_type='single')
+        p.refresh_from_db()
+        self.assertEqual(p.stock, 0)
+        item = PurchaseOrderItem.objects.get(product=p)
+        self.assertEqual(item.quantity_ordered, 3)
 
     def test_import_catalog_endpoint_accepts_post_not_405(self):
         f = make_xlsx(["type", "name", "price_clp", "sealed_kind"], [["sealed", "Bundle Box", 12000, "bundle"]])
