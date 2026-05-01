@@ -73,12 +73,12 @@ class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
     permission_classes = [IsAdminOrReadOnly]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ["name", "description", "mtg_card__name"]
+    search_fields = ["name", "description", "single_card__mtg_card__name"]
     ordering_fields = ["price", "price_clp", "created_at", "name", "stock"]
     parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def get_queryset(self):
-        q = Product.objects.select_related("mtg_card", "category").all()
+        q = Product.objects.select_related("category", "single_card__mtg_card", "sealed_product").all()
         p = self.request.query_params
         if p.get("product_type"):
             q = q.filter(product_type=p["product_type"])
@@ -87,7 +87,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         if p.get("active") in {"true", "false"}:
             q = q.filter(is_active=p["active"] == "true")
         if p.get("rarity"):
-            q = q.filter(mtg_card__rarity__iexact=p["rarity"])
+            q = q.filter(single_card__mtg_card__rarity__iexact=p["rarity"])
         return q
 
     @action(detail=False, methods=["post"], url_path="create-single-from-scryfall", permission_classes=[IsAdminUser])

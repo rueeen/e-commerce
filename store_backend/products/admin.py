@@ -1,6 +1,23 @@
 from django.contrib import admin
 
-from .models import ExchangeRateConfig, KardexMovement, MTGCard, PricingSettings, Product, ServiceFeeConfig, ShippingConfig, Supplier
+from .models import BundleItem, ExchangeRateConfig, KardexMovement, MTGCard, PricingSettings, Product, SealedProduct, ServiceFeeConfig, ShippingConfig, SingleCard, Supplier
+
+
+class SingleCardInline(admin.StackedInline):
+    model = SingleCard
+    extra = 0
+
+
+class SealedProductInline(admin.StackedInline):
+    model = SealedProduct
+    extra = 0
+
+
+class BundleItemInline(admin.TabularInline):
+    model = BundleItem
+    fk_name = "bundle"
+    extra = 1
+    autocomplete_fields = ("item",)
 
 
 @admin.register(MTGCard)
@@ -11,9 +28,10 @@ class MTGCardAdmin(admin.ModelAdmin):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ("name", "category", "product_type", "price_clp_final", "price_clp_suggested", "price_usd_reference", "stock", "condition", "language", "is_foil", "mtg_card", "is_active")
-    search_fields = ("name", "mtg_card__name", "mtg_card__set_code", "mtg_card__collector_number")
-    list_filter = ("product_type", "condition", "language", "is_foil", "is_active")
+    list_display = ("name", "category", "product_type", "price_clp", "stock", "is_active")
+    list_filter = ("product_type", "is_active")
+    search_fields = ("name", "single_card__mtg_card__name")
+    inlines = (SingleCardInline, SealedProductInline, BundleItemInline)
 
 
 admin.site.register(Supplier)
@@ -30,5 +48,3 @@ class PricingSettingsAdmin(admin.ModelAdmin):
 @admin.register(KardexMovement)
 class KardexMovementAdmin(admin.ModelAdmin):
     list_display = ("id", "product", "movement_type", "quantity", "previous_stock", "new_stock", "created_by", "created_at")
-    list_filter = ("product", "movement_type", "created_at", "created_by")
-    search_fields = ("product__name", "reference", "notes")
