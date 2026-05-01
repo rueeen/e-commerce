@@ -42,7 +42,7 @@ class PurchaseOrderItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PurchaseOrderItem
-        fields = ("id", "product", "product_name", "quantity_ordered", "quantity_received", "unit_cost_clp", "subtotal_clp")
+        fields = ("id", "product", "product_name", "quantity_ordered", "quantity_received", "unit_cost_usd", "unit_cost_clp", "subtotal_clp")
 
 
 class PurchaseOrderSerializer(serializers.ModelSerializer):
@@ -56,14 +56,17 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         items = validated_data.pop("items", [])
         po = PurchaseOrder.objects.create(**validated_data)
-        subtotal = 0
+        subtotal_clp = 0
+        subtotal_usd = 0
         for item in items:
             item["subtotal_clp"] = int(item["quantity_ordered"]) * int(item.get("unit_cost_clp", 0))
-            subtotal += item["subtotal_clp"]
+            subtotal_clp += item["subtotal_clp"]
+            subtotal_usd += float(item.get("unit_cost_usd", 0)) * int(item["quantity_ordered"])
             PurchaseOrderItem.objects.create(purchase_order=po, **item)
-        po.subtotal_clp = subtotal
-        po.total_clp = subtotal + po.shipping_clp + po.import_fees_clp + po.taxes_clp
-        po.save(update_fields=["subtotal_clp", "total_clp"])
+        po.subtotal_clp = subtotal_clp
+        po.subtotal_usd = subtotal_usd
+        po.total_clp = subtotal_clp + po.shipping_clp + po.import_fees_clp + po.taxes_clp
+        po.save(update_fields=["subtotal_clp", "subtotal_usd", "total_clp"])
         return po
 
 
