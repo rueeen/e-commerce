@@ -18,6 +18,44 @@ SCRYFALL_BASE = "https://api.scryfall.com"
 SCRYFALL_TIMEOUT = 20
 logger = logging.getLogger(__name__)
 
+
+COLUMN_ALIASES = {
+    "name": ["name", "nombre"],
+    "type": ["type", "tipo"],
+    "price_clp": ["price_clp", "precio", "price"],
+}
+
+
+def _normalize_header(value):
+    return str(value or "").strip().lower().replace(" ", "_")
+
+
+def _resolve_catalog_headers(raw_headers):
+    normalized_headers = [_normalize_header(h) for h in raw_headers]
+    logger.info("Headers recibidos en importación catálogo XLSX: %s", normalized_headers)
+
+    alias_to_canonical = {}
+    for canonical, aliases in COLUMN_ALIASES.items():
+        for alias in aliases:
+            alias_to_canonical[_normalize_header(alias)] = canonical
+
+    header_map = {}
+    for header in normalized_headers:
+        canonical = alias_to_canonical.get(header, header)
+        if canonical not in header_map:
+            header_map[canonical] = header
+
+    expected = ["name", "type", "price_clp"]
+    missing = [column for column in expected if column not in header_map]
+    if missing:
+        raise ValidationError({
+            "detail": "Columnas inválidas",
+            "expected": expected,
+            "received": normalized_headers,
+        })
+
+    return normalized_headers, header_map
+
 class ScryfallServiceError(Exception):
     pass
 
@@ -145,14 +183,14 @@ def import_catalog_row(row_data):
 def import_catalog_from_xlsx(excel_file):
     workbook = load_workbook(excel_file, data_only=True)
     sheet = workbook["catalog"] if "catalog" in workbook.sheetnames else workbook.active
-    headers = [str(c.value or "").strip().lower() for c in next(sheet.iter_rows(min_row=1, max_row=1))]
-    required = {"type", "name", "price_clp"}
-    if not required.issubset(set(headers)): raise ValidationError(f"Columnas inválidas. Requeridas: {sorted(required)}")
+    raw_headers = [c.value for c in next(sheet.iter_rows(min_row=1, max_row=1))]
+    normalized_headers, header_map = _resolve_catalog_headers(raw_headers)
     summary = {"created": 0, "updated": 0, "errors": [], "warnings": [], "preview": []}
     categories = {c.name.strip().lower(): c for c in Product._meta.get_field('category').related_model.objects.all()}
     initial_stock = {p.id: p.stock for p in Product.objects.all()}
     for row_num, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
-        row_data = dict(zip(headers, row))
+        source_row_data = dict(zip(normalized_headers, row))
+        row_data = {canonical: source_row_data.get(source_header) for canonical, source_header in header_map.items()}
         row_data["category"] = categories.get(str(row_data.get("category") or "").strip().lower())
         try:
             logger.info("Procesando fila %s", row_num)
