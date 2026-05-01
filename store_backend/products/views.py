@@ -31,6 +31,13 @@ def _to_bool(value, default=False):
         return value.strip().lower() in {"true", "1", "yes", "on"}
     return bool(value)
 
+def format_exception(exc):
+    if hasattr(exc, "messages"):
+        return exc.messages
+    if hasattr(exc, "message_dict"):
+        return exc.message_dict
+    return str(exc)
+
 
 class CardViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = MTGCard.objects.all()
@@ -245,12 +252,15 @@ class ProductViewSet(viewsets.ModelViewSet):
             summary = import_catalog_from_xlsx(excel_file)
             return Response(summary, status=200)
         except ValidationError as exc:
-            payload = exc.message
-            if isinstance(payload, dict):
-                return Response(payload, status=400)
-            return Response({"detail": "Error procesando archivo", "error": str(exc)}, status=400)
+            return Response({
+                "detail": "Error procesando archivo",
+                "error": format_exception(exc),
+            }, status=400)
         except Exception as exc:
-            return Response({"detail": "Error procesando archivo", "error": str(exc)}, status=400)
+            return Response({
+                "detail": "Error procesando archivo",
+                "error": str(exc),
+            }, status=400)
 
 
 class KardexViewSet(viewsets.GenericViewSet):
