@@ -14,10 +14,16 @@ export const api = {
   updateProduct: (id, payload) => apiClient.put(`/api/products/${id}/`, payload),
   patchProduct: (id, payload) => apiClient.patch(`/api/products/${id}/`, payload),
   deleteProduct: (id) => apiClient.delete(`/api/products/${id}/`),
-  importProductsExcel: (file) => {
+  importCatalogXlsx: (file) => {
     const formData = new FormData();
     formData.append('file', file);
-    return apiClient.post('/api/kardex/import-excel/', formData);
+    return apiClient.post('/api/products/import-catalog-xlsx/', formData);
+  },
+  importPurchaseOrderXlsx: (file, purchase_order_id = null) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (purchase_order_id) formData.append('purchase_order_id', purchase_order_id);
+    return apiClient.post('/api/purchase-orders/import-xlsx/', formData);
   },
 
   getCategories: (params = {}) => apiClient.get('/api/categories/', { params }),

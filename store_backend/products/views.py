@@ -15,7 +15,7 @@ from accounts.permissions import IsAdminUser, IsAdminOrWorkerUser
 from .models import Category, KardexMovement, MTGCard, PricingSettings, Product, PurchaseOrder, SingleCard, Supplier
 from .permissions import IsAdminOrReadOnly
 from .serializers import CategorySerializer, KardexMovementSerializer, MTGCardSerializer, PricingSettingsSerializer, ProductSerializer, PurchaseOrderSerializer, SupplierSerializer
-from .services import ScryfallServiceError, calculate_price_clp, calculate_suggested_sale_price, extract_usd_price, get_active_pricing_settings, get_scryfall_card_by_id, import_card, import_product_row, import_single_row, search_cards
+from .services import ScryfallServiceError, calculate_suggested_sale_price, extract_usd_price, get_active_pricing_settings, get_scryfall_card_by_id, import_card, import_catalog_from_xlsx, import_purchase_order_from_xlsx, search_cards
 from .inventory_services import create_stock_movement, receive_purchase_order
 
 
@@ -272,59 +272,19 @@ class KardexViewSet(viewsets.GenericViewSet):
             return Response({"detail": str(exc)}, status=400)
         return Response(self.get_serializer(movement).data, status=201)
 
-    @action(detail=False, methods=["post"], url_path="import-excel")
-    def import_excel(self, request):
+
+class CatalogImportView(APIView):
+    permission_classes = [IsAdminOrWorkerUser]
+    parser_classes = [FormParser, MultiPartParser]
+
+    def post(self, request):
         excel_file = request.FILES.get("file")
         if not excel_file:
-            return Response({"detail": "Debes adjuntar un archivo .xlsx"}, status=status.HTTP_400_BAD_REQUEST)
-        workbook = load_workbook(excel_file, data_only=True)
-        sheet = workbook.active
-        headers = [str(c.value or "").strip().lower() for c in next(sheet.iter_rows(min_row=1, max_row=1))]
-        headers_set = set(headers)
-        single_template_required = {"name", "condition", "qty", "price_usd", "total_usd", "foil"}
-        mixed_template_required = {"name", "type", "qty", "price_usd"}
-        is_single_template = single_template_required.issubset(headers_set)
-        is_mixed_template = mixed_template_required.issubset(headers_set)
-        if not is_single_template and not is_mixed_template:
-            return Response(
-                {
-                    "detail": "Columnas inválidas",
-                    "valid_templates": {
-                        "single": sorted(single_template_required),
-                        "mixed": sorted(mixed_template_required),
-                    },
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        category_map = {c.name.strip().lower(): c for c in Category.objects.all()}
-        summary = {"template": "single" if is_single_template else "mixed", "singles": 0, "bundles": 0, "sealed": 0, "created": 0, "updated": 0, "errors": [], "preview": []}
-        for row_num, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
-            row_data = dict(zip(headers, row))
-            row_type = str(row_data.get("type") or "").strip().lower()
-            state = "ok"
-            action = "update"
-            try:
-                row_data["category"] = category_map.get(str(row_data.get("category") or "").strip().lower())
-                row_data["price_clp"] = int(float(row_data.get("price_clp") or row_data.get("price_usd") or 0))
-                row_data["foil"] = _to_bool(row_data.get("foil"), default=False)
-                if is_single_template:
-                    row_data["type"] = Product.ProductType.SINGLE
-                    product, created, resolved_type = import_single_row(row_data)
-                else:
-                    product, created, resolved_type = import_product_row(row_data)
-                summary["created" if created else "updated"] += 1
-                if resolved_type == Product.ProductType.SINGLE:
-                    summary["singles"] += 1
-                elif resolved_type == Product.ProductType.SEALED:
-                    summary["sealed"] += 1
-                else:
-                    summary["bundles"] += 1
-                action = "create" if created else "update"
-            except Exception as exc:
-                state = "error"
-                summary["errors"].append({"row": row_num, "error": str(exc)})
-            summary["preview"].append({"row": row_num, "type": (Product.ProductType.SINGLE if is_single_template else row_type) or "-", "status": state, "action": action})
-        return Response(summary)
+            return Response({"detail": "Debes adjuntar un archivo .xlsx"}, status=400)
+        try:
+            return Response(import_catalog_from_xlsx(excel_file))
+        except Exception as exc:
+            return Response({"detail": str(exc)}, status=400)
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
@@ -343,7 +303,6 @@ class PricingSettingsViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return PricingSettings.objects.order_by("-updated_at")
-
 
     def _ensure_single_active(self, instance):
         if instance.is_active:
@@ -385,6 +344,18 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
     def receive(self, request, pk=None):
         po = receive_purchase_order(int(pk), request.user)
         return Response(self.get_serializer(po).data)
+
+    @action(detail=False, methods=["post"], url_path="import-xlsx")
+    def import_xlsx(self, request):
+        excel_file = request.FILES.get("file")
+        if not excel_file:
+            return Response({"detail": "Debes adjuntar un archivo .xlsx"}, status=400)
+        po_id = request.data.get("purchase_order_id")
+        try:
+            po, summary = import_purchase_order_from_xlsx(excel_file=excel_file, user=request.user, purchase_order_id=po_id)
+        except Exception as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response({"purchase_order_id": po.id, "summary": summary}, status=201)
 
 
 class InventoryDashboardView(APIView):
