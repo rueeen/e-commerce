@@ -9,7 +9,6 @@ urlpatterns = [
     path('api/', include('products.urls')),
     path('api/cart/', include('cart.urls')),
     path('api/orders/', include('orders.urls')),
-    path('api/library/', include('digital_library.urls')),
 ]
 
 if settings.DEBUG:

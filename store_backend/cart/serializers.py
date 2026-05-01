@@ -7,21 +7,21 @@ from .models import Cart, CartItem
 
 class CartItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source="product.name", read_only=True)
-    unit_price = serializers.DecimalField(source="product.price", max_digits=10, decimal_places=2, read_only=True)
-    subtotal = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    unit_price_clp = serializers.IntegerField(source="product.computed_price_clp", read_only=True)
+    subtotal_clp = serializers.IntegerField(source="subtotal", read_only=True)
 
     class Meta:
         model = CartItem
-        fields = ("id", "product", "product_name", "quantity", "unit_price", "subtotal")
+        fields = ("id", "product", "product_name", "quantity", "unit_price_clp", "subtotal_clp")
 
 
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
-    total = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    total_clp = serializers.IntegerField(source="total", read_only=True)
 
     class Meta:
         model = Cart
-        fields = ("id", "items", "total", "updated_at")
+        fields = ("id", "items", "total_clp", "updated_at")
 
 
 class AddCartItemSerializer(serializers.Serializer):
