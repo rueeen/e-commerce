@@ -56,10 +56,8 @@ class MTGCard(models.Model):
 class Product(models.Model):
     class ProductType(models.TextChoices):
         SINGLE = "single", "Carta individual"
-        SEALED = "sealed", "Producto sellado"
-        ACCESSORY = "accessory", "Accesorio"
-        DECK = "deck", "Mazo"
         BUNDLE = "bundle", "Bundle"
+        OTHER = "other", "Otro"
 
     class CardCondition(models.TextChoices):
         NM = "NM", "Near Mint"
@@ -72,7 +70,7 @@ class Product(models.Model):
     mtg_card = models.ForeignKey(MTGCard, on_delete=models.SET_NULL, related_name="products", null=True, blank=True)
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    product_type = models.CharField(max_length=20, choices=ProductType.choices, default=ProductType.SINGLE)
+    product_type = models.CharField(max_length=20, choices=ProductType.choices, default=ProductType.SINGLE, db_index=True)
     price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     price_clp = models.PositiveIntegerField(default=0)
     stock = models.PositiveIntegerField(default=0)
