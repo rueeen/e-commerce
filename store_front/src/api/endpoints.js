@@ -31,6 +31,7 @@ export const api = {
   getKardex: (params = {}) => apiClient.get('/api/kardex/', { params }),
   createKardexMovement: (payload) => apiClient.post('/api/kardex/movement/', payload),
   productKardex: (id) => apiClient.get(`/api/products/${id}/kardex/`),
+  productSuggestedPrice: (id, unit_cost_clp = 0) => apiClient.get(`/api/products/${id}/suggested-price/`, { params: { unit_cost_clp } }),
 
   getSuppliers: () => apiClient.get('/api/suppliers/'),
   createSupplier: (payload) => apiClient.post('/api/suppliers/', payload),

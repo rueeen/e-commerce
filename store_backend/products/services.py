@@ -213,3 +213,55 @@ def create_or_update_single_product(card: MTGCard, payload):
             notes="Ingreso automático por creación de single",
         )
     return product, True
+
+
+def calculate_suggested_sale_price(product, unit_cost_clp=None):
+    settings = get_active_pricing_settings()
+    unit_cost = int(unit_cost_clp or 0)
+    scryfall_usd = Decimal("0")
+
+    if product.product_type == Product.ProductType.SINGLE and product.mtg_card:
+        scryfall_usd = extract_usd_price(product.mtg_card.raw_data or {}, is_foil=product.is_foil)
+
+    usd_to_clp_store = _to_decimal(settings.usd_to_clp_store, fallback=Decimal("0"))
+    default_margin = _to_decimal(settings.default_margin, fallback=Decimal("1"))
+    min_margin = _to_decimal(settings.min_margin, fallback=Decimal("1"))
+
+    round_to = max(int(settings.rounding_to or 100), 1)
+
+    scryfall_base_clp = int((scryfall_usd * usd_to_clp_store).quantize(Decimal("1"), rounding=ROUND_HALF_UP)) if scryfall_usd > 0 else 0
+
+    if unit_cost <= 0:
+        fallback = scryfall_usd * usd_to_clp_store * default_margin
+        suggested = int((fallback / Decimal(round_to)).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * Decimal(round_to)) if fallback > 0 else 0
+        return {
+            "scryfall_usd": float(scryfall_usd),
+            "usd_to_clp_store": float(usd_to_clp_store),
+            "unit_cost_clp": unit_cost,
+            "min_price_clp": 0,
+            "margin_price_clp": 0,
+            "suggested_price_clp": suggested,
+            "source": "SCRYFALL_ONLY" if scryfall_usd > 0 else "NO_REFERENCE",
+            "has_scryfall_price": scryfall_usd > 0,
+        }
+
+    min_price = int((Decimal(unit_cost) * min_margin).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    margin_price = int((Decimal(unit_cost) * default_margin).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+    reference_candidates = [min_price, margin_price]
+    if scryfall_base_clp > 0:
+        reference_candidates.append(scryfall_base_clp)
+
+    recommended = max(reference_candidates) if reference_candidates else 0
+    suggested = int((Decimal(recommended) / Decimal(round_to)).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * Decimal(round_to)) if recommended > 0 else 0
+
+    return {
+        "scryfall_usd": float(scryfall_usd),
+        "usd_to_clp_store": float(usd_to_clp_store),
+        "unit_cost_clp": unit_cost,
+        "min_price_clp": min_price,
+        "margin_price_clp": margin_price,
+        "suggested_price_clp": suggested,
+        "source": "SCRYFALL_AND_MARGIN" if scryfall_base_clp > 0 else "COST_AND_MARGIN",
+        "has_scryfall_price": scryfall_usd > 0,
+    }
