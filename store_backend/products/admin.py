@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BundleItem, ExchangeRateConfig, KardexMovement, MTGCard, PricingSettings, Product, SealedProduct, ServiceFeeConfig, ShippingConfig, SingleCard, Supplier
+from .models import BundleItem, ExchangeRateConfig, InventoryLot, KardexMovement, MTGCard, PricingSettings, Product, SealedProduct, ServiceFeeConfig, ShippingConfig, SingleCard, Supplier
 
 
 class SingleCardInline(admin.StackedInline):
@@ -48,3 +48,10 @@ class PricingSettingsAdmin(admin.ModelAdmin):
 @admin.register(KardexMovement)
 class KardexMovementAdmin(admin.ModelAdmin):
     list_display = ("id", "product", "movement_type", "quantity", "previous_stock", "new_stock", "created_by", "created_at")
+
+
+@admin.register(InventoryLot)
+class InventoryLotAdmin(admin.ModelAdmin):
+    list_display = ("id", "product", "quantity_initial", "quantity_remaining", "unit_cost_clp", "received_at")
+    list_filter = ("received_at",)
+    search_fields = ("product__name",)

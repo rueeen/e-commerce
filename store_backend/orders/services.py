@@ -3,7 +3,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from cart.models import Cart
-from products.inventory_services import create_stock_movement
+from products.inventory_services import consume_fifo_stock, create_stock_movement
 from products.models import KardexMovement, Product
 
 from .models import Order, OrderItem
@@ -28,6 +28,10 @@ def create_order_from_cart(user):
 
         unit_price = int(product.computed_price_clp or product.price_clp)
         line_subtotal = unit_price * item.quantity
+        fifo_cost = consume_fifo_stock(product, item.quantity)
+        total_cost_clp = int(fifo_cost["total_cost_clp"])
+        unit_cost_clp = int(fifo_cost["unit_cost_clp"])
+        gross_profit_clp = line_subtotal - total_cost_clp
 
         OrderItem.objects.create(
             order=order,
@@ -37,6 +41,9 @@ def create_order_from_cart(user):
             quantity=item.quantity,
             unit_price_clp=unit_price,
             subtotal_clp=line_subtotal,
+            unit_cost_clp=unit_cost_clp,
+            total_cost_clp=total_cost_clp,
+            gross_profit_clp=gross_profit_clp,
         )
 
         create_stock_movement(

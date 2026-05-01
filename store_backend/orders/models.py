@@ -126,3 +126,6 @@ class OrderItem(models.Model):
     product_type_snapshot = models.CharField(max_length=20, default="")
     unit_price_clp = models.PositiveIntegerField(default=0)
     subtotal_clp = models.PositiveIntegerField(default=0)
+    unit_cost_clp = models.IntegerField(default=0)
+    total_cost_clp = models.IntegerField(default=0)
+    gross_profit_clp = models.IntegerField(default=0)

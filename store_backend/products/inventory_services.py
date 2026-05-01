@@ -2,7 +2,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 import logging
-from .models import KardexMovement, PricingSettings, Product, PurchaseOrder
+from .models import InventoryLot, KardexMovement, PricingSettings, Product, PurchaseOrder
 
 PURCHASE_IN_TYPES = {KardexMovement.MovementType.PURCHASE_IN, KardexMovement.MovementType.MANUAL_IN, KardexMovement.MovementType.RETURN_IN}
 OUT_TYPES = {KardexMovement.MovementType.SALE_OUT, KardexMovement.MovementType.MANUAL_OUT}
@@ -26,6 +26,37 @@ def _round_to(value, rounding_to):
 
 def _get_active_pricing_settings():
     return PricingSettings.objects.filter(is_active=True).order_by("-updated_at").first() or PricingSettings()
+
+
+@transaction.atomic
+def consume_fifo_stock(product, quantity):
+    qty_to_consume = int(quantity or 0)
+    if qty_to_consume <= 0:
+        raise ValidationError("quantity debe ser mayor a 0")
+
+    product = Product.objects.select_for_update().get(pk=product.pk)
+    lots = list(
+        InventoryLot.objects.select_for_update()
+        .filter(product=product, quantity_remaining__gt=0)
+        .order_by("received_at", "id")
+    )
+    available = sum(lot.quantity_remaining for lot in lots)
+    if available < qty_to_consume:
+        raise ValidationError(f"Stock insuficiente para {product.name}.")
+
+    total_cost_clp = 0
+    remaining = qty_to_consume
+    for lot in lots:
+        if remaining == 0:
+            break
+        consumed = min(lot.quantity_remaining, remaining)
+        lot.quantity_remaining -= consumed
+        lot.save(update_fields=["quantity_remaining"])
+        total_cost_clp += consumed * int(lot.unit_cost_clp)
+        remaining -= consumed
+
+    unit_cost_clp = int(round(total_cost_clp / qty_to_consume))
+    return {"total_cost_clp": total_cost_clp, "unit_cost_clp": unit_cost_clp}
 
 @transaction.atomic
 def create_stock_movement(*, product, movement_type, quantity, created_by=None, unit_cost_clp=0, unit_price_clp=0, reference_type="", reference_id="", reference_label="", notes=""):
@@ -118,6 +149,14 @@ def receive_purchase_order(purchase_order_id, user):
             suggested = int(suggested_payload.get("suggested_price_clp") or 0)
             min_allowed = int(suggested_payload.get("min_price_clp") or 0)
             create_stock_movement(product=item.product, movement_type=KardexMovement.MovementType.PURCHASE_IN, quantity=qty, created_by=user, unit_cost_clp=unit_cost_real_clp, reference_type="PURCHASE_ORDER", reference_id=po.id, reference_label=po.order_number, notes="Ingreso por recepción de orden de compra")
+            InventoryLot.objects.create(
+                product=item.product,
+                purchase_order_item=item,
+                quantity_initial=qty,
+                quantity_remaining=qty,
+                unit_cost_clp=unit_cost_real_clp,
+                received_at=timezone.now(),
+            )
             item.product.price_clp_suggested = int(suggested)
             if po.update_prices_on_receive and suggested > 0:
                 item.product.price_clp = int(suggested)
