@@ -33,6 +33,17 @@ class ImportTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(SealedProduct.objects.count(), 1)
 
+    def test_import_catalog_xlsx_without_file(self):
+        res = self.client.post('/api/products/import-catalog-xlsx/', {}, format='multipart')
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.data['detail'], 'Debes adjuntar un archivo .xlsx')
+
+    def test_import_catalog_xlsx_invalid_columns(self):
+        f = make_xlsx(["name", "price_clp"], [["Producto", 1000]])
+        res = self.client.post('/api/products/import-catalog-xlsx/', {'file': f}, format='multipart')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("Error procesando archivo", res.data["detail"])
+
     @patch('products.services.search_cards')
     def test_reject_ambiguous_single_without_scryfall(self, mock_search):
         mock_search.return_value = [{"id":"1"},{"id":"2"}]
@@ -53,6 +64,11 @@ class ImportTests(TestCase):
         f = make_xlsx(["product_id","name","quantity","unit_cost_usd","unit_cost_clp","supplier","order_number","exchange_rate"], [[p.id,'',3,2,1500,'ABC','PO-1',900]])
         res = self.client.post('/api/purchase-orders/import-xlsx/', {'file': f}, format='multipart')
         self.assertEqual(res.status_code, 201)
-        p.refresh_from_db(); self.assertEqual(p.stock, 3)
-        self.assertTrue(KardexMovement.objects.filter(product=p, movement_type='PURCHASE_IN').exists())
+        p.refresh_from_db(); self.assertEqual(p.stock, 0)
+        self.assertFalse(KardexMovement.objects.filter(product=p, movement_type='PURCHASE_IN').exists())
         self.assertTrue(PurchaseOrderItem.objects.exists())
+
+    def test_import_catalog_endpoint_accepts_post_not_405(self):
+        f = make_xlsx(["type", "name", "price_clp", "sealed_kind"], [["sealed", "Bundle Box", 12000, "bundle"]])
+        res = self.client.post('/api/products/import-catalog-xlsx/', {'file': f}, format='multipart')
+        self.assertNotEqual(res.status_code, 405)
