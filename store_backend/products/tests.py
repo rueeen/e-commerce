@@ -42,7 +42,15 @@ class ImportTests(TestCase):
         f = make_xlsx(["name", "price_clp"], [["Producto", 1000]])
         res = self.client.post('/api/products/import-catalog-xlsx/', {'file': f}, format='multipart')
         self.assertEqual(res.status_code, 400)
-        self.assertIn("Error procesando archivo", res.data["detail"])
+        self.assertEqual(res.data["detail"], "Columnas inválidas")
+        self.assertEqual(res.data["expected"], ["name", "type", "price_clp"])
+        self.assertEqual(res.data["received"], ["name", "price_clp"])
+
+    def test_import_catalog_xlsx_with_column_aliases(self):
+        f = make_xlsx([" Tipo ", "Nombre", "Precio"], [["sealed", "Deck", 12000]])
+        res = self.client.post('/api/products/import-catalog-xlsx/', {'file': f}, format='multipart')
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(Product.objects.filter(name='Deck', product_type='sealed').exists())
 
     @patch('products.services.search_cards')
     def test_reject_ambiguous_single_without_scryfall(self, mock_search):
