@@ -4,7 +4,7 @@ import { api } from '../api/endpoints';
 import { notyf } from '../api/notifier';
 import ProductAutocomplete from '../components/ProductAutocomplete';
 
-const emptyForm = { supplier: '', notes: '', shipping_clp: 0, import_fees_clp: 0, taxes_clp: 0, status: 'DRAFT', update_prices_on_receive: false, items: [] };
+const emptyForm = { supplier: '', notes: '', shipping_clp: '', import_fees_clp: '', taxes_clp: '', status: 'DRAFT', update_prices_on_receive: false, items: [] };
 
 export default function AdminPurchaseOrdersPage() {
   const [search] = useSearchParams();
@@ -40,7 +40,7 @@ export default function AdminPurchaseOrdersPage() {
       const p = products.find((it) => it.id === preProduct);
       if (p && !form.items.some((it) => it.product === p.id)) {
         setShowForm(true);
-        setForm((f) => ({ ...f, items: [...f.items, { product: p.id, name: p.name, quantity_ordered: 1, unit_cost_clp: p.last_purchase_cost_clp || 0, current_price: p.price_clp_final || 0, suggested: null }] }));
+        setForm((f) => ({ ...f, items: [...f.items, { product: p.id, name: p.name, quantity_ordered: '1', unit_cost_clp: p.last_purchase_cost_clp ? String(p.last_purchase_cost_clp) : '', current_price: p.price_clp_final || 0, suggested: null }] }));
       }
     }
   }, [search, products]);
@@ -59,8 +59,9 @@ export default function AdminPurchaseOrdersPage() {
   const addItem = (p) => {
     if (form.items.some((it) => it.product === p.id)) return;
     const idx = form.items.length;
-    setForm((f) => ({ ...f, items: [...f.items, { product: p.id, name: p.name, quantity_ordered: 1, unit_cost_clp: p.last_purchase_cost_clp || 0, current_price: p.price_clp_final || 0, suggested: null }] }));
-    setTimeout(() => fetchSuggested(idx, p.last_purchase_cost_clp || 0), 0);
+    const unitCost = p.last_purchase_cost_clp ? String(p.last_purchase_cost_clp) : '';
+    setForm((f) => ({ ...f, items: [...f.items, { product: p.id, name: p.name, quantity_ordered: '1', unit_cost_clp: unitCost, current_price: p.price_clp_final || 0, suggested: null }] }));
+    setTimeout(() => fetchSuggested(idx, unitCost), 0);
   };
 
   const save = async (status) => {
@@ -70,7 +71,10 @@ export default function AdminPurchaseOrdersPage() {
         ...form,
         supplier: Number(form.supplier),
         status,
-        items: form.items.map((it) => ({ product: it.product, quantity_ordered: Number(it.quantity_ordered), unit_cost_clp: Number(it.unit_cost_clp), quantity_received: 0 })),
+        shipping_clp: Number(form.shipping_clp || 0),
+        import_fees_clp: Number(form.import_fees_clp || 0),
+        taxes_clp: Number(form.taxes_clp || 0),
+        items: form.items.map((it) => ({ product: it.product, quantity_ordered: Number(it.quantity_ordered || 0), unit_cost_clp: Number(it.unit_cost_clp || 0), quantity_received: 0 })),
       });
       notyf.success(`Orden ${status === 'DRAFT' ? 'guardada como borrador' : 'enviada'}`);
       setForm(emptyForm);
@@ -95,18 +99,26 @@ export default function AdminPurchaseOrdersPage() {
       </div>
       <label className="form-label">Agregar productos</label>
       <ProductAutocomplete products={products} onSelect={addItem} placeholder="Buscar por nombre de producto..." />
-      <table className="table table-sm mt-3"><thead><tr><th>Producto</th><th>Cantidad</th><th>Costo unitario</th><th>Subtotal</th><th>Precio sugerido</th><th>Acciones</th></tr></thead><tbody>{form.items.map((it, idx) => <tr key={it.product}><td>{it.name}</td><td><input type="number" min="1" className="form-control" value={it.quantity_ordered} onChange={(e) => setForm((f) => ({ ...f, items: f.items.map((row, i) => i === idx ? { ...row, quantity_ordered: Number(e.target.value) } : row) }))} /></td><td><input type="number" min="0" className="form-control" value={it.unit_cost_clp} onChange={(e) => {
-        const v = Number(e.target.value);
+      <table className="table table-sm mt-3"><thead><tr><th>Producto</th><th>Cantidad</th><th>Costo unitario</th><th>Subtotal</th><th>Precio sugerido</th><th>Acciones</th></tr></thead><tbody>{form.items.map((it, idx) => <tr key={it.product}><td>{it.name}</td><td><input type="number" min="1" className="form-control" placeholder="0" value={it.quantity_ordered} onChange={(e) => setForm((f) => ({ ...f, items: f.items.map((row, i) => i === idx ? { ...row, quantity_ordered: e.target.value } : row) }))} /></td><td><input type="number" min="0" className="form-control" placeholder="0" value={it.unit_cost_clp} onChange={(e) => {
+        const v = e.target.value;
         setForm((f) => ({ ...f, items: f.items.map((row, i) => i === idx ? { ...row, unit_cost_clp: v } : row) }));
         fetchSuggested(idx, v);
       }} /></td><td>${Number(it.quantity_ordered || 0) * Number(it.unit_cost_clp || 0)}</td><td>{it.suggested ? <div><strong className="text-success">${it.suggested.suggested_price_clp}</strong><div className="small text-muted">Scryfall USD: {it.suggested.scryfall_usd || 'N/D'} · Dólar tienda: {it.suggested.usd_to_clp_store} · Margen aplicado</div>{!it.suggested.has_scryfall_price ? <div className="small text-warning">Sin precio Scryfall</div> : null}{it.current_price > 0 && it.suggested.min_price_clp > 0 && it.current_price < it.suggested.min_price_clp ? <div className="small text-danger">Precio actual bajo margen mínimo</div> : null}</div> : <span className="text-muted">—</span>}</td><td><div className="d-flex gap-2"><button className="btn btn-outline-success btn-sm" onClick={async () => {
-        if (!it.suggested?.suggested_price_clp) return;
+        if (!it.suggested?.suggested_price_clp) {
+          notyf.error('No hay precio sugerido para este producto.');
+          return;
+        }
         if (!window.confirm(`¿Actualizar precio de venta de este producto a $${it.suggested.suggested_price_clp}?`)) return;
-        await api.patchProduct(it.product, { price_clp_final: it.suggested.suggested_price_clp, price_clp: it.suggested.suggested_price_clp, price: it.suggested.suggested_price_clp });
-        notyf.success('Precio de venta actualizado');
+        try {
+          await api.patchProduct(it.product, { price_clp_final: it.suggested.suggested_price_clp });
+          setForm((f) => ({ ...f, items: f.items.map((row, i) => i === idx ? { ...row, current_price: it.suggested.suggested_price_clp } : row) }));
+          notyf.success('Precio de venta actualizado');
+        } catch {
+          notyf.error('No se pudo actualizar el precio de venta.');
+        }
       }}>Usar precio sugerido</button><button className="btn btn-outline-danger btn-sm" onClick={() => setForm((f) => ({ ...f, items: f.items.filter((_, i) => i !== idx) }))}>Eliminar</button></div></td></tr>)}</tbody></table>
       <div className="form-check mb-2"><input className="form-check-input" type="checkbox" id="update-prices-on-receive" checked={form.update_prices_on_receive} onChange={(e) => setForm({ ...form, update_prices_on_receive: e.target.checked })} /><label className="form-check-label" htmlFor="update-prices-on-receive">Actualizar precios de venta al recibir orden</label></div>
-      <div className="row g-2 mt-2"><div className="col-md-2"><label className="form-label">Costo envío</label><input type="number" className="form-control" value={form.shipping_clp} onChange={(e) => setForm({ ...form, shipping_clp: Number(e.target.value) })} /></div><div className="col-md-2"><label className="form-label">Importación</label><input type="number" className="form-control" value={form.import_fees_clp} onChange={(e) => setForm({ ...form, import_fees_clp: Number(e.target.value) })} /></div><div className="col-md-2"><label className="form-label">Impuestos</label><input type="number" className="form-control" value={form.taxes_clp} onChange={(e) => setForm({ ...form, taxes_clp: Number(e.target.value) })} /></div><div className="col-md-6"><div className="alert alert-light border mt-4 mb-0">Subtotal: ${subtotal} | Total final: <strong>${total}</strong></div></div></div>
+      <div className="row g-2 mt-2"><div className="col-md-2"><label className="form-label">Costo envío</label><input type="number" className="form-control" placeholder="0" value={form.shipping_clp} onChange={(e) => setForm({ ...form, shipping_clp: e.target.value })} /></div><div className="col-md-2"><label className="form-label">Importación</label><input type="number" className="form-control" placeholder="0" value={form.import_fees_clp} onChange={(e) => setForm({ ...form, import_fees_clp: e.target.value })} /></div><div className="col-md-2"><label className="form-label">Impuestos</label><input type="number" className="form-control" placeholder="0" value={form.taxes_clp} onChange={(e) => setForm({ ...form, taxes_clp: e.target.value })} /></div><div className="col-md-6"><div className="alert alert-light border mt-4 mb-0">Subtotal: ${subtotal} | Total final: <strong>${total}</strong></div></div></div>
       <div className="d-flex gap-2 mt-3"><button className="btn btn-outline-secondary" onClick={() => save('DRAFT')}>Guardar borrador</button><button className="btn btn-success" onClick={() => save('SENT')}>Guardar y enviar</button></div>
     </div> : null}
 
