@@ -166,35 +166,55 @@ def import_catalog_from_xlsx(excel_file):
             raise ValidationError("La importación de catálogo no puede modificar stock")
     return summary
 
+
+def _get_xlsx_sheet(workbook, preferred_sheet=None):
+    if preferred_sheet and preferred_sheet in workbook.sheetnames:
+        return workbook[preferred_sheet]
+    return workbook.active
+
+
+def _sheet_headers(sheet):
+    first_row = next(sheet.iter_rows(min_row=1, max_row=1), None)
+    if not first_row:
+        raise ValidationError("El archivo XLSX está vacío")
+    headers = [str(c.value or "").strip().lower() for c in first_row]
+    if not any(headers):
+        raise ValidationError("El archivo XLSX no tiene encabezados válidos")
+    return headers
+
 def import_purchase_order_from_xlsx(*, excel_file, user, purchase_order_id=None):
     workbook = load_workbook(excel_file, data_only=True)
-    sheet = workbook.active
-    headers = [str(c.value or "").strip().lower() for c in next(sheet.iter_rows(min_row=1, max_row=1))]
+    sheet = _get_xlsx_sheet(workbook, preferred_sheet="purchase_orders")
+    headers = _sheet_headers(sheet)
     required = {"quantity", "supplier", "order_number"}
     if not required.issubset(set(headers)): raise ValidationError("Columnas inválidas para importación de compra")
-    first = dict(zip(headers, next(sheet.iter_rows(min_row=2, max_row=2, values_only=True))))
+    first_row = next(sheet.iter_rows(min_row=2, max_row=2, values_only=True), None)
+    if not first_row:
+        raise ValidationError("El XLSX no contiene filas de detalle")
+    first = dict(zip(headers, first_row))
     supplier, _ = Supplier.objects.get_or_create(name=str(first.get("supplier") or "Proveedor XLSX").strip())
-    po = PurchaseOrder.objects.filter(pk=purchase_order_id).first() if purchase_order_id else None
-    if not po:
-        po = PurchaseOrder.objects.create(supplier=supplier, order_number=str(first.get("order_number") or f"XLSX-{timezone.now().timestamp()}"), created_by=user, status=PurchaseOrder.Status.RECEIVED, exchange_rate=_to_decimal(first.get("exchange_rate"), Decimal("0")))
-    summary = {"rows_processed": 0, "errors": [], "preview": []}
-    for row_num, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
-        r = dict(zip(headers, row)); summary["rows_processed"] += 1
-        try:
-            qty = _to_int(r.get("quantity"), 0)
-            if qty <= 0: raise ValidationError("quantity debe ser entero > 0")
-            product = Product.objects.filter(pk=r.get("product_id")).first()
-            if not product and r.get("name"):
-                product = Product.objects.filter(name=str(r.get("name")).strip()).first()
-            if not product: raise ValidationError("No se pudo resolver product_id/name")
-            unit_cost_clp = _to_int(r.get("unit_cost_clp"), 0)
-            unit_cost_usd = _to_decimal(r.get("unit_cost_usd"), Decimal("0"))
-            PurchaseOrderItem.objects.create(purchase_order=po, product=product, quantity_ordered=qty, quantity_received=qty, unit_cost_usd=unit_cost_usd, unit_cost_clp=unit_cost_clp, subtotal_clp=qty * unit_cost_clp)
-            create_stock_movement(product=product, movement_type=KardexMovement.MovementType.PURCHASE_IN, quantity=qty, created_by=user, unit_cost_clp=unit_cost_clp, reference_type="PURCHASE_ORDER", reference_id=po.id, reference_label=po.order_number, notes="Ingreso por importación XLSX")
-            summary["preview"].append({"row": row_num, "status": "ok", "product_id": product.id})
-        except Exception as exc:
-            summary["errors"].append({"row": row_num, "error": str(exc)})
-            summary["preview"].append({"row": row_num, "status": "error"})
+    with transaction.atomic():
+        po = PurchaseOrder.objects.filter(pk=purchase_order_id).first() if purchase_order_id else None
+        if not po:
+            po = PurchaseOrder.objects.create(supplier=supplier, order_number=str(first.get("order_number") or f"XLSX-{timezone.now().timestamp()}"), created_by=user, status=PurchaseOrder.Status.RECEIVED, exchange_rate=_to_decimal(first.get("exchange_rate"), Decimal("0")))
+        summary = {"rows_processed": 0, "errors": [], "preview": []}
+        for row_num, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
+            r = dict(zip(headers, row)); summary["rows_processed"] += 1
+            try:
+                qty = _to_int(r.get("quantity"), 0)
+                if qty <= 0: raise ValidationError("quantity debe ser entero > 0")
+                product = Product.objects.filter(pk=r.get("product_id")).first()
+                if not product and r.get("name"):
+                    product = Product.objects.filter(name=str(r.get("name")).strip()).first()
+                if not product: raise ValidationError("No se pudo resolver product_id/name")
+                unit_cost_clp = _to_int(r.get("unit_cost_clp"), 0)
+                unit_cost_usd = _to_decimal(r.get("unit_cost_usd"), Decimal("0"))
+                PurchaseOrderItem.objects.create(purchase_order=po, product=product, quantity_ordered=qty, quantity_received=qty, unit_cost_usd=unit_cost_usd, unit_cost_clp=unit_cost_clp, subtotal_clp=qty * unit_cost_clp)
+                create_stock_movement(product=product, movement_type=KardexMovement.MovementType.PURCHASE_IN, quantity=qty, created_by=user, unit_cost_clp=unit_cost_clp, reference_type="PURCHASE_ORDER", reference_id=po.id, reference_label=po.order_number, notes="Ingreso por importación XLSX")
+                summary["preview"].append({"row": row_num, "status": "ok", "product_id": product.id})
+            except Exception as exc:
+                summary["errors"].append({"row": row_num, "error": str(exc)})
+                summary["preview"].append({"row": row_num, "status": "error"})
     return po, summary
 
 def calculate_price_clp(usd_price, is_foil=False):
