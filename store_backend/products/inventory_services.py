@@ -111,12 +111,17 @@ def receive_purchase_order(purchase_order_id, user):
     po.exchange_rate = po.exchange_rate or settings.usd_to_clp_real or settings.usd_to_clp
     total_usd_paid = float(po.subtotal_usd) + float(po.shipping_usd or 0) + float(po.payment_fee_usd or 0)
     po.total_paid_clp = int(round(total_usd_paid * float(po.exchange_rate or 0)))
-    po.total_real_clp = int(
-        int(po.subtotal_clp or 0)
-        + int(po.shipping_clp or 0)
-        + int(po.import_fees_clp or 0)
-        + int(po.taxes_clp or 0)
-    )
+    subtotal_clp = int(po.subtotal_clp or 0)
+    shipping_clp = int(po.shipping_clp or 0)
+    import_fees_clp = int(po.import_fees_clp or 0)
+    taxable_base = subtotal_clp + shipping_clp + import_fees_clp
+    vat_percentage = float(getattr(settings, "vat_percentage", 19) or 19)
+    if not settings.is_active:
+        raise ValidationError("No hay configuración de precios activa para IVA")
+    if int(po.taxes_clp or 0) <= 0:
+        po.taxes_clp = int(round(taxable_base * vat_percentage / 100))
+
+    po.total_real_clp = int(subtotal_clp + shipping_clp + import_fees_clp + int(po.taxes_clp or 0))
 
     for item in items:
         qty = item.quantity_ordered - item.quantity_received
@@ -173,6 +178,6 @@ def receive_purchase_order(purchase_order_id, user):
             item.save(update_fields=["quantity_received", "subtotal_clp", "unit_cost_clp"])
     po.status = PurchaseOrder.Status.RECEIVED
     po.received_at = timezone.now()
-    po.save(update_fields=["status", "received_at", "updated_at", "subtotal_usd", "exchange_rate", "total_paid_clp", "total_real_clp"])
+    po.save(update_fields=["status", "received_at", "updated_at", "subtotal_usd", "exchange_rate", "total_paid_clp", "total_real_clp", "taxes_clp"])
     logger.info("Purchase order received po_id=%s items=%s total_real_clp=%s", po.pk, len(items), po.total_real_clp)
     return po

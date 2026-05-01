@@ -17,6 +17,8 @@ export default function ProductDetailPage() {
   }, [id]);
 
   if (!product) return <LoadingSpinner />;
+  const margin = Number(product.margin_clp || 0);
+  const isLoss = margin < 0;
 
   return (
     <div className="row g-4 align-items-start">
@@ -29,6 +31,10 @@ export default function ProductDetailPage() {
           <p className="mb-1"><strong>Tipo:</strong> {product.mtg_card?.type_line}</p>
           <p className="text-secondary">{product.mtg_card?.oracle_text || product.description}</p>
           <p className="price-highlight">CLP ${product.price_clp}</p>
+          <p className="mb-1"><strong>Costo real:</strong> ${product.cost_real_clp || 0}</p>
+          <p className={`mb-1 ${isLoss ? 'text-danger' : 'text-success'}`}><strong>Margen:</strong> {margin >= 0 ? '+' : ''}${margin} ({product.margin_percentage || 0}%) {isLoss ? '⚠️ Estás perdiendo dinero' : '✅ Margen positivo'}</p>
+          <p className="mb-1"><strong>Precio sugerido:</strong> ${product.suggested_price_clp || 0}</p>
+          <p className="small text-muted">El costo real incluye envío, importación e impuestos.</p>
           <p className="mb-3">Stock: {product.stock}</p>
           <div className="mb-3 col-6"><label className="form-label">Cantidad</label><input type="number" min="1" max={Math.max(1, Number(product.stock || 1))} className="form-control" value={quantity} onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))} /></div>
           <button className="btn btn-primary" onClick={() => addItem(product, quantity)} disabled={Number(product.stock || 0) <= 0}><i className="bi bi-cart-plus me-2" />Agregar al carrito</button>
