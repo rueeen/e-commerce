@@ -265,3 +265,61 @@ def calculate_suggested_sale_price(product, unit_cost_clp=None):
         "source": "SCRYFALL_AND_MARGIN" if scryfall_base_clp > 0 else "COST_AND_MARGIN",
         "has_scryfall_price": scryfall_usd > 0,
     }
+
+
+def import_product_row(row_data):
+    row_type = str(row_data.get("type") or "").strip().lower()
+    if not row_type:
+        raise ValidationError("type es obligatorio")
+    if row_type not in {Product.ProductType.SINGLE, Product.ProductType.BUNDLE, Product.ProductType.OTHER}:
+        raise ValidationError("type inválido. Usa single, bundle u other")
+
+    if row_type == Product.ProductType.SINGLE:
+        name = str(row_data.get("name") or "").strip()
+        if not name:
+            raise ValidationError("name es obligatorio para singles")
+        query_parts = [f'!"{name}"']
+        if row_data.get("set"):
+            query_parts.append(f"set:{str(row_data['set']).strip().lower()}")
+        if row_data.get("collector_number"):
+            query_parts.append(f"number:{str(row_data['collector_number']).strip()}")
+        cards = search_cards(" ".join(query_parts))
+        if not cards:
+            raise ValidationError("Single no encontrado en Scryfall")
+        card_data = cards[0]
+        card, _ = MTGCard.objects.update_or_create(
+            scryfall_id=card_data["id"],
+            defaults=_normalize_card_data(card_data),
+        )
+        product, created = create_or_update_single_product(card, {
+            "category": row_data.get("category"),
+            "condition": str(row_data.get("condition") or Product.CardCondition.NM).upper(),
+            "language": str(row_data.get("language") or "EN").upper(),
+            "is_foil": bool(row_data.get("foil", False)),
+            "edition": row_data.get("edition") or card.set_name,
+            "price_clp_final": int(row_data.get("price_clp") or 0),
+            "price_usd_reference": extract_usd_price(card_data, bool(row_data.get("foil", False))),
+            "price_clp_suggested": int(row_data.get("price_clp") or 0),
+            "stock": 0,
+            "notes": row_data.get("notes", ""),
+            "is_active": True,
+        })
+        return product, created, "single"
+
+    product, created = Product.objects.update_or_create(
+        name=str(row_data.get("name") or "").strip(),
+        product_type=row_type,
+        defaults={
+            "category": row_data.get("category"),
+            "description": str(row_data.get("description") or ""),
+            "price_clp": int(row_data.get("price_clp") or 0),
+            "price": int(row_data.get("price_clp") or 0),
+            "image": str(row_data.get("image") or ""),
+            "pricing_source": PricingSource.MANUAL,
+            "stock": 0,
+            "notes": str(row_data.get("notes") or ""),
+            "is_active": True,
+            "mtg_card": None,
+        },
+    )
+    return product, created, "bundle"

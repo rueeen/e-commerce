@@ -22,6 +22,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "language", "is_foil", "edition", "notes", "price_usd_reference", "price_clp_suggested", "price_clp_final", "pricing_source", "pricing_last_update", "created_at", "mtg_card", "mtg_card_id", "category", "category_id",
         )
         read_only_fields = ("created_at", "stock", "average_cost_clp", "last_purchase_cost_clp")
+        extra_kwargs = {"product_type": {"required": True}}
 
 
 class CategorySerializer(serializers.ModelSerializer):

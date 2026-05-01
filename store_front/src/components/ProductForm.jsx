@@ -1,9 +1,7 @@
 const PRODUCT_TYPE_OPTIONS = [
   { value: 'single', label: 'Carta individual' },
-  { value: 'sealed', label: 'Producto sellado' },
-  { value: 'accessory', label: 'Accesorio' },
-  { value: 'deck', label: 'Mazo' },
   { value: 'bundle', label: 'Bundle' },
+  { value: 'other', label: 'Otro' },
 ];
 const CONDITION_OPTIONS = [{ value: 'NM', label: 'Near Mint' }, { value: 'LP', label: 'Lightly Played' }, { value: 'MP', label: 'Moderately Played' }, { value: 'HP', label: 'Heavily Played' }, { value: 'DMG', label: 'Damaged' }];
 const LANGUAGE_OPTIONS = ['EN', 'ES', 'JP', 'PT', 'IT', 'DE', 'FR'];
