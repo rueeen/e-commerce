@@ -9,7 +9,6 @@ from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
 from accounts.permissions import IsAdminUser, IsAdminOrWorkerUser
 from .models import Category, KardexMovement, MTGCard, PricingSettings, Product, PurchaseOrder, SingleCard, Supplier
@@ -230,6 +229,26 @@ class ProductViewSet(viewsets.ModelViewSet):
         movements = product.kardex_movements.all()[:50]
         return Response(KardexMovementSerializer(movements, many=True).data)
 
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="import-catalog-xlsx",
+        permission_classes=[IsAdminOrWorkerUser],
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def import_catalog_xlsx(self, request):
+        excel_file = request.FILES.get("file")
+        if not excel_file:
+            return Response({"detail": "Debes adjuntar un archivo .xlsx"}, status=400)
+        try:
+            summary = import_catalog_from_xlsx(excel_file)
+            return Response(summary, status=200)
+        except Exception as exc:
+            return Response(
+                {"detail": "Error procesando archivo", "error": str(exc)},
+                status=400,
+            )
+
 
 class KardexViewSet(viewsets.GenericViewSet):
     serializer_class = KardexMovementSerializer
@@ -271,20 +290,6 @@ class KardexViewSet(viewsets.GenericViewSet):
         except (TypeError, ValueError, ValidationError) as exc:
             return Response({"detail": str(exc)}, status=400)
         return Response(self.get_serializer(movement).data, status=201)
-
-
-class CatalogImportView(APIView):
-    permission_classes = [IsAdminOrWorkerUser]
-    parser_classes = [FormParser, MultiPartParser]
-
-    def post(self, request):
-        excel_file = request.FILES.get("file")
-        if not excel_file:
-            return Response({"detail": "Debes adjuntar un archivo .xlsx"}, status=400)
-        try:
-            return Response(import_catalog_from_xlsx(excel_file))
-        except Exception as exc:
-            return Response({"detail": str(exc)}, status=400)
 
 
 class CategoryViewSet(viewsets.ModelViewSet):

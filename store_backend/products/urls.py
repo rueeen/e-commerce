@@ -1,7 +1,7 @@
-from django.urls import include, path, re_path
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .views import CardViewSet, CatalogImportView, CategoryViewSet, InventoryDashboardView, KardexViewSet, MTGScryfallViewSet, PricingSettingsViewSet, ProductViewSet, PurchaseOrderViewSet, SupplierViewSet
+from .views import CardViewSet, CategoryViewSet, InventoryDashboardView, KardexViewSet, MTGScryfallViewSet, PricingSettingsViewSet, ProductViewSet, PurchaseOrderViewSet, SupplierViewSet
 
 router = DefaultRouter()
 router.register('cards', CardViewSet, basename='card')
@@ -15,8 +15,5 @@ router.register('purchase-orders', PurchaseOrderViewSet, basename='purchase-orde
 
 urlpatterns = [
     path('', include(router.urls)),
-    path('products/import-catalog-xlsx/', CatalogImportView.as_view(), name='import-catalog-xlsx'),
-    # Backward compatible endpoint without trailing slash (avoid 301/405 for multipart POST)
-    re_path(r'^products/import-catalog-xlsx$', CatalogImportView.as_view(), name='import-catalog-xlsx-no-slash'),
     path('inventory/dashboard/', InventoryDashboardView.as_view(), name='inventory-dashboard'),
 ]

@@ -2,6 +2,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 import json
+import logging
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
@@ -11,11 +12,11 @@ from django.db import transaction
 from django.utils import timezone
 from openpyxl import load_workbook
 
-from .inventory_services import create_stock_movement
-from .models import BundleItem, KardexMovement, MTGCard, PricingSettings, Product, PricingSource, PurchaseOrder, PurchaseOrderItem, SealedProduct, SingleCard, Supplier
+from .models import BundleItem, MTGCard, PricingSettings, Product, PurchaseOrder, PurchaseOrderItem, SealedProduct, SingleCard, Supplier
 
 SCRYFALL_BASE = "https://api.scryfall.com"
 SCRYFALL_TIMEOUT = 20
+logger = logging.getLogger(__name__)
 
 class ScryfallServiceError(Exception):
     pass
@@ -113,7 +114,7 @@ def import_single_catalog_row(row_data):
     name = str(row_data.get("name") or card.name).strip()
     product, created = Product.objects.update_or_create(
         name=name, product_type=Product.ProductType.SINGLE,
-        defaults={"category": row_data.get("category"), "description": str(row_data.get("description") or card.type_line or ""), "price_clp": _to_int(row_data.get("price_clp"), 0), "image": str(row_data.get("image") or card.image_large or card.image_normal or card.image_small or ""), "notes": str(row_data.get("notes") or ""), "is_active": _to_bool(row_data.get("is_active"), True), "pricing_source": PricingSource.MANUAL},
+        defaults={"category": row_data.get("category"), "description": str(row_data.get("description") or card.type_line or ""), "price_clp": _to_int(row_data.get("price_clp"), 0), "image": str(row_data.get("image") or card.image_large or card.image_normal or card.image_small or ""), "notes": str(row_data.get("notes") or ""), "is_active": _to_bool(row_data.get("is_active"), True)},
     )
     SingleCard.objects.update_or_create(product=product, defaults={"mtg_card": card, "condition": str(row_data.get("condition") or Product.CardCondition.NM).upper(), "language": str(row_data.get("language") or "EN").upper(), "is_foil": _to_bool(row_data.get("is_foil"), False), "edition": row_data.get("set_name") or card.set_name, "price_usd_reference": extract_usd_price(card_data, _to_bool(row_data.get("is_foil"), False))})
     return product, created, warnings
@@ -122,7 +123,7 @@ def import_sealed_catalog_row(row_data):
     sealed_kind = str(row_data.get("sealed_kind") or "").strip().lower()
     if not sealed_kind:
         raise ValidationError("sealed_kind es obligatorio para type=sealed")
-    product, created = Product.objects.update_or_create(name=str(row_data.get("name") or "").strip(), product_type=Product.ProductType.SEALED, defaults={"category": row_data.get("category"), "description": str(row_data.get("description") or ""), "price_clp": _to_int(row_data.get("price_clp"), 0), "image": str(row_data.get("image") or ""), "notes": str(row_data.get("notes") or ""), "is_active": _to_bool(row_data.get("is_active"), True), "pricing_source": PricingSource.MANUAL})
+    product, created = Product.objects.update_or_create(name=str(row_data.get("name") or "").strip(), product_type=Product.ProductType.SEALED, defaults={"category": row_data.get("category"), "description": str(row_data.get("description") or ""), "price_clp": _to_int(row_data.get("price_clp"), 0), "image": str(row_data.get("image") or ""), "notes": str(row_data.get("notes") or ""), "is_active": _to_bool(row_data.get("is_active"), True)})
     SealedProduct.objects.update_or_create(product=product, defaults={"sealed_kind": sealed_kind, "set_code": str(row_data.get("set_code") or "")})
     return product, created, []
 
@@ -137,7 +138,7 @@ def import_catalog_row(row_data):
     if row_type == Product.ProductType.SEALED:
         return import_sealed_catalog_row(row_data)
     if row_type == Product.ProductType.BUNDLE:
-        product, created = Product.objects.update_or_create(name=str(row_data.get("name")).strip(), product_type=Product.ProductType.BUNDLE, defaults={"category": row_data.get("category"), "description": str(row_data.get("description") or ""), "price_clp": price, "image": str(row_data.get("image") or ""), "notes": str(row_data.get("notes") or ""), "is_active": _to_bool(row_data.get("is_active"), True), "pricing_source": PricingSource.MANUAL})
+        product, created = Product.objects.update_or_create(name=str(row_data.get("name")).strip(), product_type=Product.ProductType.BUNDLE, defaults={"category": row_data.get("category"), "description": str(row_data.get("description") or ""), "price_clp": price, "image": str(row_data.get("image") or ""), "notes": str(row_data.get("notes") or ""), "is_active": _to_bool(row_data.get("is_active"), True)})
         return product, created, []
     raise ValidationError("type inválido. Usa single, sealed o bundle")
 
@@ -147,18 +148,20 @@ def import_catalog_from_xlsx(excel_file):
     headers = [str(c.value or "").strip().lower() for c in next(sheet.iter_rows(min_row=1, max_row=1))]
     required = {"type", "name", "price_clp"}
     if not required.issubset(set(headers)): raise ValidationError(f"Columnas inválidas. Requeridas: {sorted(required)}")
-    summary = {"rows_processed": 0, "products_created": 0, "products_updated": 0, "errors": [], "warnings": [], "preview": []}
+    summary = {"created": 0, "updated": 0, "errors": [], "warnings": [], "preview": []}
     categories = {c.name.strip().lower(): c for c in Product._meta.get_field('category').related_model.objects.all()}
     initial_stock = {p.id: p.stock for p in Product.objects.all()}
     for row_num, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
-        row_data = dict(zip(headers, row)); summary["rows_processed"] += 1
+        row_data = dict(zip(headers, row))
         row_data["category"] = categories.get(str(row_data.get("category") or "").strip().lower())
         try:
+            logger.info("Procesando fila %s", row_num)
             product, created, warns = import_catalog_row(row_data)
-            summary["products_created" if created else "products_updated"] += 1
+            summary["created" if created else "updated"] += 1
             summary["warnings"].extend([{"row": row_num, "warning": w} for w in warns])
             summary["preview"].append({"row": row_num, "product_id": product.id, "status": "ok"})
         except Exception as exc:
+            logger.error("Error fila %s: %s", row_num, exc)
             summary["errors"].append({"row": row_num, "error": str(exc)})
             summary["preview"].append({"row": row_num, "status": "error"})
     for p in Product.objects.filter(id__in=initial_stock.keys()):
@@ -196,7 +199,7 @@ def import_purchase_order_from_xlsx(*, excel_file, user, purchase_order_id=None)
     with transaction.atomic():
         po = PurchaseOrder.objects.filter(pk=purchase_order_id).first() if purchase_order_id else None
         if not po:
-            po = PurchaseOrder.objects.create(supplier=supplier, order_number=str(first.get("order_number") or f"XLSX-{timezone.now().timestamp()}"), created_by=user, status=PurchaseOrder.Status.RECEIVED, exchange_rate=_to_decimal(first.get("exchange_rate"), Decimal("0")))
+            po = PurchaseOrder.objects.create(supplier=supplier, order_number=str(first.get("order_number") or f"XLSX-{timezone.now().timestamp()}"), created_by=user, status=PurchaseOrder.Status.DRAFT, exchange_rate=_to_decimal(first.get("exchange_rate"), Decimal("0")))
         summary = {"rows_processed": 0, "errors": [], "preview": []}
         for row_num, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
             r = dict(zip(headers, row)); summary["rows_processed"] += 1
@@ -209,8 +212,7 @@ def import_purchase_order_from_xlsx(*, excel_file, user, purchase_order_id=None)
                 if not product: raise ValidationError("No se pudo resolver product_id/name")
                 unit_cost_clp = _to_int(r.get("unit_cost_clp"), 0)
                 unit_cost_usd = _to_decimal(r.get("unit_cost_usd"), Decimal("0"))
-                PurchaseOrderItem.objects.create(purchase_order=po, product=product, quantity_ordered=qty, quantity_received=qty, unit_cost_usd=unit_cost_usd, unit_cost_clp=unit_cost_clp, subtotal_clp=qty * unit_cost_clp)
-                create_stock_movement(product=product, movement_type=KardexMovement.MovementType.PURCHASE_IN, quantity=qty, created_by=user, unit_cost_clp=unit_cost_clp, reference_type="PURCHASE_ORDER", reference_id=po.id, reference_label=po.order_number, notes="Ingreso por importación XLSX")
+                PurchaseOrderItem.objects.create(purchase_order=po, product=product, quantity_ordered=qty, quantity_received=0, unit_cost_usd=unit_cost_usd, unit_cost_clp=unit_cost_clp, subtotal_clp=qty * unit_cost_clp)
                 summary["preview"].append({"row": row_num, "status": "ok", "product_id": product.id})
             except Exception as exc:
                 summary["errors"].append({"row": row_num, "error": str(exc)})
