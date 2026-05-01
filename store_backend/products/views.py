@@ -3,7 +3,6 @@ from django.db.models import Count
 from django.db import models
 from django.core.exceptions import ValidationError
 import logging
-from openpyxl import load_workbook
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -81,7 +80,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["name", "description", "single_card__mtg_card__name"]
-    ordering_fields = ["price", "price_clp", "created_at", "name", "stock"]
+    ordering_fields = ["price_clp", "created_at", "name", "stock"]
     parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def get_queryset(self):

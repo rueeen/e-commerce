@@ -166,9 +166,11 @@ def search_cards(query):
     return payload.get("data", [])
 def get_card_by_id(scryfall_id): return _request_json(f"/cards/{scryfall_id}")
 def get_scryfall_card_by_id(scryfall_id):
-    response = requests.get(f"{SCRYFALL_BASE}/cards/{scryfall_id}", timeout=10)
-    if response.status_code != 200: raise ValidationError(f"Scryfall no encontró la carta: {response.text}")
-    return response.json()
+    try:
+        return get_card_by_id(scryfall_id)
+    except ScryfallServiceError as exc:
+        logger.warning("Scryfall lookup failed for scryfall_id=%s error=%s", scryfall_id, exc)
+        raise ValidationError(f"Scryfall no encontró la carta: {exc}") from exc
 
 def import_card(scryfall_id):
     card_data = get_card_by_id(scryfall_id)
