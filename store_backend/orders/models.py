@@ -108,8 +108,12 @@ class Order(models.Model):
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="orders")
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
-    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
-    stock_deducted = models.BooleanField(default=False)
+    subtotal_clp = models.PositiveIntegerField(default=0)
+    shipping_clp = models.PositiveIntegerField(default=0)
+    discount_clp = models.PositiveIntegerField(default=0)
+    total_clp = models.PositiveIntegerField(default=0)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -118,8 +122,6 @@ class OrderItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
     product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="order_items")
     quantity = models.PositiveIntegerField()
-    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
-    subtotal = models.DecimalField(max_digits=12, decimal_places=2)
     product_name_snapshot = models.CharField(max_length=255, default="")
     product_type_snapshot = models.CharField(max_length=20, default="")
     unit_price_clp = models.PositiveIntegerField(default=0)
