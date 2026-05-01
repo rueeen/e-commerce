@@ -1,10 +1,12 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
+import logging
 from .models import KardexMovement, PricingSettings, Product, PurchaseOrder
 
 PURCHASE_IN_TYPES = {KardexMovement.MovementType.PURCHASE_IN, KardexMovement.MovementType.MANUAL_IN, KardexMovement.MovementType.RETURN_IN}
 OUT_TYPES = {KardexMovement.MovementType.SALE_OUT, KardexMovement.MovementType.MANUAL_OUT}
+logger = logging.getLogger(__name__)
 
 def _recalculate_average_cost(product, incoming_qty, incoming_cost):
     previous_stock = int(product.stock)
@@ -48,7 +50,9 @@ def create_stock_movement(*, product, movement_type, quantity, created_by=None, 
         product.last_purchase_cost_clp = int(unit_cost_clp or 0)
     product.stock = new_stock
     product.save(update_fields=["stock", "average_cost_clp", "last_purchase_cost_clp"])
-    return KardexMovement.objects.create(product=product, movement_type=movement_type, quantity=qty, previous_stock=previous_stock, new_stock=new_stock, unit_cost_clp=int(unit_cost_clp or 0), unit_price_clp=int(unit_price_clp or 0), reference_type=reference_type, reference_id=str(reference_id or ""), reference_label=reference_label or "", notes=notes or "", created_by=created_by)
+    movement = KardexMovement.objects.create(product=product, movement_type=movement_type, quantity=qty, previous_stock=previous_stock, new_stock=new_stock, unit_cost_clp=int(unit_cost_clp or 0), unit_price_clp=int(unit_price_clp or 0), reference_type=reference_type, reference_id=str(reference_id or ""), reference_label=reference_label or "", notes=notes or "", created_by=created_by)
+    logger.info("Kardex movement created product_id=%s type=%s qty=%s previous_stock=%s new_stock=%s", product.pk, movement_type, qty, previous_stock, new_stock)
+    return movement
 
 @transaction.atomic
 def receive_purchase_order(purchase_order_id, user):
@@ -86,15 +90,11 @@ def receive_purchase_order(purchase_order_id, user):
             suggested_payload = calculate_suggested_sale_price(item.product, unit_cost_real_clp)
             suggested = int(suggested_payload.get("suggested_price_clp") or 0)
             min_allowed = int(suggested_payload.get("min_price_clp") or 0)
-            if item.product.price_clp_final and item.product.price_clp_final < min_allowed:
-                raise ValidationError(f"Precio por debajo del margen mínimo para {item.product.name}")
             create_stock_movement(product=item.product, movement_type=KardexMovement.MovementType.PURCHASE_IN, quantity=qty, created_by=user, unit_cost_clp=unit_cost_real_clp, reference_type="PURCHASE_ORDER", reference_id=po.id, reference_label=po.order_number, notes="Ingreso por recepción de orden de compra")
             item.product.price_clp_suggested = int(suggested)
             if po.update_prices_on_receive and suggested > 0:
-                item.product.price_clp_final = int(suggested)
                 item.product.price_clp = int(suggested)
-                item.product.price = int(suggested)
-                item.product.save(update_fields=["price_clp_suggested", "price_clp_final", "price_clp", "price"])
+                item.product.save(update_fields=["price_clp_suggested", "price_clp"])
             else:
                 item.product.save(update_fields=["price_clp_suggested"])
             item.quantity_received = item.quantity_ordered
@@ -103,4 +103,5 @@ def receive_purchase_order(purchase_order_id, user):
     po.status = PurchaseOrder.Status.RECEIVED
     po.received_at = timezone.now()
     po.save(update_fields=["status", "received_at", "updated_at", "subtotal_usd", "exchange_rate", "total_paid_clp", "total_real_clp"])
+    logger.info("Purchase order received po_id=%s items=%s total_real_clp=%s", po.pk, len(items), po.total_real_clp)
     return po
