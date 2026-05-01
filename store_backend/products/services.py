@@ -296,3 +296,46 @@ def import_product_row(row_data):
     if row_type == Product.ProductType.SEALED:
         SealedProduct.objects.update_or_create(product=product, defaults={"sealed_kind": str(row_data.get("sealed_kind") or SealedProduct.SealedKind.OTHER), "set_code": str(row_data.get("set") or "")})
     return product, created, row_type
+
+
+def import_single_row(row_data):
+    normalized_name = " ".join(str(row_data.get("name") or "").replace("\n", " ").split()).strip()
+    if not normalized_name:
+        raise ValidationError("name es obligatorio para singles")
+
+    cards = search_cards(f'!"{normalized_name}"')
+    if len(cards) != 1:
+        raise ValidationError("El single debe resolver exactamente una carta en Scryfall")
+
+    card_data = cards[0]
+    card, _ = MTGCard.objects.update_or_create(
+        scryfall_id=card_data["id"],
+        defaults=_normalize_card_data(card_data),
+    )
+
+    product, created = Product.objects.update_or_create(
+        name=f"{card.name} - {card.set_code.upper()} {card.collector_number}".strip(),
+        product_type=Product.ProductType.SINGLE,
+        defaults={
+            "category": row_data.get("category"),
+            "description": str(row_data.get("description") or ""),
+            "price_clp": int(row_data.get("price_clp") or 0),
+            "image": card.image_large or card.image_normal or card.image_small,
+            "stock": 0,
+            "notes": str(row_data.get("notes") or ""),
+            "is_active": True,
+            "pricing_source": PricingSource.SCRYFALL,
+        },
+    )
+    SingleCard.objects.update_or_create(
+        product=product,
+        defaults={
+            "mtg_card": card,
+            "condition": str(row_data.get("condition") or Product.CardCondition.NM).upper(),
+            "language": str(row_data.get("language") or "EN").upper(),
+            "is_foil": bool(row_data.get("foil", False)),
+            "edition": row_data.get("edition") or card.set_name,
+            "price_usd_reference": extract_usd_price(card_data, bool(row_data.get("foil", False))),
+        },
+    )
+    return product, created, "single"
