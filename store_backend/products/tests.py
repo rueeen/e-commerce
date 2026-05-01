@@ -136,7 +136,12 @@ class PurchaseOrderReceiveTests(TestCase):
 
     def test_receive_purchase_order_uses_clp_when_usd_not_present(self):
         product = Product.objects.create(name='Producto CLP', product_type='sealed', price_clp=1000, stock=0)
-        po = PurchaseOrder.objects.create(status=PurchaseOrder.Status.DRAFT, created_by=self.user, order_number='PO-CLP-1')
+        po = PurchaseOrder.objects.create(
+            status=PurchaseOrder.Status.DRAFT,
+            created_by=self.user,
+            order_number='PO-CLP-1',
+            subtotal_clp=4500,
+        )
         item = PurchaseOrderItem.objects.create(
             purchase_order=po,
             product=product,
@@ -157,6 +162,38 @@ class PurchaseOrderReceiveTests(TestCase):
         self.assertEqual(item.quantity_received, 3)
         self.assertEqual(product.stock, 3)
         self.assertEqual(po.status, PurchaseOrder.Status.RECEIVED)
+        self.assertEqual(po.total_real_clp, 4500)
+
+    def test_receive_purchase_order_allocates_additional_costs_into_unit_cost(self):
+        p1 = Product.objects.create(name='Producto A', product_type='sealed', price_clp=1000, stock=0)
+        p2 = Product.objects.create(name='Producto B', product_type='sealed', price_clp=1000, stock=0)
+        po = PurchaseOrder.objects.create(
+            status=PurchaseOrder.Status.DRAFT,
+            created_by=self.user,
+            order_number='PO-ALLOC-1',
+            subtotal_clp=6000,
+            shipping_clp=1000,
+            import_fees_clp=500,
+            taxes_clp=500,
+        )
+        i1 = PurchaseOrderItem.objects.create(
+            purchase_order=po, product=p1, quantity_ordered=2, quantity_received=0, unit_cost_clp=1500, subtotal_clp=3000
+        )
+        i2 = PurchaseOrderItem.objects.create(
+            purchase_order=po, product=p2, quantity_ordered=3, quantity_received=0, unit_cost_clp=1000, subtotal_clp=3000
+        )
+
+        res = self.client.post(f'/api/purchase-orders/{po.id}/receive/')
+        self.assertEqual(res.status_code, 200)
+
+        po.refresh_from_db()
+        i1.refresh_from_db()
+        i2.refresh_from_db()
+        self.assertEqual(po.total_real_clp, 8000)
+        self.assertEqual(i1.unit_cost_clp, 2000)
+        self.assertEqual(i2.unit_cost_clp, 1333)
+        self.assertEqual(i1.subtotal_clp, 4000)
+        self.assertEqual(i2.subtotal_clp, 3999)
 
     def test_receive_purchase_order_requires_positive_cost_in_clp_or_usd(self):
         product = Product.objects.create(name='Producto Inválido', product_type='sealed', price_clp=1000, stock=0)
