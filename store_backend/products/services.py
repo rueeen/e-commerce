@@ -1,11 +1,7 @@
 from datetime import date
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
-import json
 import logging
-from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
-from urllib.request import urlopen
 import requests
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -15,7 +11,7 @@ from openpyxl import load_workbook
 from .models import BundleItem, MTGCard, PricingSettings, Product, PurchaseOrder, PurchaseOrderItem, SealedProduct, SingleCard, Supplier
 
 SCRYFALL_BASE = "https://api.scryfall.com"
-SCRYFALL_TIMEOUT = 20
+SCRYFALL_TIMEOUT = 10
 logger = logging.getLogger(__name__)
 
 
@@ -102,19 +98,17 @@ class ScryfallServiceError(Exception):
 # ... keep existing helpers
 
 def _request_json(path, params=None):
-    query = f"?{urlencode(params)}" if params else ""
-    url = f"{SCRYFALL_BASE}{path}{query}"
+    url = f"{SCRYFALL_BASE}{path}"
     try:
-        with urlopen(url, timeout=SCRYFALL_TIMEOUT) as response:
-            payload = response.read().decode()
-    except HTTPError as exc:
-        if exc.code == 404:
-            raise ScryfallServiceError("Carta no encontrada en Scryfall") from exc
-        raise ScryfallServiceError(f"Error Scryfall ({exc.code})") from exc
-    except URLError as exc:
+        response = requests.get(url, params=params, timeout=SCRYFALL_TIMEOUT)
+    except requests.RequestException as exc:
         raise ScryfallServiceError("Error de red consultando Scryfall") from exc
+    if response.status_code == 404:
+        raise ScryfallServiceError("Carta no encontrada en Scryfall")
+    if response.status_code != 200:
+        raise ScryfallServiceError(f"Error Scryfall ({response.status_code})")
     try:
-        return json.loads(payload)
+        return response.json()
     except ValueError as exc:
         raise ScryfallServiceError("Respuesta inválida desde Scryfall") from exc
 
@@ -158,7 +152,18 @@ def extract_usd_price(card_data, is_foil=False):
     prices = card_data.get("prices") or {}
     return _to_decimal(prices.get("usd_foil" if is_foil else "usd"), fallback=Decimal("0"))
 
-def search_cards(query): return _request_json("/cards/search", params={"q": query}).get("data", [])
+def search_cards(query):
+    url = f"{SCRYFALL_BASE}/cards/search"
+    try:
+        response = requests.get(url, params={"q": query}, timeout=10)
+    except requests.RequestException as exc:
+        raise ScryfallServiceError("Error de red consultando Scryfall") from exc
+    if response.status_code == 404:
+        return []
+    if response.status_code != 200:
+        raise ScryfallServiceError(f"Error Scryfall ({response.status_code})")
+    payload = response.json()
+    return payload.get("data", [])
 def get_card_by_id(scryfall_id): return _request_json(f"/cards/{scryfall_id}")
 def get_scryfall_card_by_id(scryfall_id):
     response = requests.get(f"{SCRYFALL_BASE}/cards/{scryfall_id}", timeout=10)
@@ -170,20 +175,65 @@ def import_card(scryfall_id):
     card, _ = MTGCard.objects.update_or_create(scryfall_id=card_data["id"], defaults=_normalize_card_data(card_data))
     return card, card_data
 
+def _normalize_card_name(name):
+    normalized_name = " ".join(str(name or "").replace("\n", " ").split()).strip()
+    if ":" in normalized_name:
+        _, possible_name = normalized_name.split(":", 1)
+        if possible_name.strip():
+            normalized_name = possible_name.strip()
+    return normalized_name
+
+
+def _normalized_for_match(value):
+    return " ".join(str(value or "").strip().lower().split())
+
+
+def _pick_card_match(cards, normalized_name):
+    if not cards:
+        return None
+    normalized_target = _normalized_for_match(normalized_name)
+    for card_data in cards:
+        if _normalized_for_match(card_data.get("name")) == normalized_target:
+            return card_data
+    return None
+
+
 def resolve_scryfall_card(*, scryfall_id=None, name=None):
     if scryfall_id:
         card_data = get_card_by_id(str(scryfall_id).strip())
         card, _ = MTGCard.objects.update_or_create(scryfall_id=card_data["id"], defaults=_normalize_card_data(card_data))
         return card, card_data, []
-    normalized_name = " ".join(str(name or "").replace("\n", " ").split()).strip()
+    normalized_name = _normalize_card_name(name)
     if not normalized_name:
         raise ValidationError("name es obligatorio para single")
-    cards = search_cards(f'!"{normalized_name}"')
-    if len(cards) > 1:
-        raise ValidationError("Single ambiguo sin scryfall_id: más de una coincidencia")
-    if len(cards) == 0:
-        raise ValidationError("No se encontró carta en Scryfall por nombre")
-    card_data = cards[0]
+    attempted_queries = [f'!"{normalized_name}"', normalized_name]
+    cards = []
+    query_used = attempted_queries[0]
+    for query in attempted_queries:
+        query_used = query
+        try:
+            cards = search_cards(query)
+        except ScryfallServiceError:
+            continue
+        if cards:
+            break
+    if not cards:
+        raise ValidationError({
+            "name": normalized_name,
+            "error": "No se pudo resolver la carta en Scryfall",
+            "query_used": query_used,
+            "suggestion": "Agrega columna scryfall_id para importación exacta",
+        })
+    card_data = _pick_card_match(cards, normalized_name) or cards[0]
+    if len(cards) > 1 and not _pick_card_match(cards, normalized_name):
+        suggestions = [card.get("name") for card in cards[:5] if card.get("name")]
+        raise ValidationError({
+            "name": normalized_name,
+            "error": "Resultado ambiguo en Scryfall",
+            "query_used": query_used,
+            "suggestions": suggestions,
+            "suggestion": "Agrega columna scryfall_id para importación exacta",
+        })
     card, _ = MTGCard.objects.update_or_create(scryfall_id=card_data["id"], defaults=_normalize_card_data(card_data))
     return card, card_data, ["single sin scryfall_id: se resolvió por nombre"]
 
@@ -231,7 +281,6 @@ def import_catalog_from_xlsx(excel_file):
         _, header_map = _resolve_catalog_headers(raw_headers)
     summary = {"created": 0, "updated": 0, "errors": [], "warnings": [], "preview": [], "detected_format": detected_format}
     categories = {c.name.strip().lower(): c for c in Product._meta.get_field('category').related_model.objects.all()}
-    initial_stock = {p.id: p.stock for p in Product.objects.all()}
     for row_num, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
         source_row_data = dict(zip(normalized_headers, row))
         row_data = {canonical: source_row_data.get(source_header) for canonical, source_header in header_map.items()}
@@ -247,11 +296,12 @@ def import_catalog_from_xlsx(excel_file):
             summary["preview"].append({"row": row_num, "product_id": product.id, "status": "ok"})
         except Exception as exc:
             logger.error("Error fila %s: %s", row_num, exc)
-            summary["errors"].append({"row": row_num, "error": str(exc)})
+            if isinstance(exc, ValidationError) and hasattr(exc, "message_dict"):
+                error_payload = {"row": row_num, **exc.message_dict}
+            else:
+                error_payload = {"row": row_num, "error": str(exc)}
+            summary["errors"].append(error_payload)
             summary["preview"].append({"row": row_num, "status": "error"})
-    for p in Product.objects.filter(id__in=initial_stock.keys()):
-        if p.stock != initial_stock[p.id]:
-            raise ValidationError("La importación de catálogo no puede modificar stock")
     return summary
 
 
