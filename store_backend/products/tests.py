@@ -5,7 +5,7 @@ from django.test import TestCase
 from openpyxl import Workbook
 from rest_framework.test import APIClient
 
-from .models import KardexMovement, Product, PurchaseOrderItem, SealedProduct, SingleCard
+from .models import KardexMovement, Product, PurchaseOrder, PurchaseOrderItem, SealedProduct, SingleCard, Supplier
 
 
 def make_xlsx(headers, rows):
@@ -104,3 +104,26 @@ class ImportTests(TestCase):
         f = make_xlsx(["type", "name", "price_clp", "sealed_kind"], [["sealed", "Bundle Box", 12000, "bundle"]])
         res = self.client.post('/api/products/import-catalog-xlsx/', {'file': f}, format='multipart')
         self.assertNotEqual(res.status_code, 405)
+
+    def test_create_purchase_order_without_order_number_autogenerates_and_calculates_totals(self):
+        supplier = Supplier.objects.create(name="Proveedor Test")
+        product = Product.objects.create(name="Producto Test", product_type="sealed", price_clp=1000, stock=0)
+        payload = {
+            "supplier": supplier.id,
+            "status": "DRAFT",
+            "shipping_clp": 1000,
+            "import_fees_clp": 500,
+            "taxes_clp": 200,
+            "order_number": "",
+            "items": [
+                {"product": product.id, "quantity_ordered": 2, "unit_cost_clp": 1500, "quantity_received": 0},
+            ],
+        }
+        res = self.client.post("/api/purchase-orders/", payload, format="json")
+        self.assertEqual(res.status_code, 201)
+        po = PurchaseOrder.objects.get(id=res.data["id"])
+        self.assertRegex(po.order_number, r"^PO-\d{8}-\d{4}$")
+        self.assertEqual(po.subtotal_clp, 3000)
+        self.assertEqual(po.total_clp, 4700)
+        item = po.items.get(product=product)
+        self.assertEqual(item.subtotal_clp, 3000)

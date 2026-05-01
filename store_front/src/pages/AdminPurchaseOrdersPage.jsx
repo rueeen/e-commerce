@@ -68,14 +68,14 @@ export default function AdminPurchaseOrdersPage() {
   const save = async (status) => {
     if (isSaving) return;
     if (!form.supplier || form.items.length === 0) return notyf.error('Proveedor e items son obligatorios');
-    if (form.order_number && !form.order_number.trim()) return notyf.error('El número de orden no puede estar vacío.');
     if (!form.items.every((it) => Number(it.quantity_ordered || 0) > 0)) return notyf.error('La cantidad de cada item debe ser mayor a 0.');
     if (!form.items.every((it) => Number(it.unit_cost_clp || 0) >= 0)) return notyf.error('El costo unitario debe ser mayor o igual a 0.');
     try {
       setIsSaving(true);
+      const orderNumber = form.order_number?.trim();
       await api.createPurchaseOrder({
         ...form,
-        order_number: form.order_number?.trim() || '',
+        ...(orderNumber ? { order_number: orderNumber } : {}),
         supplier: Number(form.supplier),
         status,
         shipping_clp: Number(form.shipping_clp || 0),

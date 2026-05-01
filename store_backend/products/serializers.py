@@ -69,6 +69,7 @@ class PurchaseOrderItemSerializer(serializers.ModelSerializer):
 
 class PurchaseOrderSerializer(serializers.ModelSerializer):
     items = PurchaseOrderItemSerializer(many=True)
+    order_number = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = PurchaseOrder
