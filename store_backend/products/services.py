@@ -10,7 +10,8 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from .models import MTGCard, PricingSettings, Product, PricingSource
+from .inventory_services import create_stock_movement
+from .models import KardexMovement, MTGCard, PricingSettings, Product, PricingSource
 
 SCRYFALL_BASE = "https://api.scryfall.com"
 SCRYFALL_TIMEOUT = 20
@@ -178,16 +179,37 @@ def create_or_update_single_product(card: MTGCard, payload):
     }
 
     if existing:
-        previous_stock = existing.stock
         for key, value in common_data.items():
-            setattr(existing, key, value)
-        existing.stock = previous_stock + payload["stock"]
+            if key != "stock":
+                setattr(existing, key, value)
         existing.save()
+        incoming_stock = int(payload.get("stock") or 0)
+        if incoming_stock > 0:
+            create_stock_movement(
+                product=existing,
+                movement_type=KardexMovement.MovementType.PURCHASE_IN,
+                quantity=incoming_stock,
+                unit_cost_clp=int(payload.get("last_purchase_cost_clp") or 0),
+                reference_type="PRODUCT_IMPORT",
+                reference_label="Importación de carta",
+                notes="Ingreso automático por actualización de single existente",
+            )
         return existing, False
 
     product = Product.objects.create(
         mtg_card=card,
         name=f"{card.name} - {card.set_code.upper()} {card.collector_number}".strip(),
-        **common_data,
+        **{**common_data, "stock": 0},
     )
+    incoming_stock = int(payload.get("stock") or 0)
+    if incoming_stock > 0:
+        create_stock_movement(
+            product=product,
+            movement_type=KardexMovement.MovementType.PURCHASE_IN,
+            quantity=incoming_stock,
+            unit_cost_clp=int(payload.get("last_purchase_cost_clp") or 0),
+            reference_type="PRODUCT_IMPORT",
+            reference_label="Importación de carta",
+            notes="Ingreso automático por creación de single",
+        )
     return product, True

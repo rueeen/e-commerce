@@ -59,6 +59,12 @@ def receive_purchase_order(purchase_order_id, user):
         raise ValidationError("No se puede recibir una orden cancelada")
     settings = _get_active_pricing_settings()
     items = list(po.items.all())
+    if not items:
+        raise ValidationError("No se puede recibir una orden sin items")
+
+    if not any((item.quantity_ordered - item.quantity_received) > 0 for item in items):
+        raise ValidationError("No hay cantidades pendientes por recibir")
+
     total_usd_items = sum(float(item.unit_cost_usd or 0) * int(item.quantity_ordered) for item in items)
     po.subtotal_usd = round(total_usd_items, 2)
     po.exchange_rate = po.exchange_rate or settings.usd_to_clp_real or settings.usd_to_clp
@@ -73,6 +79,8 @@ def receive_purchase_order(purchase_order_id, user):
             weight = (item_total_usd / total_usd_items) if total_usd_items > 0 else 0
             allocated_cost = int(round(weight * po.total_real_clp))
             unit_cost_real_clp = int(round(allocated_cost / item.quantity_ordered))
+            if unit_cost_real_clp <= 0:
+                raise ValidationError(f"Costo unitario CLP no válido (0) para {item.product.name}")
             item.unit_cost_clp = unit_cost_real_clp
             suggested = unit_cost_real_clp * float(settings.default_margin or 1)
             suggested = suggested * (float(settings.usd_to_clp_store or 1) / float(settings.usd_to_clp_real or 1))
@@ -80,7 +88,7 @@ def receive_purchase_order(purchase_order_id, user):
             min_allowed = unit_cost_real_clp * float(settings.min_margin or 1)
             if item.product.price_clp_final and item.product.price_clp_final < int(min_allowed):
                 raise ValidationError(f"Precio por debajo del margen mínimo para {item.product.name}")
-            create_stock_movement(product=item.product, movement_type=KardexMovement.MovementType.PURCHASE_IN, quantity=qty, created_by=user, unit_cost_clp=unit_cost_real_clp, reference_type="IMPORT_PURCHASE", reference_id=po.id, reference_label=po.order_number, notes="Ingreso por recepción de orden de compra internacional")
+            create_stock_movement(product=item.product, movement_type=KardexMovement.MovementType.PURCHASE_IN, quantity=qty, created_by=user, unit_cost_clp=unit_cost_real_clp, reference_type="PURCHASE_ORDER", reference_id=po.id, reference_label=po.order_number, notes="Ingreso por recepción de orden de compra")
             item.product.price_clp_suggested = int(suggested)
             item.product.save(update_fields=["price_clp_suggested"])
             item.quantity_received = item.quantity_ordered
