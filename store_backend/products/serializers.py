@@ -64,16 +64,34 @@ class PurchaseOrderItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PurchaseOrderItem
-        fields = ("id", "product", "product_name", "quantity_ordered", "quantity_received", "unit_cost_usd", "unit_cost_clp", "subtotal_clp")
+        fields = ("product", "product_name", "quantity_ordered", "quantity_received", "unit_cost_clp", "subtotal_clp")
 
 
 class PurchaseOrderSerializer(serializers.ModelSerializer):
+    supplier_name = serializers.CharField(source="supplier.name", read_only=True)
     items = PurchaseOrderItemSerializer(many=True)
     order_number = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = PurchaseOrder
-        fields = "__all__"
+        fields = (
+            "id",
+            "order_number",
+            "supplier",
+            "supplier_name",
+            "status",
+            "notes",
+            "subtotal_clp",
+            "shipping_clp",
+            "import_fees_clp",
+            "taxes_clp",
+            "total_clp",
+            "total_real_clp",
+            "update_prices_on_receive",
+            "created_at",
+            "received_at",
+            "items",
+        )
         read_only_fields = ("created_by", "received_at")
 
     def validate_order_number(self, value):

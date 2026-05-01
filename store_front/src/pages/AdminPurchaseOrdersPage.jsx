@@ -14,6 +14,9 @@ export default function AdminPurchaseOrdersPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [loadingDetailId, setLoadingDetailId] = useState(null);
 
   const load = async () => {
     const [{ data: od }, { data: sd }, { data: pd }] = await Promise.all([api.getPurchaseOrders(), api.getSuppliers(), api.getProducts()]);
@@ -48,6 +51,19 @@ export default function AdminPurchaseOrdersPage() {
 
   const subtotal = useMemo(() => form.items.reduce((acc, it) => acc + Number(it.quantity_ordered || 0) * Number(it.unit_cost_clp || 0), 0), [form.items]);
   const total = subtotal + Number(form.shipping_clp || 0) + Number(form.import_fees_clp || 0) + Number(form.taxes_clp || 0);
+
+  const handleViewDetail = async (orderId) => {
+    setLoadingDetailId(orderId);
+    try {
+      const { data } = await api.getPurchaseOrderById(orderId);
+      setSelectedOrder(data);
+      setShowModal(true);
+    } catch {
+      notyf.error('No se pudo cargar el detalle de la orden');
+    } finally {
+      setLoadingDetailId(null);
+    }
+  };
 
   const receive = async (id) => {
     const ok = window.confirm('Esto aumentará el stock y generará movimientos Kardex. ¿Deseas continuar?');
@@ -132,6 +148,8 @@ export default function AdminPurchaseOrdersPage() {
       <div className="d-flex gap-2 mt-3"><button className="btn btn-outline-secondary" disabled={isSaving} onClick={() => save('DRAFT')}>{isSaving ? 'Guardando orden...' : 'Guardar borrador'}</button><button className="btn btn-success" disabled={isSaving} onClick={() => save('SENT')}>{isSaving ? 'Guardando orden...' : 'Guardar y enviar'}</button></div>
     </div> : null}
 
-    <table className="table"><thead><tr><th>Número</th><th>Proveedor</th><th>Estado</th><th>Total</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody>{orders.map((o) => <tr key={o.id}><td>{o.order_number}</td><td>{o.supplier_name || o.supplier}</td><td><span className="badge text-bg-secondary">{o.status}</span></td><td>${o.total_clp}</td><td>{new Date(o.created_at).toLocaleDateString('es-CL')}</td><td className="d-flex gap-2"><button className="btn btn-outline-primary btn-sm" onClick={() => window.alert(`Detalle: ${o.order_number}`)}>Ver detalle</button>{o.status !== 'RECEIVED' ? <button className="btn btn-sm btn-success" onClick={() => receive(o.id)}>Marcar como recibida</button> : null}</td></tr>)}</tbody></table>
+    <table className="table"><thead><tr><th>Número</th><th>Proveedor</th><th>Estado</th><th>Total</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody>{orders.map((o) => <tr key={o.id}><td>{o.order_number}</td><td>{o.supplier_name}</td><td><span className="badge text-bg-secondary">{o.status}</span></td><td>${o.total_clp}</td><td>{new Date(o.created_at).toLocaleDateString('es-CL')}</td><td className="d-flex gap-2"><button className="btn btn-outline-primary btn-sm" disabled={loadingDetailId === o.id} onClick={() => handleViewDetail(o.id)}>{loadingDetailId === o.id ? 'Cargando...' : 'Ver detalle'}</button>{o.status !== 'RECEIVED' ? <button className="btn btn-sm btn-success" onClick={() => receive(o.id)}>Marcar como recibida</button> : null}</td></tr>)}</tbody></table>
+
+    {showModal && selectedOrder ? <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0, 0, 0, 0.6)' }}><div className="modal-dialog modal-lg modal-dialog-scrollable"><div className="modal-content bg-dark text-white border-secondary"><div className="modal-header border-secondary"><h5 className="modal-title">Orden {selectedOrder.order_number}</h5><button type="button" className="btn-close btn-close-white" aria-label="Close" onClick={() => setShowModal(false)} /></div><div className="modal-body"><div className="row g-2 mb-3"><div className="col-md-6"><strong>Proveedor:</strong> {selectedOrder.supplier_name}</div><div className="col-md-6"><strong>Estado:</strong> {selectedOrder.status}</div><div className="col-md-6"><strong>Creada:</strong> {new Date(selectedOrder.created_at).toLocaleString('es-CL')}</div><div className="col-md-6"><strong>Notas:</strong> {selectedOrder.notes || '—'}</div></div><table className="table table-dark table-striped table-sm"><thead><tr><th>Producto</th><th>Cantidad pedida</th><th>Cantidad recibida</th><th>Costo unitario</th><th>Subtotal</th></tr></thead><tbody>{(selectedOrder.items || []).map((item, i) => <tr key={`${item.product}-${i}`}><td>{item.product_name}</td><td>{item.quantity_ordered}</td><td>{item.quantity_received}</td><td>${item.unit_cost_clp}</td><td>${item.subtotal_clp}</td></tr>)}</tbody></table><hr className="border-secondary" /><div className="row g-2"><div className="col-md-6"><strong>Subtotal:</strong> ${selectedOrder.subtotal_clp}</div><div className="col-md-6"><strong>Envío:</strong> ${selectedOrder.shipping_clp}</div><div className="col-md-6"><strong>Importación:</strong> ${selectedOrder.import_fees_clp}</div><div className="col-md-6"><strong>Impuestos:</strong> ${selectedOrder.taxes_clp}</div></div><h5 className="mt-3">Total real: ${selectedOrder.total_real_clp}</h5></div><div className="modal-footer border-secondary"><button className="btn btn-outline-light" onClick={() => setShowModal(false)}>Cerrar</button></div></div></div></div> : null}
   </div>;
 }
