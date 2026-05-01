@@ -220,6 +220,25 @@ class PurchaseOrderItem(models.Model):
     subtotal_clp = models.PositiveIntegerField(default=0)
 
 
+class InventoryLot(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="lots")
+    purchase_order_item = models.ForeignKey(
+        PurchaseOrderItem,
+        on_delete=models.PROTECT,
+        related_name="lots",
+        null=True,
+        blank=True,
+    )
+    quantity_initial = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    quantity_remaining = models.PositiveIntegerField(validators=[MinValueValidator(0)])
+    unit_cost_clp = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    received_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["received_at", "id"]
+
+
 class ExchangeRateConfig(models.Model):
     name = models.CharField(max_length=80, default="default")
     usd_to_clp = models.DecimalField(max_digits=12, decimal_places=2)
