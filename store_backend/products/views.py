@@ -360,6 +360,13 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return PurchaseOrder.objects.select_related("supplier", "created_by").prefetch_related("items__product").order_by("-created_at")
 
+    def _generate_order_number(self):
+        date_prefix = timezone.localdate().strftime("%Y%m%d")
+        base = f"PO-{date_prefix}-"
+        last_po = PurchaseOrder.objects.filter(order_number__startswith=base).order_by("-order_number").first()
+        seq = int(last_po.order_number.split("-")[-1]) + 1 if last_po else 1
+        return f"{base}{seq:04d}"
+
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
@@ -465,13 +472,22 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
         if not supplier:
             return Response({"detail": "supplier_id o supplier_name es obligatorio"}, status=400)
         po = PurchaseOrder.objects.create(
-            supplier=supplier, created_by=request.user, source_store=request.data.get("source_store", "Card Kingdom"),
-            status=PurchaseOrder.Status.DRAFT, original_currency=parsed.get("currency", "CLP"),
-            subtotal_original=Decimal(parsed["totals"]["subtotal_original"]), shipping_original=Decimal(parsed["totals"]["shipping_original"]),
-            sales_tax_original=Decimal(parsed["totals"]["sales_tax_original"]), total_original=Decimal(parsed["totals"]["total_original"]),
-            import_duties_clp=int(request.data.get("import_duties_clp") or 0), customs_fee_clp=int(request.data.get("customs_fee_clp") or 0),
-            handling_fee_clp=int(request.data.get("handling_fee_clp") or 0), paypal_variation_clp=int(request.data.get("paypal_variation_clp") or 0),
-            other_costs_clp=int(request.data.get("other_costs_clp") or 0), update_prices_on_receive=_to_bool(request.data.get("update_prices_on_receive"), False),
+            supplier=supplier,
+            order_number=self._generate_order_number(),
+            created_by=request.user,
+            source_store=request.data.get("source_store", "Card Kingdom"),
+            status=PurchaseOrder.Status.DRAFT,
+            original_currency=parsed.get("currency", "CLP"),
+            subtotal_original=Decimal(parsed["totals"]["subtotal_original"]),
+            shipping_original=Decimal(parsed["totals"]["shipping_original"]),
+            sales_tax_original=Decimal(parsed["totals"]["sales_tax_original"]),
+            total_original=Decimal(parsed["totals"]["total_original"]),
+            import_duties_clp=int(request.data.get("import_duties_clp") or 0),
+            customs_fee_clp=int(request.data.get("customs_fee_clp") or 0),
+            handling_fee_clp=int(request.data.get("handling_fee_clp") or 0),
+            paypal_variation_clp=int(request.data.get("paypal_variation_clp") or 0),
+            other_costs_clp=int(request.data.get("other_costs_clp") or 0),
+            update_prices_on_receive=_to_bool(request.data.get("update_prices_on_receive"), False),
         )
         auto_match = _to_bool(request.data.get("auto_match_scryfall"), True)
         for it in parsed.get("items", []):
