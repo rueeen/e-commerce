@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db import IntegrityError
 from django.db.models import Count
 from django.db import models
 from django.core.exceptions import ValidationError
@@ -464,15 +465,24 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
             supplier, _ = Supplier.objects.get_or_create(name=supplier_name)
         if not supplier:
             return Response({"detail": "supplier_id o supplier_name es obligatorio"}, status=400)
-        po = PurchaseOrder.objects.create(
-            supplier=supplier, created_by=request.user, source_store=request.data.get("source_store", "Card Kingdom"),
-            status=PurchaseOrder.Status.DRAFT, original_currency=parsed.get("currency", "CLP"),
-            subtotal_original=Decimal(parsed["totals"]["subtotal_original"]), shipping_original=Decimal(parsed["totals"]["shipping_original"]),
-            sales_tax_original=Decimal(parsed["totals"]["sales_tax_original"]), total_original=Decimal(parsed["totals"]["total_original"]),
-            import_duties_clp=int(request.data.get("import_duties_clp") or 0), customs_fee_clp=int(request.data.get("customs_fee_clp") or 0),
-            handling_fee_clp=int(request.data.get("handling_fee_clp") or 0), paypal_variation_clp=int(request.data.get("paypal_variation_clp") or 0),
-            other_costs_clp=int(request.data.get("other_costs_clp") or 0), update_prices_on_receive=_to_bool(request.data.get("update_prices_on_receive"), False),
-        )
+        max_attempts = 3
+        po = None
+        for _ in range(max_attempts):
+            try:
+                po = PurchaseOrder.objects.create(
+                    supplier=supplier, created_by=request.user, source_store=request.data.get("source_store", "Card Kingdom"),
+                    status=PurchaseOrder.Status.DRAFT, original_currency=parsed.get("currency", "CLP"),
+                    subtotal_original=Decimal(parsed["totals"]["subtotal_original"]), shipping_original=Decimal(parsed["totals"]["shipping_original"]),
+                    sales_tax_original=Decimal(parsed["totals"]["sales_tax_original"]), total_original=Decimal(parsed["totals"]["total_original"]),
+                    import_duties_clp=int(request.data.get("import_duties_clp") or 0), customs_fee_clp=int(request.data.get("customs_fee_clp") or 0),
+                    handling_fee_clp=int(request.data.get("handling_fee_clp") or 0), paypal_variation_clp=int(request.data.get("paypal_variation_clp") or 0),
+                    other_costs_clp=int(request.data.get("other_costs_clp") or 0), update_prices_on_receive=_to_bool(request.data.get("update_prices_on_receive"), False),
+                )
+                break
+            except IntegrityError:
+                po = None
+        if po is None:
+            return Response({"detail": "No se pudo generar un número de orden único. Intenta nuevamente."}, status=409)
         auto_match = _to_bool(request.data.get("auto_match_scryfall"), True)
         for it in parsed.get("items", []):
             item = PurchaseOrderItem.objects.create(
