@@ -13,9 +13,10 @@ from rest_framework.views import APIView
 from accounts.permissions import IsAdminUser, IsAdminOrWorkerUser
 from .models import Category, KardexMovement, MTGCard, PricingSettings, Product, PurchaseOrder, SingleCard, Supplier
 from .permissions import IsAdminOrReadOnly
-from .serializers import CategorySerializer, KardexMovementSerializer, MTGCardSerializer, PricingSettingsSerializer, ProductSerializer, PurchaseOrderSerializer, SupplierSerializer
+from .serializers import CategorySerializer, KardexMovementSerializer, MTGCardSerializer, PricingSettingsSerializer, ProductSerializer, PurchaseOrderItemSerializer, PurchaseOrderSerializer, SupplierSerializer
 from .services import ScryfallServiceError, calculate_suggested_sale_price, extract_usd_price, get_active_pricing_settings, get_scryfall_card_by_id, import_card, import_catalog_from_xlsx, import_purchase_order_from_xlsx, search_cards
-from .inventory_services import create_stock_movement, receive_purchase_order
+from .inventory_services import create_stock_movement
+from .purchase_order_services import allocate_extra_costs, calculate_purchase_order_totals, receive_purchase_order
 
 
 logger = logging.getLogger(__name__)
@@ -359,7 +360,23 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="receive")
     def receive(self, request, pk=None):
-        po = receive_purchase_order(int(pk), request.user)
+        po = self.get_object()
+        po = receive_purchase_order(po, request.user)
+        return Response(self.get_serializer(po).data)
+
+    @action(detail=True, methods=["post"], url_path="recalculate")
+    def recalculate(self, request, pk=None):
+        po = self.get_object()
+        totals = allocate_extra_costs(po)
+        po.refresh_from_db()
+        return Response({**{k: str(v) for k, v in totals.items()}, "items": PurchaseOrderItemSerializer(po.items.all(), many=True).data})
+
+    @action(detail=True, methods=["post"], url_path="apply-suggested-prices")
+    def apply_suggested_prices(self, request, pk=None):
+        po = self.get_object()
+        for item in po.items.all():
+            item.sale_price_to_apply_clp = item.suggested_sale_price_clp
+            item.save(update_fields=["sale_price_to_apply_clp"])
         return Response(self.get_serializer(po).data)
 
     @action(detail=False, methods=["post"], url_path="import-xlsx")

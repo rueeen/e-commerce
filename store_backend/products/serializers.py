@@ -3,6 +3,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .models import BundleItem, Category, KardexMovement, MTGCard, PricingSettings, Product, PurchaseOrder, PurchaseOrderItem, SealedProduct, SingleCard, Supplier
+from .purchase_order_services import allocate_extra_costs, calculate_purchase_order_totals
 
 
 class MTGCardSerializer(serializers.ModelSerializer):
@@ -68,7 +69,7 @@ class PurchaseOrderItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PurchaseOrderItem
-        fields = ("product", "product_name", "quantity_ordered", "quantity_received", "unit_cost_clp", "subtotal_clp")
+        fields = ("product", "product_name", "quantity_ordered", "quantity_received", "unit_cost_clp", "subtotal_clp", "allocated_extra_cost_clp", "real_unit_cost_clp", "margin_percent", "suggested_sale_price_clp", "sale_price_to_apply_clp")
 
 
 class PurchaseOrderSerializer(serializers.ModelSerializer):
@@ -88,6 +89,13 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             "subtotal_clp",
             "shipping_clp",
             "import_fees_clp",
+            "customs_clp",
+            "handling_clp",
+            "paypal_variation_clp",
+            "other_costs_clp",
+            "currency",
+            "exchange_rate",
+            "tax_rate_percent",
             "taxes_clp",
             "total_clp",
             "total_real_clp",
@@ -151,21 +159,7 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
                 subtotal += item_subtotal
                 normalized_items.append({**item_data, "subtotal_clp": item_subtotal})
 
-            shipping_clp = int(validated_data.get("shipping_clp") or 0)
-            import_fees_clp = int(validated_data.get("import_fees_clp") or 0)
-            taxes_input = validated_data.get("taxes_clp")
-            taxable_base = subtotal + shipping_clp + import_fees_clp
-            active_settings = PricingSettings.objects.filter(is_active=True).order_by("-updated_at").first()
-            vat_percentage = float(getattr(active_settings, "vat_percentage", 19) or 19)
-            calculated_taxes = int(round(taxable_base * vat_percentage / 100))
-            taxes_clp = int(taxes_input or 0)
-            if taxes_clp <= 0:
-                taxes_clp = calculated_taxes
-
             validated_data["subtotal_clp"] = subtotal
-            validated_data["taxes_clp"] = taxes_clp
-            validated_data["total_clp"] = subtotal + shipping_clp + import_fees_clp + taxes_clp
-            validated_data["total_real_clp"] = validated_data["total_clp"]
 
             try:
                 order = PurchaseOrder.objects.create(**validated_data)
@@ -175,10 +169,13 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({"order_number": ["Este número de orden ya existe."]})
 
         for item_data in normalized_items:
-            PurchaseOrderItem.objects.create(
-                purchase_order=order,
-                **item_data,
-            )
+            PurchaseOrderItem.objects.create(purchase_order=order, **item_data)
+        totals = allocate_extra_costs(order)
+        order.subtotal_clp = int(totals["subtotal_products"])
+        order.taxes_clp = int(totals["tax_amount"])
+        order.total_clp = int(totals["grand_total"])
+        order.total_real_clp = int(totals["grand_total"])
+        order.save(update_fields=["subtotal_clp", "taxes_clp", "total_clp", "total_real_clp"])
         return order
 
 

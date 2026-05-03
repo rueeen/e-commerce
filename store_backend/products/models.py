@@ -211,6 +211,7 @@ class PurchaseOrder(models.Model):
     external_reference = models.CharField(max_length=120, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     subtotal_clp = models.PositiveIntegerField(default=0)
+    currency = models.CharField(max_length=3, choices=(("CLP", "CLP"), ("USD", "USD")), default="CLP")
     shipping_clp = models.PositiveIntegerField(default=0)
     import_fees_clp = models.PositiveIntegerField(default=0)
     taxes_clp = models.PositiveIntegerField(default=0)
@@ -219,8 +220,10 @@ class PurchaseOrder(models.Model):
     shipping_usd = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     payment_fee_usd = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     exchange_rate = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    tax_rate_percent = models.DecimalField(max_digits=5, decimal_places=2, default=19)
     total_paid_clp = models.PositiveIntegerField(default=0)
     customs_clp = models.PositiveIntegerField(default=0)
+    paypal_variation_clp = models.IntegerField(default=0)
     handling_clp = models.PositiveIntegerField(default=0)
     other_costs_clp = models.PositiveIntegerField(default=0)
     total_real_clp = models.PositiveIntegerField(default=0)
@@ -229,6 +232,7 @@ class PurchaseOrder(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     received_at = models.DateTimeField(null=True, blank=True)
+    received_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="purchase_orders_received")
     update_prices_on_receive = models.BooleanField(default=False)
 
 
@@ -240,6 +244,7 @@ class PurchaseOrderItem(models.Model):
     unit_cost_usd = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     unit_cost_clp = models.PositiveIntegerField(default=0)
     subtotal_clp = models.PositiveIntegerField(default=0)
+    currency = models.CharField(max_length=3, choices=(("CLP", "CLP"), ("USD", "USD")), default="CLP")
 
 
 class InventoryLot(models.Model):
