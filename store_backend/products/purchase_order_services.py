@@ -112,22 +112,37 @@ def receive_purchase_order(order, user):
     items = list(po.items.all())
     if not items:
         raise ValidationError("No se puede recibir orden sin items")
-    receivable_items = []
-    for item in items:
-        if int(item.quantity_ordered or 0) <= 0:
-            continue
-        receivable_items.append(item)
+    receivable_items = [item for item in items if int(item.quantity_ordered or 0) > 0]
 
     if not receivable_items:
         raise ValidationError("La orden no tiene ítems válidos para recepción (quantity_ordered > 0)")
 
+    missing_items = [
+        {
+            "id": item.id,
+            "raw_description": item.raw_description,
+            "normalized_card_name": item.normalized_card_name,
+            "style_condition": item.style_condition,
+        }
+        for item in receivable_items
+        if not item.product_id
+    ]
+    if missing_items:
+        raise ValidationError(
+            {
+                "detail": "No se puede recibir la orden porque existen ítems sin producto vinculado.",
+                "missing_products_count": len(missing_items),
+                "missing_items": missing_items,
+            }
+        )
+
     for item in receivable_items:
-        if not item.product:
-            continue
         qty = int(item.quantity_ordered - item.quantity_received)
         if qty <= 0:
             continue
         unit_cost = int(item.real_unit_cost_clp or item.unit_price_clp or 0)
+        if unit_cost <= 0:
+            raise ValidationError(f"Costo unitario inválido para item {item.id}: real_unit_cost_clp debe ser mayor a 0")
         create_stock_movement(
             product=item.product,
             movement_type=KardexMovement.MovementType.PURCHASE_IN,

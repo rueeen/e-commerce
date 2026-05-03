@@ -19,6 +19,7 @@ from .serializers import CategorySerializer, KardexMovementSerializer, MTGCardSe
 from .services import ScryfallServiceError, calculate_suggested_sale_price, extract_usd_price, get_active_pricing_settings, get_scryfall_card_by_id, import_card, import_catalog_from_xlsx, import_purchase_order_from_xlsx, search_cards
 from .inventory_services import create_stock_movement
 from .purchase_order_services import recalculate_purchase_order, receive_purchase_order
+from .purchase_order_product_services import create_product_from_purchase_order_item, resolve_purchase_order_product_category
 from .purchase_order_import import parse_purchase_order_excel
 from decimal import Decimal
 from .scryfall_normalizer import normalize_card_description
@@ -491,6 +492,7 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
             update_prices_on_receive=_to_bool(request.data.get("update_prices_on_receive"), False),
         )
         auto_match = _to_bool(request.data.get("auto_match_scryfall"), True)
+        create_missing_products = _to_bool(request.data.get("create_missing_products"), False)
         for it in parsed.get("items", []):
             item = PurchaseOrderItem.objects.create(
                 purchase_order=po, raw_description=it["raw_description"], normalized_card_name=it["normalized_card_name"],
@@ -500,6 +502,13 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
             )
             if auto_match:
                 self._match_item_with_scryfall(item)
+        if create_missing_products:
+            category = resolve_purchase_order_product_category(None)
+            for item in po.items.filter(product__isnull=True):
+                try:
+                    create_product_from_purchase_order_item(item, category=category, created_by=request.user)
+                except Exception:
+                    continue
         recalculate_purchase_order(po)
         po.refresh_from_db()
         return Response(PurchaseOrderSerializer(po).data, status=201)
@@ -508,17 +517,68 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
     def create_product_from_item(self, request, pk=None, item_id=None):
         po = self.get_object()
         item = po.items.get(id=item_id)
-        if not item.scryfall_id and not item.scryfall_data:
-            return Response({"detail": "Item sin datos Scryfall"}, status=400)
-        card_data = item.scryfall_data.get("raw_data", item.scryfall_data)
-        scryfall_id = item.scryfall_id or card_data.get("id")
-        mtg_card, _ = MTGCard.objects.get_or_create(scryfall_id=scryfall_id, defaults={"name": card_data.get("name", item.normalized_card_name)})
-        category = Category.objects.first()
-        product = Product.objects.create(name=card_data.get("name", item.normalized_card_name), category=category, product_type=Product.ProductType.SINGLE, price_clp=0, stock=0)
-        SingleCard.objects.create(product=product, mtg_card=mtg_card, condition=item.style_condition, language="EN", is_foil=bool(item.scryfall_data.get("is_foil_requested", False) or item.scryfall_data.get("is_foil_detected", False)), edition=card_data.get("set_name", item.set_name_detected), price_usd_reference=Decimal((card_data.get("prices") or {}).get("usd") or card_data.get("usd_price") or 0))
-        item.product = product
-        item.save(update_fields=["product"])
-        return Response(PurchaseOrderItemSerializer(item).data)
+        category = None
+        category_id = request.data.get("category_id")
+        if category_id:
+            category = Category.objects.filter(id=category_id).first()
+            if not category:
+                return Response({"detail": "category_id inválido"}, status=400)
+        category = resolve_purchase_order_product_category(category)
+        activate_product = _to_bool(request.data.get("activate_product"), False)
+        try:
+            product, created = create_product_from_purchase_order_item(item, category=category, created_by=request.user)
+        except ValidationError as exc:
+            return Response({"detail": format_exception(exc)}, status=400)
+        if activate_product and product:
+            product.is_active = True
+            product.save(update_fields=["is_active"])
+        item.refresh_from_db()
+        return Response({
+            "item": PurchaseOrderItemSerializer(item).data,
+            "product_id": product.id,
+            "product_name": product.name,
+            "created": created,
+        })
+
+    @action(detail=True, methods=["post"], url_path="create-missing-products")
+    def create_missing_products(self, request, pk=None):
+        po = self.get_object()
+        category = None
+        category_id = request.data.get("category_id")
+        if category_id:
+            category = Category.objects.filter(id=category_id).first()
+            if not category:
+                return Response({"detail": "category_id inválido"}, status=400)
+        category = resolve_purchase_order_product_category(category)
+        activate_products = _to_bool(request.data.get("activate_products"), False)
+
+        items = list(po.items.filter(product__isnull=True).order_by("id"))
+        results = []
+        created_count = 0
+        linked_existing_count = 0
+        failed_count = 0
+        for item in items:
+            try:
+                product, created = create_product_from_purchase_order_item(item, category=category, created_by=request.user)
+                if activate_products:
+                    product.is_active = True
+                    product.save(update_fields=["is_active"])
+                status_label = "created" if created else "linked_existing"
+                if created:
+                    created_count += 1
+                else:
+                    linked_existing_count += 1
+                results.append({"item_id": item.id, "status": status_label, "product_id": product.id, "product_name": product.name})
+            except Exception as exc:
+                failed_count += 1
+                results.append({"item_id": item.id, "status": "error", "message": str(exc)})
+        return Response({
+            "purchase_order_id": po.id,
+            "created_count": created_count,
+            "linked_existing_count": linked_existing_count,
+            "failed_count": failed_count,
+            "results": results,
+        })
 
     @action(detail=True, methods=["post"], url_path="apply-suggested-prices")
     def apply_suggested_prices(self, request, pk=None):
