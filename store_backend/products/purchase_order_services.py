@@ -1,4 +1,4 @@
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -118,3 +118,20 @@ def receive_purchase_order(order, user):
     po.received_by = user
     po.save(update_fields=['status', 'received_at', 'received_by', 'subtotal_clp', 'taxes_clp', 'total_clp', 'total_real_clp'])
     return po
+
+
+CURRENCY_CLP = "CLP"
+CURRENCY_USD = "USD"
+
+def convert_money_to_clp(amount, currency, exchange_rate):
+    amount_d = _d(amount)
+    currency = (currency or CURRENCY_CLP).upper()
+    if currency == CURRENCY_CLP:
+        return int(amount_d.quantize(D("1"), rounding=ROUND_HALF_UP))
+    if currency == CURRENCY_USD:
+        rate = _d(exchange_rate)
+        if rate <= 0:
+            raise ValidationError("exchange_rate_to_clp es obligatorio para USD")
+        return int((amount_d * rate).quantize(D("1"), rounding=ROUND_HALF_UP))
+    raise ValidationError("Moneda no soportada")
+
