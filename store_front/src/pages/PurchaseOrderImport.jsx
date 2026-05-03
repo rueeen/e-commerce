@@ -32,7 +32,7 @@ export default function PurchaseOrderImport() {
   const canCreate = useMemo(() => Boolean(preview && file && (supplierId || supplierName.trim())), [preview, file, supplierId, supplierName]);
 
   const handlePreview = async () => {
-    if (!file) return notyf.error('Selecciona un archivo .xlsx');
+    if (!(file instanceof File)) return notyf.error('Selecciona un archivo .xlsx válido');
     if (!supplierId && !supplierName.trim()) return notyf.error('Selecciona un proveedor o ingresa uno nuevo');
     setLoadingPreview(true);
     setPreview(null);
@@ -77,7 +77,10 @@ export default function PurchaseOrderImport() {
     <div className="card card-body mb-3">
       <h5>1) Archivo y proveedor</h5>
       <div className="row g-2">
-        <div className="col-md-4"><label className="form-label">Archivo (.xlsx)</label><input type="file" accept=".xlsx" className="form-control" onChange={(e) => setFile(e.target.files?.[0] || null)} /></div>
+        <div className="col-md-4"><label className="form-label">Archivo (.xlsx)</label><input type="file" accept=".xlsx" className="form-control" onChange={(e) => {
+          const nextFile = e.target.files?.[0] || null;
+          setFile(nextFile);
+        }} /></div>
         <div className="col-md-4"><label className="form-label">Proveedor</label><select className="form-select" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}><option value="">Seleccionar proveedor existente</option>{suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
         <div className="col-md-4"><label className="form-label">Nuevo proveedor (opcional)</label><input className="form-control" value={supplierName} onChange={(e) => setSupplierName(e.target.value)} placeholder="Se usa si no eliges proveedor" /></div>
         <div className="col-md-4"><label className="form-label">Tienda origen</label><input className="form-control" value={sourceStore} onChange={(e) => setSourceStore(e.target.value)} /></div>

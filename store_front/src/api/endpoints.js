@@ -26,14 +26,14 @@ export const api = {
     Object.entries(payload || {}).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') formData.append(key, value);
     });
-    return apiClient.post('/api/purchase-orders/import-preview/', formData);
+    return apiClient.post('/api/purchase-orders/import-preview/', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
   purchaseOrderImportCreate: (payload) => {
     const formData = new FormData();
     Object.entries(payload || {}).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') formData.append(key, value);
     });
-    return apiClient.post('/api/purchase-orders/import-create/', formData);
+    return apiClient.post('/api/purchase-orders/import-create/', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
   getCategories: (params = {}) => apiClient.get('/api/categories/', { params }),
   createCategory: (payload) => apiClient.post('/api/categories/', payload),
