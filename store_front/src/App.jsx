@@ -23,7 +23,7 @@ import PricingSettingsPage from './pages/PricingSettingsPage';
 import AdminKardexPage from './pages/AdminKardexPage';
 import AdminSuppliersPage from './pages/AdminSuppliersPage';
 import AdminPurchaseOrdersPage from './pages/AdminPurchaseOrdersPage';
-import ImportarOrdenPage from './pages/ImportarOrdenPage';
+import PurchaseOrderImport from './pages/PurchaseOrderImport';
 
 export default function App() {
   return <Routes>
@@ -52,7 +52,7 @@ export default function App() {
       <Route path="kardex" element={<WorkerRoute><AdminKardexPage /></WorkerRoute>} />
       <Route path="suppliers" element={<WorkerRoute><AdminSuppliersPage /></WorkerRoute>} />
       <Route path="purchase-orders" element={<WorkerRoute><AdminPurchaseOrdersPage /></WorkerRoute>} />
-      <Route path="ordenes-compra/importar" element={<WorkerRoute><ImportarOrdenPage /></WorkerRoute>} />
+      <Route path="purchase-orders/import" element={<WorkerRoute><PurchaseOrderImport /></WorkerRoute>} />
     </Route>
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes>;

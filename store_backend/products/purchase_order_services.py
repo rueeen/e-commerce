@@ -81,9 +81,14 @@ def allocate_extra_costs(order):
             allocated += share
         item.allocated_extra_cost_clp = max(0, share)
         item.allocated_tax_clp = 0
-        item.real_unit_cost_clp = _clp((_d(item.line_total_clp) + _d(item.allocated_extra_cost_clp)) / _d(item.quantity_ordered))
-        rounding_to = getattr(PricingSettings.objects.filter(is_active=True).order_by("-updated_at").first(), "rounding_to", 100)
-        item.suggested_sale_price_clp = calculate_suggested_price(item.real_unit_cost_clp, item.margin_percent, rounding_to)
+        qty = int(item.quantity_ordered or 0)
+        if qty <= 0:
+            item.real_unit_cost_clp = 0
+            item.suggested_sale_price_clp = 0
+        else:
+            item.real_unit_cost_clp = _clp((_d(item.line_total_clp) + _d(item.allocated_extra_cost_clp)) / _d(qty))
+            rounding_to = getattr(PricingSettings.objects.filter(is_active=True).order_by("-updated_at").first(), "rounding_to", 100)
+            item.suggested_sale_price_clp = calculate_suggested_price(item.real_unit_cost_clp, item.margin_percent, rounding_to)
         item.save(update_fields=["allocated_extra_cost_clp", "allocated_tax_clp", "real_unit_cost_clp", "suggested_sale_price_clp"])
 
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import { notyf } from '../api/notifier';
 import ProductAutocomplete from '../components/ProductAutocomplete';
@@ -118,7 +118,7 @@ export default function AdminPurchaseOrdersPage() {
   return <div className="panel-card p-3">
     <div className="d-flex justify-content-between align-items-center mb-3">
       <h2 className="mb-0">Órdenes de compra</h2>
-      <button className="btn btn-primary" onClick={() => setShowForm((v) => !v)}>+ Nueva orden de compra</button>
+      <div className="d-flex gap-2"><button className="btn btn-primary" onClick={() => setShowForm((v) => !v)}>Crear orden</button><Link className="btn btn-outline-primary" to="/admin/purchase-orders/import">Importar Excel</Link></div>
     </div>
 
     {showForm ? <div className="card card-body mb-4">
