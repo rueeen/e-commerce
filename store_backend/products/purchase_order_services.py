@@ -95,7 +95,10 @@ def receive_purchase_order(order, user):
     po.subtotal_clp = int(totals['subtotal_products'])
     po.taxes_clp = int(totals['tax_amount'])
     po.total_clp = int(totals['grand_total'])
-    po.total_real_clp = int(totals['grand_total'])
+    po.total_real_clp = int(
+        _d(po.subtotal_clp) + _d(po.shipping_clp) + _d(po.import_fees_clp) + _d(po.taxes_clp)
+        + _d(po.customs_clp) + _d(po.handling_clp) + _d(po.other_costs_clp)
+    )
 
     for item in items:
         qty = int(item.quantity_ordered - item.quantity_received)
@@ -106,6 +109,8 @@ def receive_purchase_order(order, user):
             raise ValidationError(f'Costo unitario inválido para {item.product.name}')
         create_stock_movement(product=item.product, movement_type=KardexMovement.MovementType.PURCHASE_IN, quantity=qty, created_by=user, unit_cost_clp=unit_cost, reference_type='PURCHASE_ORDER', reference_id=po.id, reference_label=po.order_number, notes='Ingreso por recepción de orden de compra')
         Product.objects.filter(pk=item.product_id).update(last_purchase_cost_clp=unit_cost)
+        if not item.product.is_active:
+            Product.objects.filter(pk=item.product_id).update(is_active=True)
         if po.update_prices_on_receive:
             sale_price = int(item.sale_price_to_apply_clp or item.suggested_sale_price_clp or 0)
             if sale_price > 0:
@@ -134,4 +139,3 @@ def convert_money_to_clp(amount, currency, exchange_rate):
             raise ValidationError("exchange_rate_to_clp es obligatorio para USD")
         return int((amount_d * rate).quantize(D("1"), rounding=ROUND_HALF_UP))
     raise ValidationError("Moneda no soportada")
-

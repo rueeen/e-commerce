@@ -6,6 +6,7 @@ from openpyxl import Workbook
 from rest_framework.test import APIClient
 
 from .models import KardexMovement, Product, PurchaseOrder, PurchaseOrderItem, SealedProduct, SingleCard, Supplier
+from .services import parse_vendor_invoice_xlsx, resolve_scryfall_card_from_vendor
 
 
 def make_xlsx(headers, rows):
@@ -293,3 +294,64 @@ class PurchaseOrderImportParsingTests(TestCase):
         res = self.client.post('/api/purchase-orders/import/', {'file': f}, format='multipart')
         self.assertEqual(res.status_code, 200)
         self.assertTrue(any('Subtotal inconsistente' in e['error'] for e in res.data['errors']))
+
+
+class VendorInvoiceParserUnitTests(TestCase):
+    def test_parse_vendor_invoice_xlsx_extracts_items_and_totals(self):
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["NM SINGLES", "", "", "", ""])
+        ws.append(["Description", "Style", "Qty", "Price", "Total"])
+        ws.append(["Lorwyn Foil: Blood Crypt", "", 2, "10.50", "21.00"])
+        ws.append(["Subtotal", "", "", "", "21.00"])
+        ws.append(["Shipping", "", "", "", "5.00"])
+        ws.append(["Sales Tax", "", "", "", "0"])
+        ws.append(["Total", "", "", "", "USD $26.00"])
+        f = BytesIO()
+        wb.save(f)
+        f.seek(0)
+        parsed = parse_vendor_invoice_xlsx(f)
+        self.assertEqual(len(parsed["items"]), 1)
+        self.assertEqual(parsed["items"][0]["card_name"], "Blood Crypt")
+        self.assertTrue(parsed["items"][0]["is_foil"])
+        self.assertEqual(parsed["totals"]["total_usd"], 26)
+
+    def test_parse_vendor_invoice_xlsx_warns_invalid_row(self):
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["NM SINGLES", "", "", "", ""])
+        ws.append(["Bad: Row", "", "abc", "x", "y"])
+        f = BytesIO(); wb.save(f); f.seek(0)
+        parsed = parse_vendor_invoice_xlsx(f)
+        self.assertEqual(len(parsed["items"]), 0)
+        self.assertTrue(parsed["parse_warnings"])
+
+
+class VendorInvoiceImportApiTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = get_user_model().objects.create_user(username='vadmin', password='x', role='admin', is_staff=True)
+        self.client.force_authenticate(self.user)
+
+    @patch('products.views.resolve_scryfall_card_from_vendor')
+    def test_import_vendor_invoice_creates_po(self, mock_resolver):
+        from .models import MTGCard
+        card = MTGCard.objects.create(scryfall_id="id-1", name="Blood Crypt")
+        mock_resolver.return_value = (card, {"id": "id-1"}, [])
+        wb = Workbook(); ws = wb.active
+        ws.append(["NM SINGLES", "", "", "", ""]); ws.append(["X: Blood Crypt", "NM", 1, "2.5", "2.5"]); ws.append(["Total","","","","2.5"])
+        f = BytesIO(); wb.save(f); f.seek(0)
+        res = self.client.post('/api/purchase-orders/import-vendor-invoice/', {'file': f, 'supplier_name': 'CK'}, format='multipart')
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(PurchaseOrder.objects.count(), 1)
+        self.assertEqual(PurchaseOrderItem.objects.count(), 1)
+
+    @patch('products.views.resolve_scryfall_card_from_vendor')
+    def test_import_vendor_invoice_unresolved(self, mock_resolver):
+        mock_resolver.return_value = (None, {"suggestions":[{"name":"A","set_code":"x","scryfall_id":"1"}]}, ["Ambiguo"])
+        wb = Workbook(); ws = wb.active
+        ws.append(["NM SINGLES", "", "", "", ""]); ws.append(["X: Unknown Card", "NM", 1, "2.5", "2.5"])
+        f = BytesIO(); wb.save(f); f.seek(0)
+        res = self.client.post('/api/purchase-orders/import-vendor-invoice/', {'file': f, 'supplier_name': 'CK'}, format='multipart')
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data["items_unresolved"], 1)
