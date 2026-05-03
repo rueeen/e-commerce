@@ -256,3 +256,40 @@ class PurchaseOrderReceiveTests(TestCase):
         self.assertEqual(product.cost_real_clp, 1045)
         self.assertEqual(product.margin_clp, -545)
         self.assertLess(product.margin_percentage, 0)
+
+class PurchaseOrderImportParsingTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        u = get_user_model().objects.create_user(username='admin2', password='x', role='admin', is_staff=True)
+        self.client.force_authenticate(u)
+
+    @patch('products.purchase_order_import.search_scryfall_card')
+    def test_import_purchase_order_preview_endpoint_parses_sections_and_totals(self, mock_search):
+        mock_search.return_value = {"scryfall_id": "id1", "name": "Orcish Bowmasters", "set_name": "LTR", "image_large": "http://img"}
+        f = make_xlsx(
+            ["Description", "Style", "Qty", "Price", "Total"],
+            [
+                ["NM SINGLES", "", "", "", ""],
+                ["The Lord of the Rings: Tales of Middle-earth: Orcish Bowmasters Foil", "", 2, "$10", "$20"],
+                ["Subtotal", "", "", "", "$20"],
+                ["Shipping", "", "", "", "$5"],
+                ["Sales Tax", "", "", "", "$1"],
+                ["Total", "", "", "", "$26"],
+            ],
+        )
+        res = self.client.post('/api/purchase-orders/import/', {'file': f}, format='multipart')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data['currency'], 'USD')
+        self.assertEqual(len(res.data['preview']), 1)
+        self.assertEqual(res.data['preview'][0]['normalized_name'], 'Orcish Bowmasters')
+        self.assertTrue(res.data['preview'][0]['foil'])
+        self.assertEqual(res.data['preview'][0]['condition'], 'NM')
+        self.assertEqual(res.data['errors'], [])
+
+    @patch('products.purchase_order_import.search_scryfall_card')
+    def test_import_purchase_order_preview_detects_subtotal_inconsistency(self, mock_search):
+        mock_search.return_value = None
+        f = make_xlsx(["Description", "Style", "Qty", "Price", "Total"], [["Card: Test", "", 1, 2, 2], ["Subtotal", "", "", "", 3]])
+        res = self.client.post('/api/purchase-orders/import/', {'file': f}, format='multipart')
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(any('Subtotal inconsistente' in e['error'] for e in res.data['errors']))

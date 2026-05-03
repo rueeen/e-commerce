@@ -17,6 +17,7 @@ from .serializers import CategorySerializer, KardexMovementSerializer, MTGCardSe
 from .services import ScryfallServiceError, calculate_suggested_sale_price, extract_usd_price, get_active_pricing_settings, get_scryfall_card_by_id, import_card, import_catalog_from_xlsx, import_purchase_order_from_xlsx, search_cards
 from .inventory_services import create_stock_movement
 from .purchase_order_services import allocate_extra_costs, calculate_purchase_order_totals, receive_purchase_order
+from .purchase_order_import import parse_purchase_order_excel
 
 
 logger = logging.getLogger(__name__)
@@ -413,6 +414,18 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
             item.sale_price_to_apply_clp = item.suggested_sale_price_clp
             item.save(update_fields=["sale_price_to_apply_clp"])
         return Response(self.get_serializer(po).data)
+
+
+    @action(detail=False, methods=["post"], url_path="import")
+    def import_purchase_order(self, request):
+        excel_file = request.FILES.get("file")
+        if not excel_file:
+            return Response({"detail": "Debes adjuntar un archivo .xlsx"}, status=400)
+        try:
+            parsed = parse_purchase_order_excel(excel_file)
+        except Exception as exc:
+            return Response({"detail": str(exc)}, status=400)
+        return Response({"preview": parsed.get("items", []), "errors": parsed.get("errors", []), "totals": parsed.get("totals", {}), "currency": parsed.get("currency", "CLP")})
 
     @action(detail=False, methods=["post"], url_path="import-xlsx")
     def import_xlsx(self, request):
