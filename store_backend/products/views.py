@@ -2,6 +2,7 @@ from django.db import transaction
 from django.db.models import Count
 from django.db import models
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 import logging
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
@@ -14,7 +15,7 @@ from accounts.permissions import IsAdminUser, IsAdminOrWorkerUser
 from .models import Category, KardexMovement, MTGCard, PricingSettings, Product, PurchaseOrder, SingleCard, Supplier
 from .permissions import IsAdminOrReadOnly
 from .serializers import CategorySerializer, KardexMovementSerializer, MTGCardSerializer, PricingSettingsSerializer, ProductSerializer, PurchaseOrderItemSerializer, PurchaseOrderSerializer, SupplierSerializer
-from .services import ScryfallServiceError, calculate_suggested_sale_price, extract_usd_price, get_active_pricing_settings, get_scryfall_card_by_id, import_card, import_catalog_from_xlsx, import_purchase_order_from_xlsx, search_cards
+from .services import ScryfallServiceError, calculate_suggested_sale_price, extract_usd_price, get_active_pricing_settings, get_scryfall_card_by_id, import_card, import_catalog_from_xlsx, import_purchase_order_from_xlsx, parse_vendor_invoice_xlsx, resolve_scryfall_card_from_vendor, search_cards
 from .inventory_services import create_stock_movement
 from .purchase_order_services import allocate_extra_costs, calculate_purchase_order_totals, receive_purchase_order
 from .purchase_order_import import parse_purchase_order_excel
@@ -438,6 +439,64 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
         except Exception as exc:
             return Response({"detail": str(exc)}, status=400)
         return Response({"purchase_order_id": po.id, "summary": summary}, status=201)
+
+    @action(detail=False, methods=["post"], url_path="import-vendor-invoice")
+    def import_vendor_invoice(self, request):
+        excel_file = request.FILES.get("file")
+        if not excel_file:
+            return Response({"detail": "Debes adjuntar un archivo .xlsx"}, status=400)
+        parsed = parse_vendor_invoice_xlsx(excel_file)
+        exchange_rate = request.data.get("exchange_rate")
+        if not exchange_rate:
+            exchange_rate = get_active_pricing_settings().usd_to_clp_real or get_active_pricing_settings().usd_to_clp
+        supplier = None
+        if request.data.get("supplier_id"):
+            supplier = Supplier.objects.filter(pk=request.data.get("supplier_id")).first()
+        if not supplier:
+            name = request.data.get("supplier_name") or "Proveedor importado"
+            supplier, _ = Supplier.objects.get_or_create(name=name)
+        unresolved_items, items_created, items_matched = [], 0, 0
+        with transaction.atomic():
+            po = PurchaseOrder.objects.create(
+                supplier=supplier, created_by=request.user, status=PurchaseOrder.Status.DRAFT,
+                order_number=f"IMP-{timezone.now().strftime('%Y%m%d-%H%M%S')}",
+                subtotal_usd=parsed["totals"]["subtotal_usd"], shipping_usd=parsed["totals"]["shipping_usd"],
+                exchange_rate=exchange_rate, update_prices_on_receive=_to_bool(request.data.get("update_prices_on_receive"), False),
+                customs_clp=int(request.data.get("customs_clp", 0) or 0), handling_clp=int(request.data.get("handling_clp", 0) or 0), other_costs_clp=int(request.data.get("other_costs_clp", 0) or 0),
+            )
+            for item in parsed["items"]:
+                mtg_card, meta, warns = resolve_scryfall_card_from_vendor(item["card_name"], item["set_hint"], item["is_foil"])
+                parsed["parse_warnings"].extend(warns)
+                if not mtg_card:
+                    unresolved_items.append({"row": item.get("row"), "card_name": item["card_name"], "set_hint": item["set_hint"], "suggestions": (meta or {}).get("suggestions", [])})
+                    continue
+                single = SingleCard.objects.filter(mtg_card=mtg_card, condition=item["condition"], is_foil=item["is_foil"]).select_related("product").first()
+                if single:
+                    product = single.product
+                    items_matched += 1
+                else:
+                    product = Product.objects.create(name=mtg_card.name, product_type=Product.ProductType.SINGLE, price_clp=0, stock=0, is_active=False, image=mtg_card.image_normal or mtg_card.image_small)
+                    SingleCard.objects.create(product=product, mtg_card=mtg_card, condition=item["condition"], is_foil=item["is_foil"], edition=mtg_card.set_name, language="EN", price_usd_reference=item["price_usd"])
+                    items_created += 1
+                PurchaseOrderItem.objects.create(purchase_order=po, product=product, quantity_ordered=item["qty"], quantity_received=0, unit_cost_usd=item["price_usd"], unit_cost_clp=0, subtotal_clp=0)
+            po.taxes_clp = int((parsed["totals"]["tax_usd"] * po.exchange_rate)) + int(po.customs_clp or 0)
+            po.save(update_fields=["taxes_clp"])
+        return Response({"purchase_order_id": po.id, "order_number": po.order_number, "status": po.status, "items_imported": po.items.count(), "items_created": items_created, "items_matched": items_matched, "items_unresolved": len(unresolved_items), "unresolved_items": unresolved_items, "parse_warnings": parsed["parse_warnings"], "totals_parsed": parsed["totals"], "exchange_rate_used": po.exchange_rate}, status=201)
+
+    @action(detail=True, methods=["post"], url_path="resolve-item")
+    def resolve_item(self, request, pk=None):
+        po = self.get_object()
+        card, _ = import_card(request.data.get("scryfall_id"))
+        condition = request.data.get("condition", "NM")
+        is_foil = _to_bool(request.data.get("is_foil"), False)
+        single = SingleCard.objects.filter(mtg_card=card, condition=condition, is_foil=is_foil).select_related("product").first()
+        if single:
+            product = single.product
+        else:
+            product = Product.objects.create(name=request.data.get("card_name") or card.name, product_type=Product.ProductType.SINGLE, price_clp=0, stock=0, is_active=False, image=card.image_normal or card.image_small)
+            SingleCard.objects.create(product=product, mtg_card=card, condition=condition, is_foil=is_foil, language="EN", edition=card.set_name)
+        item = PurchaseOrderItem.objects.create(purchase_order=po, product=product, quantity_ordered=int(request.data.get("qty", 1)), quantity_received=0, unit_cost_usd=request.data.get("price_usd", "0"), unit_cost_clp=0, subtotal_clp=0)
+        return Response(PurchaseOrderItemSerializer(item).data, status=201)
 
 
 class InventoryDashboardView(APIView):

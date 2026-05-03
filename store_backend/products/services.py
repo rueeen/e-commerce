@@ -1,5 +1,7 @@
 from datetime import date
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+import re
+import time
 
 import logging
 import requests
@@ -238,6 +240,103 @@ def resolve_scryfall_card(*, scryfall_id=None, name=None):
         })
     card, _ = MTGCard.objects.update_or_create(scryfall_id=card_data["id"], defaults=_normalize_card_data(card_data))
     return card, card_data, ["single sin scryfall_id: se resolvió por nombre"]
+
+
+VENDOR_CONDITION_MAP = {
+    "NM": "NM", "MINT": "NM", "M": "NM",
+    "EX": "LP", "EXCELLENT": "LP",
+    "VG": "MP", "VERY GOOD": "MP",
+    "G": "HP", "GOOD": "HP", "PLAYED": "HP",
+    "PO": "DMG", "POOR": "DMG",
+}
+
+
+def parse_vendor_invoice_xlsx(excel_file):
+    logger.info("Parsing vendor invoice xlsx")
+    wb = load_workbook(excel_file, data_only=True)
+    sheet = wb.active
+    items, warnings = [], []
+    active_section = ""
+    totals = {"subtotal_usd": Decimal("0"), "shipping_usd": Decimal("0"), "tax_usd": Decimal("0"), "total_usd": Decimal("0")}
+    total_keys = {"subtotal": "subtotal_usd", "shipping": "shipping_usd", "sales tax": "tax_usd", "tax": "tax_usd", "total": "total_usd"}
+    for row_idx, row in enumerate(sheet.iter_rows(values_only=True), start=1):
+        row = list(row or [])
+        c0 = str(row[0] or "").strip()
+        if not c0:
+            continue
+        up = c0.upper()
+        if ("SINGLES" in up or "SEALED" in up) and up == up.upper():
+            active_section = c0
+            continue
+        low0 = c0.lower().strip()
+        if low0 in {"description", "desc"}:
+            continue
+        if low0 in total_keys:
+            totals[total_keys[low0]] = _to_decimal(row[4] if len(row) > 4 else "0")
+            continue
+        if ":" not in c0:
+            continue
+        try:
+            left, card_name = c0.rsplit(":", 1)
+            style = str(row[1] or "").strip()
+            raw_cond = style or active_section.split(" ", 1)[0]
+            condition = VENDOR_CONDITION_MAP.get(raw_cond.strip().upper(), "NM")
+            items.append({
+                "row": row_idx,
+                "card_name": card_name.strip(),
+                "set_hint": left.strip(),
+                "is_foil": "foil" in left.lower(),
+                "condition": condition,
+                "qty": int(_to_decimal(row[2] if len(row) > 2 else 0)),
+                "price_usd": _to_decimal(row[3] if len(row) > 3 else 0),
+                "total_usd": _to_decimal(row[4] if len(row) > 4 else 0),
+            })
+        except Exception as exc:
+            warnings.append(f"Fila {row_idx}: no se pudo parsear ({exc})")
+    return {"items": items, "totals": totals, "parse_warnings": warnings}
+
+
+def resolve_scryfall_card_from_vendor(card_name, set_hint, is_foil):
+    warnings = []
+    cleaned = re.sub(r"\s+", " ", str(card_name or "").strip())
+    m = re.search(r"\(([^)]+)\)", cleaned)
+    variant_hint = m.group(1).strip() if m else ""
+    cleaned = re.sub(r"\([^)]*\)", "", cleaned).strip()
+    queries = [f'!"{cleaned}"']
+    set_token = (set_hint or "").split()[0].lower() if set_hint else ""
+    if set_token:
+        queries.append(f'!"{cleaned}" {set_token}')
+    queries.append(cleaned)
+    all_cards = []
+    for q in queries:
+        try:
+            time.sleep(0.1)
+            cards = search_cards(q)
+            if cards:
+                all_cards = cards
+                break
+        except ScryfallServiceError as exc:
+            warnings.append(f"Scryfall error query={q}: {exc}")
+            continue
+    if not all_cards:
+        return None, None, warnings + [f"No se encontró carta para {cleaned}"]
+    matched = [c for c in all_cards if _normalized_for_match(c.get("name")) == _normalized_for_match(cleaned)] or all_cards
+    if is_foil:
+        foil_first = [c for c in matched if c.get("foil")]
+        if foil_first:
+            matched = foil_first
+    if variant_hint:
+        for c in matched:
+            if variant_hint.lower() in str(c.get("collector_number", "")).lower() or variant_hint.lower() in str(c.get("frame_effects", "")).lower():
+                matched = [c]
+                break
+    unique_names = {c.get("name") for c in matched if c.get("name")}
+    if len(matched) > 1 and len(unique_names) > 1:
+        sugg = [{"name": c.get("name"), "set_code": c.get("set"), "scryfall_id": c.get("id")} for c in matched[:3]]
+        return None, {"suggestions": sugg}, warnings + [f"Ambiguo para {cleaned}"]
+    card_data = matched[0]
+    card, _ = MTGCard.objects.update_or_create(scryfall_id=card_data["id"], defaults=_normalize_card_data(card_data))
+    return card, card_data, warnings
 
 def import_single_catalog_row(row_data):
     card, card_data, warnings = resolve_scryfall_card(scryfall_id=row_data.get("scryfall_id"), name=row_data.get("name"))
