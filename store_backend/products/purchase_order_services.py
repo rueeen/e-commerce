@@ -112,9 +112,16 @@ def receive_purchase_order(order, user):
     items = list(po.items.all())
     if not items:
         raise ValidationError("No se puede recibir orden sin items")
+    receivable_items = []
     for item in items:
         if int(item.quantity_ordered or 0) <= 0:
-            raise ValidationError("quantity_ordered debe ser mayor a 0")
+            continue
+        receivable_items.append(item)
+
+    if not receivable_items:
+        raise ValidationError("La orden no tiene ítems válidos para recepción (quantity_ordered > 0)")
+
+    for item in receivable_items:
         if not item.product:
             continue
         qty = int(item.quantity_ordered - item.quantity_received)
