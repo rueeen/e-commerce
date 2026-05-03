@@ -20,13 +20,21 @@ export const api = {
       },
     });
   },
-  importPurchaseOrderXlsx: (file, purchase_order_id = null) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (purchase_order_id) formData.append('purchase_order_id', purchase_order_id);
-    return apiClient.post('/api/purchase-orders/import-xlsx/', formData);
-  },
 
+  purchaseOrderImportPreview: (payload) => {
+    const formData = new FormData();
+    Object.entries(payload || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') formData.append(key, value);
+    });
+    return apiClient.post('/api/purchase-orders/import-preview/', formData);
+  },
+  purchaseOrderImportCreate: (payload) => {
+    const formData = new FormData();
+    Object.entries(payload || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') formData.append(key, value);
+    });
+    return apiClient.post('/api/purchase-orders/import-create/', formData);
+  },
   getCategories: (params = {}) => apiClient.get('/api/categories/', { params }),
   createCategory: (payload) => apiClient.post('/api/categories/', payload),
   updateCategory: (id, payload) => apiClient.put(`/api/categories/${id}/`, payload),
