@@ -3,7 +3,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .models import BundleItem, Category, KardexMovement, MTGCard, PricingSettings, Product, PurchaseOrder, PurchaseOrderItem, SealedProduct, SingleCard, Supplier
-from .purchase_order_services import allocate_extra_costs, calculate_purchase_order_totals
+from .purchase_order_services import get_active_exchange_rate, recalculate_purchase_order
 
 
 class MTGCardSerializer(serializers.ModelSerializer):
@@ -66,33 +66,16 @@ class SupplierSerializer(serializers.ModelSerializer):
 
 class PurchaseOrderItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source="product.name", read_only=True)
-    allocated_extra_cost_clp = serializers.SerializerMethodField()
-    real_unit_cost_clp = serializers.SerializerMethodField()
-    margin_percent = serializers.SerializerMethodField()
-    suggested_sale_price_clp = serializers.SerializerMethodField()
-    sale_price_to_apply_clp = serializers.SerializerMethodField()
 
     class Meta:
         model = PurchaseOrderItem
-        fields = ("product", "product_name", "quantity_ordered", "quantity_received", "unit_cost_clp", "subtotal_clp", "allocated_extra_cost_clp", "real_unit_cost_clp", "margin_percent", "suggested_sale_price_clp", "sale_price_to_apply_clp")
-
-    def _get_int_field(self, obj, name, default=0):
-        return int(getattr(obj, name, default) or default)
-
-    def get_allocated_extra_cost_clp(self, obj):
-        return self._get_int_field(obj, "allocated_extra_cost_clp")
-
-    def get_real_unit_cost_clp(self, obj):
-        return self._get_int_field(obj, "real_unit_cost_clp", self._get_int_field(obj, "unit_cost_clp"))
-
-    def get_margin_percent(self, obj):
-        return float(getattr(obj, "margin_percent", 0) or 0)
-
-    def get_suggested_sale_price_clp(self, obj):
-        return self._get_int_field(obj, "suggested_sale_price_clp")
-
-    def get_sale_price_to_apply_clp(self, obj):
-        return self._get_int_field(obj, "sale_price_to_apply_clp", self.get_suggested_sale_price_clp(obj))
+        fields = (
+            "id", "product", "product_name", "raw_description", "normalized_card_name", "set_name_detected", "style_condition",
+            "quantity_ordered", "quantity_received", "unit_price_original", "line_total_original", "unit_price_clp", "line_total_clp",
+            "allocated_extra_cost_clp", "allocated_tax_clp", "real_unit_cost_clp", "margin_percent", "suggested_sale_price_clp",
+            "sale_price_to_apply_clp", "scryfall_id", "scryfall_data",
+        )
+        read_only_fields = ("quantity_received", "unit_price_clp", "line_total_clp", "allocated_extra_cost_clp", "allocated_tax_clp", "real_unit_cost_clp", "suggested_sale_price_clp")
 
 
 class PurchaseOrderSerializer(serializers.ModelSerializer):
@@ -102,106 +85,49 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PurchaseOrder
-        fields = (
-            "id",
-            "order_number",
-            "supplier",
-            "supplier_name",
-            "status",
-            "notes",
-            "subtotal_clp",
-            "shipping_clp",
-            "import_fees_clp",
-            "customs_clp",
-            "handling_clp",
-            "paypal_variation_clp",
-            "other_costs_clp",
-            "currency",
-            "exchange_rate",
-            "tax_rate_percent",
-            "taxes_clp",
-            "total_clp",
-            "total_real_clp",
-            "update_prices_on_receive",
-            "created_at",
-            "received_at",
-            "items",
-        )
-        read_only_fields = ("created_by", "received_at")
-
-    def validate_order_number(self, value):
-        if value is None:
-            return ""
-        return value.strip()
+        fields = ("id", "order_number", "supplier", "supplier_name", "external_reference", "status", "source_store", "original_currency", "exchange_rate_snapshot_clp", "subtotal_original", "shipping_original", "sales_tax_original", "total_original", "import_duties_clp", "customs_fee_clp", "handling_fee_clp", "paypal_variation_clp", "other_costs_clp", "subtotal_clp", "shipping_clp", "sales_tax_clp", "total_origin_clp", "total_extra_costs_clp", "grand_total_clp", "real_total_clp", "notes", "update_prices_on_receive", "created_at", "received_at", "items")
+        read_only_fields = ("exchange_rate_snapshot_clp", "subtotal_clp", "shipping_clp", "sales_tax_clp", "total_origin_clp", "total_extra_costs_clp", "grand_total_clp", "real_total_clp", "created_at", "received_at")
 
     def validate(self, attrs):
         items = attrs.get("items", [])
-        supplier = attrs.get("supplier")
-        if not supplier:
+        if not attrs.get("supplier"):
             raise serializers.ValidationError({"supplier": ["Este campo es requerido."]})
         if not items:
             raise serializers.ValidationError({"items": ["Debes agregar al menos 1 item."]})
+        currency = (attrs.get("original_currency") or "").upper()
+        if currency not in ("CLP", "USD"):
+            raise serializers.ValidationError({"original_currency": ["Debe ser CLP o USD"]})
+        if currency == "USD":
+            get_active_exchange_rate()
+        for it in items:
+            qty = int(it.get("quantity_ordered") or 0)
+            if qty <= 0:
+                raise serializers.ValidationError({"items": ["quantity_ordered debe ser mayor a 0."]})
         return attrs
 
     def _generate_order_number(self):
         date_prefix = timezone.localdate().strftime("%Y%m%d")
         base = f"PO-{date_prefix}-"
         last_po = PurchaseOrder.objects.filter(order_number__startswith=base).order_by("-order_number").first()
-        next_seq = 1
-        if last_po:
-            try:
-                next_seq = int(last_po.order_number.split("-")[-1]) + 1
-            except (ValueError, IndexError):
-                next_seq = 1
-        return f"{base}{next_seq:04d}"
+        seq = int(last_po.order_number.split("-")[-1]) + 1 if last_po else 1
+        return f"{base}{seq:04d}"
 
     @transaction.atomic
     def create(self, validated_data):
-        items_data = validated_data.pop("items", [])
-        order_number = (validated_data.get("order_number") or "").strip()
-        attempts = 0
-        while True:
-            attempts += 1
-            if not order_number:
-                validated_data["order_number"] = self._generate_order_number()
-            else:
-                validated_data["order_number"] = order_number
-
-            subtotal = 0
-            normalized_items = []
-            for item_data in items_data:
-                if not item_data.get("product"):
-                    raise serializers.ValidationError({"items": ["Cada item debe tener un producto."]})
-                qty = int(item_data.get("quantity_ordered") or 0)
-                unit_cost = int(item_data.get("unit_cost_clp") or 0)
-                if qty <= 0:
-                    raise serializers.ValidationError({"items": ["quantity_ordered debe ser mayor a 0."]})
-                if unit_cost < 0:
-                    raise serializers.ValidationError({"items": ["unit_cost_clp debe ser mayor o igual a 0."]})
-                item_subtotal = qty * unit_cost
-                subtotal += item_subtotal
-                normalized_items.append({**item_data, "subtotal_clp": item_subtotal})
-
-            validated_data["subtotal_clp"] = subtotal
-
-            try:
-                order = PurchaseOrder.objects.create(**validated_data)
-                break
-            except IntegrityError:
-                if order_number or attempts >= 5:
-                    raise serializers.ValidationError({"order_number": ["Este número de orden ya existe."]})
-
-        for item_data in normalized_items:
-            PurchaseOrderItem.objects.create(purchase_order=order, **item_data)
-        totals = allocate_extra_costs(order)
-        order.subtotal_clp = int(totals["subtotal_products"])
-        order.taxes_clp = int(totals["tax_amount"])
-        order.total_clp = int(totals["grand_total"])
-        order.total_real_clp = int(totals["grand_total"])
-        order.save(update_fields=["subtotal_clp", "taxes_clp", "total_clp", "total_real_clp"])
+        items_data = validated_data.pop("items")
+        validated_data["order_number"] = (validated_data.get("order_number") or "").strip() or self._generate_order_number()
+        currency = validated_data.get("original_currency", "CLP")
+        validated_data["exchange_rate_snapshot_clp"] = 1 if currency == "CLP" else get_active_exchange_rate()
+        if validated_data.get("status") == PurchaseOrder.Status.RECEIVED:
+            raise serializers.ValidationError({"status": ["No se puede crear recibida directamente"]})
+        order = PurchaseOrder.objects.create(**validated_data)
+        for it in items_data:
+            expected = (it["unit_price_original"] * it["quantity_ordered"]).quantize(it["unit_price_original"].__class__('0.01'))
+            if it.get("line_total_original") != expected:
+                raise serializers.ValidationError({"items": ["line_total_original debe coincidir con quantity_ordered * unit_price_original"]})
+            PurchaseOrderItem.objects.create(purchase_order=order, **it)
+        recalculate_purchase_order(order)
         return order
-
-
 class KardexMovementSerializer(serializers.ModelSerializer):
     class Meta:
         model = KardexMovement
