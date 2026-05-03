@@ -66,10 +66,33 @@ class SupplierSerializer(serializers.ModelSerializer):
 
 class PurchaseOrderItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source="product.name", read_only=True)
+    allocated_extra_cost_clp = serializers.SerializerMethodField()
+    real_unit_cost_clp = serializers.SerializerMethodField()
+    margin_percent = serializers.SerializerMethodField()
+    suggested_sale_price_clp = serializers.SerializerMethodField()
+    sale_price_to_apply_clp = serializers.SerializerMethodField()
 
     class Meta:
         model = PurchaseOrderItem
         fields = ("product", "product_name", "quantity_ordered", "quantity_received", "unit_cost_clp", "subtotal_clp", "allocated_extra_cost_clp", "real_unit_cost_clp", "margin_percent", "suggested_sale_price_clp", "sale_price_to_apply_clp")
+
+    def _get_int_field(self, obj, name, default=0):
+        return int(getattr(obj, name, default) or default)
+
+    def get_allocated_extra_cost_clp(self, obj):
+        return self._get_int_field(obj, "allocated_extra_cost_clp")
+
+    def get_real_unit_cost_clp(self, obj):
+        return self._get_int_field(obj, "real_unit_cost_clp", self._get_int_field(obj, "unit_cost_clp"))
+
+    def get_margin_percent(self, obj):
+        return float(getattr(obj, "margin_percent", 0) or 0)
+
+    def get_suggested_sale_price_clp(self, obj):
+        return self._get_int_field(obj, "suggested_sale_price_clp")
+
+    def get_sale_price_to_apply_clp(self, obj):
+        return self._get_int_field(obj, "sale_price_to_apply_clp", self.get_suggested_sale_price_clp(obj))
 
 
 class PurchaseOrderSerializer(serializers.ModelSerializer):
