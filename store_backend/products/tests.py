@@ -355,3 +355,91 @@ class VendorInvoiceImportApiTests(TestCase):
         res = self.client.post('/api/purchase-orders/import-vendor-invoice/', {'file': f, 'supplier_name': 'CK'}, format='multipart')
         self.assertEqual(res.status_code, 201)
         self.assertEqual(res.data["items_unresolved"], 1)
+
+class VendorInvoiceParserTests(TestCase):
+    def _make_vendor_invoice(self, rows):
+        wb = Workbook()
+        ws = wb.active
+        for row in rows:
+            ws.append(row)
+        f = BytesIO()
+        wb.save(f)
+        f.seek(0)
+        return f
+
+    def test_parse_lotring_double_colon(self):
+        f = self._make_vendor_invoice([
+            ["NM SINGLES"],
+            [None],
+            ["Description", "Style", "Qty", "Price", "Total"],
+            ["The Lord of the Rings: Tales of Middle-earth: Orcish Bowmasters", "NM", 1, 10.0, 10.0],
+        ])
+        parsed = parse_vendor_invoice_xlsx(f)
+        self.assertEqual(parsed["items"][0]["card_name"], "Orcish Bowmasters")
+        self.assertEqual(parsed["items"][0]["set_hint"], "The Lord of the Rings: Tales of Middle-earth")
+
+    def test_parse_foil_detection(self):
+        f = self._make_vendor_invoice([
+            ["NM SINGLES"],
+            [None],
+            ["Description", "Style", "Qty", "Price", "Total"],
+            ["Lorwyn Eclipsed Foil: Blood Crypt", "NM", 1, 5.0, 5.0],
+        ])
+        parsed = parse_vendor_invoice_xlsx(f)
+        self.assertTrue(parsed["items"][0]["is_foil"])
+
+    def test_parse_parenthetical_removal(self):
+        f = self._make_vendor_invoice([
+            ["NM SINGLES"],
+            [None],
+            ["Description", "Style", "Qty", "Price", "Total"],
+            ["LotR Variants Foil: Sauron, the Dark Lord (0329 - Showcase)", "NM", 1, 15.0, 15.0],
+        ])
+        parsed = parse_vendor_invoice_xlsx(f)
+        self.assertEqual(parsed["items"][0]["card_name"], "Sauron, the Dark Lord")
+        self.assertEqual(parsed["items"][0]["variant_hint"], "0329 - Showcase")
+
+    def test_parse_totals(self):
+        f = self._make_vendor_invoice([
+            ["NM SINGLES"],
+            [None],
+            ["Description", "Style", "Qty", "Price", "Total"],
+            ["Foundations Foil: Guttersnipe", "NM", 1, 1.0, 1.0],
+            ["Subtotal", None, None, None, 245.69],
+            ["Shipping", None, None, None, 42.78],
+            ["UPS Worldwide Saver", None, None, None, None],
+            ["Sales Tax", None, None, None, 0.00],
+            ["Total", None, None, None, "USD $288.47"],
+        ])
+        parsed = parse_vendor_invoice_xlsx(f)
+        self.assertEqual(parsed["totals"]["subtotal_usd"], Decimal("245.69"))
+        self.assertEqual(parsed["totals"]["shipping_usd"], Decimal("42.78"))
+        self.assertEqual(parsed["totals"]["tax_usd"], Decimal("0.00"))
+        self.assertEqual(parsed["totals"]["total_usd"], Decimal("288.47"))
+
+    def test_parse_condition_mapping(self):
+        f = self._make_vendor_invoice([
+            ["NM SINGLES"],
+            [None],
+            ["Description", "Style", "Qty", "Price", "Total"],
+            ["Set A: Card NM", "NM", 1, 1.0, 1.0],
+            ["Set B: Card EX", "EX", 1, 1.0, 1.0],
+            ["Set C: Card VG", "VG", 1, 1.0, 1.0],
+            ["Set D: Card G", "G", 1, 1.0, 1.0],
+            ["Set E: Card from section", "", 1, 1.0, 1.0],
+        ])
+        parsed = parse_vendor_invoice_xlsx(f)
+        conditions = [item["condition"] for item in parsed["items"]]
+        self.assertEqual(conditions, ["NM", "LP", "MP", "HP", "NM"])
+
+    def test_parse_skip_invalid_row(self):
+        f = self._make_vendor_invoice([
+            ["NM SINGLES"],
+            [None],
+            ["Description", "Style", "Qty", "Price", "Total"],
+            ["Set A: Valid Card", "NM", 1, 1.0, 1.0],
+            ["Set A: Invalid Qty", "NM", "abc", 1.0, 1.0],
+        ])
+        parsed = parse_vendor_invoice_xlsx(f)
+        self.assertEqual(len(parsed["items"]), 1)
+        self.assertTrue(any("qty inválida" in warning for warning in parsed["parse_warnings"]))

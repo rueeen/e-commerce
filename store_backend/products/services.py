@@ -255,45 +255,98 @@ def parse_vendor_invoice_xlsx(excel_file):
     logger.info("Parsing vendor invoice xlsx")
     wb = load_workbook(excel_file, data_only=True)
     sheet = wb.active
-    items, warnings = [], []
-    active_section = ""
-    totals = {"subtotal_usd": Decimal("0"), "shipping_usd": Decimal("0"), "tax_usd": Decimal("0"), "total_usd": Decimal("0")}
+    rows = [list(row or []) for row in sheet.iter_rows(values_only=True)]
+
+    section_pattern = re.compile(r"^[A-Z\s]+(?:SINGLES|SEALED)$")
+    parenthetical_pattern = re.compile(r"\s*\(([^)]+)\)\s*$")
     total_keys = {"subtotal": "subtotal_usd", "shipping": "shipping_usd", "sales tax": "tax_usd", "tax": "tax_usd", "total": "total_usd"}
-    for row_idx, row in enumerate(sheet.iter_rows(values_only=True), start=1):
-        row = list(row or [])
-        c0 = str(row[0] or "").strip()
+
+    items, parse_warnings, sections_found = [], [], []
+    totals = {"subtotal_usd": Decimal("0"), "shipping_usd": Decimal("0"), "tax_usd": Decimal("0"), "total_usd": Decimal("0")}
+
+    sections = []
+    for idx, row in enumerate(rows):
+        c0 = str(row[0] if row else "" or "").strip()
+        if c0 and section_pattern.match(c0):
+            sections.append({"name": c0, "start_idx": idx, "header_idx": None})
+            sections_found.append(c0)
+    for i, section in enumerate(sections):
+        search_end = sections[i + 1]["start_idx"] if i + 1 < len(sections) else len(rows)
+        for idx in range(section["start_idx"] + 1, search_end):
+            c0 = str(rows[idx][0] if rows[idx] else "" or "").strip().lower()
+            if c0 == "description":
+                section["header_idx"] = idx
+                break
+
+    for row_idx, row in enumerate(rows, start=1):
+        c0 = str(row[0] if row else "" or "").strip()
         if not c0:
             continue
-        up = c0.upper()
-        if ("SINGLES" in up or "SEALED" in up) and up == up.upper():
-            active_section = c0
+        key = c0.lower()
+        if key in total_keys and len(row) > 4 and row[4] is not None:
+            cleaned = re.sub(r"[^0-9.]", "", str(row[4]))
+            if cleaned:
+                totals[total_keys[key]] = Decimal(cleaned)
+
+    for section_idx, section in enumerate(sections):
+        if section["header_idx"] is None:
+            parse_warnings.append(f"Sección '{section['name']}' sin headers Description/Style/Qty/Price/Total")
             continue
-        low0 = c0.lower().strip()
-        if low0 in {"description", "desc"}:
-            continue
-        if low0 in total_keys:
-            totals[total_keys[low0]] = _to_decimal(row[4] if len(row) > 4 else "0")
-            continue
-        if ":" not in c0:
-            continue
-        try:
-            left, card_name = c0.rsplit(":", 1)
-            style = str(row[1] or "").strip()
-            raw_cond = style or active_section.split(" ", 1)[0]
-            condition = VENDOR_CONDITION_MAP.get(raw_cond.strip().upper(), "NM")
+        section_end = sections[section_idx + 1]["start_idx"] if section_idx + 1 < len(sections) else len(rows)
+        inferred_raw = section["name"].split()[0].strip().upper()
+        inferred_condition = VENDOR_CONDITION_MAP.get(inferred_raw, "NM")
+        for idx in range(section["header_idx"] + 1, section_end):
+            row = rows[idx]
+            description = str(row[0] if row else "" or "").strip()
+            if not description or description.lower() == "description":
+                continue
+            low0 = description.lower()
+            if low0 in total_keys or section_pattern.match(description):
+                continue
+            if ":" not in description:
+                continue
+
+            set_hint, card_name_raw = description.rsplit(":", 1)
+            set_hint = set_hint.strip()
+            card_name = card_name_raw.strip()
+            variant_hint = ""
+            variant_match = parenthetical_pattern.search(card_name)
+            if variant_match:
+                variant_hint = variant_match.group(1).strip()
+                card_name = parenthetical_pattern.sub("", card_name).strip()
+
+            style_raw = str(row[1] if len(row) > 1 and row[1] is not None else "").strip().upper()
+            condition = VENDOR_CONDITION_MAP.get(style_raw, inferred_condition) if style_raw else inferred_condition
+            try:
+                qty = int(row[2])
+            except (TypeError, ValueError):
+                parse_warnings.append(f"Fila {idx + 1}: qty inválida '{row[2] if len(row) > 2 else None}'")
+                continue
+            try:
+                price_usd = Decimal(str(row[3]))
+            except (InvalidOperation, TypeError, ValueError):
+                parse_warnings.append(f"Fila {idx + 1}: price inválido '{row[3] if len(row) > 3 else None}'")
+                continue
+            try:
+                total_usd = Decimal(str(row[4])) if len(row) > 4 and row[4] is not None else qty * price_usd
+            except (InvalidOperation, TypeError, ValueError):
+                parse_warnings.append(f"Fila {idx + 1}: total inválido '{row[4] if len(row) > 4 else None}', usando qty*price")
+                total_usd = qty * price_usd
+
             items.append({
-                "row": row_idx,
-                "card_name": card_name.strip(),
-                "set_hint": left.strip(),
-                "is_foil": "foil" in left.lower(),
+                "row": idx + 1,
+                "raw_description": description,
+                "card_name": card_name,
+                "set_hint": set_hint,
+                "variant_hint": variant_hint,
+                "is_foil": "foil" in set_hint.lower(),
                 "condition": condition,
-                "qty": int(_to_decimal(row[2] if len(row) > 2 else 0)),
-                "price_usd": _to_decimal(row[3] if len(row) > 3 else 0),
-                "total_usd": _to_decimal(row[4] if len(row) > 4 else 0),
+                "qty": qty,
+                "price_usd": price_usd,
+                "total_usd": total_usd,
             })
-        except Exception as exc:
-            warnings.append(f"Fila {row_idx}: no se pudo parsear ({exc})")
-    return {"items": items, "totals": totals, "parse_warnings": warnings}
+
+    return {"items": items, "totals": totals, "sections_found": sections_found, "parse_warnings": parse_warnings}
 
 
 def resolve_scryfall_card_from_vendor(card_name, set_hint, is_foil):
