@@ -358,6 +358,25 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
+
+    @action(detail=False, methods=["post"], url_path="import-preview")
+    def import_preview(self, request):
+        rows = request.data.get("rows", [])
+        currency = request.data.get("original_currency", "CLP")
+        items=[]
+        for row in rows:
+            if not row.get("Description"):
+                continue
+            items.append({
+                "raw_description": row.get("Description", ""),
+                "normalized_card_name": normalize_card_description(row.get("Description", "")),
+                "style_condition": row.get("Style") or "NM",
+                "quantity": int(row.get("Qty") or 1),
+                "unit_price_original": str(row.get("Price") or 0),
+                "line_total_original": str(row.get("Total") or 0),
+            })
+        return Response({"original_currency": currency, "items": items})
+
     @action(detail=True, methods=["post"], url_path="receive")
     def receive(self, request, pk=None):
         po = self.get_object()
@@ -370,6 +389,22 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
         totals = allocate_extra_costs(po)
         po.refresh_from_db()
         return Response({**{k: str(v) for k, v in totals.items()}, "items": PurchaseOrderItemSerializer(po.items.all(), many=True).data})
+
+
+    @action(detail=True, methods=["post"], url_path="scryfall-match")
+    def scryfall_match(self, request, pk=None):
+        po = self.get_object()
+        item_id = request.data.get("item_id")
+        item = po.items.get(id=item_id)
+        name = request.data.get("normalized_card_name") or item.normalized_card_name or normalize_card_description(item.raw_description)
+        result = search_scryfall_card(name, item.set_name_detected)
+        if not result:
+            return Response({"detail": "No se encontró carta"}, status=404)
+        item.normalized_card_name = name
+        item.scryfall_id = result["scryfall_id"]
+        item.scryfall_data = result
+        item.save(update_fields=["normalized_card_name", "scryfall_id", "scryfall_data"])
+        return Response(result)
 
     @action(detail=True, methods=["post"], url_path="apply-suggested-prices")
     def apply_suggested_prices(self, request, pk=None):
