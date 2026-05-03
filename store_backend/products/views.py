@@ -12,13 +12,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.permissions import IsAdminUser, IsAdminOrWorkerUser
-from .models import Category, KardexMovement, MTGCard, PricingSettings, Product, PurchaseOrder, SingleCard, Supplier
+from .models import Category, KardexMovement, MTGCard, PricingSettings, Product, PurchaseOrder, PurchaseOrderItem, SingleCard, Supplier
 from .permissions import IsAdminOrReadOnly
 from .serializers import CategorySerializer, KardexMovementSerializer, MTGCardSerializer, PricingSettingsSerializer, ProductSerializer, PurchaseOrderItemSerializer, PurchaseOrderSerializer, SupplierSerializer
 from .services import ScryfallServiceError, calculate_suggested_sale_price, extract_usd_price, get_active_pricing_settings, get_scryfall_card_by_id, import_card, import_catalog_from_xlsx, import_purchase_order_from_xlsx, search_cards
 from .inventory_services import create_stock_movement
 from .purchase_order_services import recalculate_purchase_order, receive_purchase_order
 from .purchase_order_import import parse_purchase_order_excel
+from decimal import Decimal
 from .scryfall_normalizer import normalize_card_description
 from .scryfall_service import search_scryfall_card
 
@@ -362,24 +363,55 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
+    def _find_existing_single_product(self, scryfall_id, condition, language="EN", is_foil=False):
+        single = SingleCard.objects.filter(
+            mtg_card__scryfall_id=scryfall_id,
+            condition=condition,
+            language=language,
+            is_foil=is_foil,
+        ).select_related("product").first()
+        return single.product if single else None
+
+    def _match_item_with_scryfall(self, item, normalized_name=None, set_name=None):
+        normalized_name = normalized_name or item.normalized_card_name or normalize_card_description(item.raw_description)["normalized_card_name"]
+        set_name = set_name if set_name is not None else item.set_name_detected
+        result = search_scryfall_card(normalized_name, set_hint=set_name, is_foil=item.scryfall_data.get("is_foil_detected", False))
+        if not result.get("found"):
+            return {"status": result.get("status", "not_found"), "message": result.get("message", "No encontrado"), "result": result}
+        product = self._find_existing_single_product(result.get("scryfall_id", ""), item.style_condition, "EN", item.scryfall_data.get("is_foil_detected", False))
+        item.normalized_card_name = normalized_name
+        item.set_name_detected = set_name or item.set_name_detected
+        item.scryfall_id = result["scryfall_id"]
+        item.scryfall_data = result
+        if product:
+            item.product = product
+        item.save(update_fields=["normalized_card_name", "set_name_detected", "scryfall_id", "scryfall_data", "product"])
+        return {"status": "matched", "message": "ok", "result": result, "product_id": product.id if product else None}
 
     @action(detail=False, methods=["post"], url_path="import-preview")
     def import_preview(self, request):
-        rows = request.data.get("rows", [])
-        currency = request.data.get("original_currency", "CLP")
-        items=[]
-        for row in rows:
-            if not row.get("Description"):
-                continue
-            items.append({
-                "raw_description": row.get("Description", ""),
-                "normalized_card_name": normalize_card_description(row.get("Description", "")),
-                "style_condition": row.get("Style") or "NM",
-                "quantity_ordered": int(row.get("Qty") or 1),
-                "unit_price_original": str(row.get("Price") or 0),
-                "line_total_original": str(row.get("Total") or 0),
-            })
-        return Response({"original_currency": currency, "items": items})
+        excel_file = request.FILES.get("file")
+        if not excel_file:
+            return Response({"detail": "Debes adjuntar un archivo .xlsx"}, status=400)
+        parsed = parse_purchase_order_excel(excel_file, fallback_currency=request.data.get("original_currency", "CLP"))
+        items = parsed.get("items", [])
+        condition_counts = {"NM": 0, "EX": 0, "VG": 0}
+        items_sum = Decimal("0")
+        for item in items:
+            condition_counts[item.get("style_condition", "NM")] = condition_counts.get(item.get("style_condition", "NM"), 0) + 1
+            items_sum += Decimal(item.get("line_total_original", "0"))
+        return Response({
+            "source_store": request.data.get("source_store", "Card Kingdom"),
+            "supplier_id": request.data.get("supplier_id"),
+            "currency": parsed.get("currency"),
+            "detected_currency": parsed.get("currency"),
+            "totals": parsed.get("totals"),
+            "items": items,
+            "items_count_by_condition": condition_counts,
+            "items_calculated_sum": f"{items_sum.quantize(Decimal('0.01'))}",
+            "warnings": parsed.get("warnings", []),
+            "errors": parsed.get("errors", []),
+        })
 
     @action(detail=True, methods=["post"], url_path="receive")
     def receive(self, request, pk=None):
@@ -406,15 +438,70 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
         po = self.get_object()
         item_id = request.data.get("item_id")
         item = po.items.get(id=item_id)
-        name = request.data.get("normalized_card_name") or item.normalized_card_name or normalize_card_description(item.raw_description)
-        result = search_scryfall_card(name, item.set_name_detected)
-        if not result:
-            return Response({"detail": "No se encontró carta"}, status=404)
-        item.normalized_card_name = name
-        item.scryfall_id = result["scryfall_id"]
-        item.scryfall_data = result
-        item.save(update_fields=["normalized_card_name", "scryfall_id", "scryfall_data"])
-        return Response(result)
+        name = request.data.get("normalized_card_name")
+        set_name = request.data.get("set_name_detected")
+        output = self._match_item_with_scryfall(item, normalized_name=name, set_name=set_name)
+        if output["status"] != "matched":
+            return Response({"scryfall_match_status": output["status"], "scryfall_match_message": output["message"]}, status=404)
+        item.refresh_from_db()
+        data = PurchaseOrderItemSerializer(item).data
+        data["scryfall_match_status"] = "matched"
+        data["scryfall_match_message"] = "Carta vinculada" if output.get("product_id") else "Carta encontrada, sin producto vinculado"
+        return Response(data)
+
+    @action(detail=False, methods=["post"], url_path="import-create")
+    def import_create(self, request):
+        excel_file = request.FILES.get("file")
+        if not excel_file:
+            return Response({"detail": "Debes adjuntar un archivo .xlsx"}, status=400)
+        parsed = parse_purchase_order_excel(excel_file, fallback_currency=request.data.get("original_currency", "CLP"))
+        supplier = None
+        supplier_id = request.data.get("supplier_id")
+        supplier_name = (request.data.get("supplier_name") or "").strip()
+        if supplier_id:
+            supplier = Supplier.objects.filter(id=supplier_id).first()
+        elif supplier_name:
+            supplier, _ = Supplier.objects.get_or_create(name=supplier_name)
+        if not supplier:
+            return Response({"detail": "supplier_id o supplier_name es obligatorio"}, status=400)
+        po = PurchaseOrder.objects.create(
+            supplier=supplier, created_by=request.user, source_store=request.data.get("source_store", "Card Kingdom"),
+            status=PurchaseOrder.Status.DRAFT, original_currency=parsed.get("currency", "CLP"),
+            subtotal_original=Decimal(parsed["totals"]["subtotal_original"]), shipping_original=Decimal(parsed["totals"]["shipping_original"]),
+            sales_tax_original=Decimal(parsed["totals"]["sales_tax_original"]), total_original=Decimal(parsed["totals"]["total_original"]),
+            import_duties_clp=int(request.data.get("import_duties_clp") or 0), customs_fee_clp=int(request.data.get("customs_fee_clp") or 0),
+            handling_fee_clp=int(request.data.get("handling_fee_clp") or 0), paypal_variation_clp=int(request.data.get("paypal_variation_clp") or 0),
+            other_costs_clp=int(request.data.get("other_costs_clp") or 0), update_prices_on_receive=_to_bool(request.data.get("update_prices_on_receive"), False),
+        )
+        auto_match = _to_bool(request.data.get("auto_match_scryfall"), True)
+        for it in parsed.get("items", []):
+            item = PurchaseOrderItem.objects.create(
+                purchase_order=po, raw_description=it["raw_description"], normalized_card_name=it["normalized_card_name"],
+                set_name_detected=it["set_name_detected"], style_condition=it["style_condition"], quantity_ordered=it["quantity_ordered"],
+                unit_price_original=Decimal(it["unit_price_original"]), line_total_original=Decimal(it["line_total_original"]),
+                scryfall_data={"is_foil_detected": it.get("is_foil_detected", False), "language": it.get("language", "EN")},
+            )
+            if auto_match:
+                self._match_item_with_scryfall(item)
+        recalculate_purchase_order(po)
+        po.refresh_from_db()
+        return Response(PurchaseOrderSerializer(po).data, status=201)
+
+    @action(detail=True, methods=["post"], url_path=r"items/(?P<item_id>[^/.]+)/create-product")
+    def create_product_from_item(self, request, pk=None, item_id=None):
+        po = self.get_object()
+        item = po.items.get(id=item_id)
+        if not item.scryfall_id and not item.scryfall_data:
+            return Response({"detail": "Item sin datos Scryfall"}, status=400)
+        card_data = item.scryfall_data.get("raw_data", item.scryfall_data)
+        scryfall_id = item.scryfall_id or card_data.get("id")
+        mtg_card, _ = MTGCard.objects.get_or_create(scryfall_id=scryfall_id, defaults={"name": card_data.get("name", item.normalized_card_name)})
+        category = Category.objects.first()
+        product = Product.objects.create(name=card_data.get("name", item.normalized_card_name), category=category, product_type=Product.ProductType.SINGLE, price_clp=0, stock=0)
+        SingleCard.objects.create(product=product, mtg_card=mtg_card, condition=item.style_condition, language="EN", is_foil=bool(item.scryfall_data.get("is_foil_requested", False) or item.scryfall_data.get("is_foil_detected", False)), edition=card_data.get("set_name", item.set_name_detected), price_usd_reference=Decimal((card_data.get("prices") or {}).get("usd") or card_data.get("usd_price") or 0))
+        item.product = product
+        item.save(update_fields=["product"])
+        return Response(PurchaseOrderItemSerializer(item).data)
 
     @action(detail=True, methods=["post"], url_path="apply-suggested-prices")
     def apply_suggested_prices(self, request, pk=None):
