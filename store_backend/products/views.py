@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db import IntegrityError
 from django.db.models import Count
 from django.db import models
 from django.core.exceptions import ValidationError
