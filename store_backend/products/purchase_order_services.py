@@ -121,7 +121,17 @@ def receive_purchase_order(order, user):
         if qty <= 0:
             continue
         unit_cost = int(item.real_unit_cost_clp or item.unit_price_clp or 0)
-        create_stock_movement(item.product, KardexMovement.MovementType.PURCHASE_IN, qty, user, unit_cost_clp=unit_cost, reference_type="PURCHASE_ORDER", reference_id=po.id, reference_label=po.order_number, notes="Ingreso por recepción de orden de compra")
+        create_stock_movement(
+            product=item.product,
+            movement_type=KardexMovement.MovementType.PURCHASE_IN,
+            quantity=qty,
+            created_by=user,
+            unit_cost_clp=unit_cost,
+            reference_type="PURCHASE_ORDER",
+            reference_id=po.id,
+            reference_label=po.order_number,
+            notes="Ingreso por recepción de orden de compra",
+        )
         InventoryLot.objects.create(product=item.product, purchase_order_item=item, quantity_initial=qty, quantity_remaining=qty, unit_cost_clp=max(1, unit_cost), received_at=timezone.now())
         Product.objects.filter(pk=item.product_id).update(last_purchase_cost_clp=unit_cost, average_cost_clp=unit_cost)
         if po.update_prices_on_receive:
