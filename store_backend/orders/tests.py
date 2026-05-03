@@ -57,3 +57,37 @@ class FifoInventoryTests(TestCase):
         self._receive_po("PO-FIFO-1", 1, 1000)
         with self.assertRaises(ValidationError):
             consume_fifo_stock(self.product, 2)
+
+class OrderStockDeductionTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="buyer", password="x", role="customer")
+        self.staff = get_user_model().objects.create_user(username="ops", password="x", role="admin", is_staff=True)
+        self.supplier = Supplier.objects.create(name="Supplier Stock")
+        self.product = Product.objects.create(name="Shock", product_type="single", price_clp=2500, stock=0, is_active=True)
+
+        po = PurchaseOrder.objects.create(supplier=self.supplier, created_by=self.staff, order_number="PO-STOCK-1")
+        PurchaseOrderItem.objects.create(purchase_order=po, product=self.product, quantity_ordered=5, unit_cost_clp=1000)
+        receive_purchase_order(po.id, self.staff)
+
+    def test_create_order_deducts_product_stock_once(self):
+        cart, _ = Cart.objects.get_or_create(user=self.user)
+        CartItem.objects.create(cart=cart, product=self.product, quantity=2)
+
+        create_order_from_cart(self.user)
+
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock, 3)
+
+    def test_create_order_sets_sale_kardex_unit_cost_from_fifo(self):
+        cart, _ = Cart.objects.get_or_create(user=self.user)
+        CartItem.objects.create(cart=cart, product=self.product, quantity=2)
+
+        order = create_order_from_cart(self.user)
+        movement = KardexMovement.objects.get(
+            product=self.product,
+            movement_type=KardexMovement.MovementType.SALE_OUT,
+            reference_id=str(order.id),
+        )
+
+        self.assertEqual(movement.unit_cost_clp, 1000)
+        self.assertEqual(movement.quantity, 2)

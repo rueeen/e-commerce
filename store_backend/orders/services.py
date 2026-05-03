@@ -11,6 +11,7 @@ from .models import Order, OrderItem
 
 @transaction.atomic
 def create_order_from_cart(user):
+    """Create an order from the cart and consume stock once using FIFO + kardex sale movement."""
     cart, _ = Cart.objects.select_for_update().get_or_create(user=user)
     items = list(cart.items.select_related("product"))
     if not items:
@@ -51,6 +52,7 @@ def create_order_from_cart(user):
             movement_type=KardexMovement.MovementType.SALE_OUT,
             quantity=item.quantity,
             created_by=user,
+            unit_cost_clp=unit_cost_clp,
             unit_price_clp=unit_price,
             reference_type="ORDER",
             reference_id=order.id,

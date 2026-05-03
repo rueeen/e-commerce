@@ -30,6 +30,7 @@ def _get_active_pricing_settings():
 
 @transaction.atomic
 def consume_fifo_stock(product, quantity):
+    """Consume InventoryLot in FIFO order and return weighted costs for a sale."""
     qty_to_consume = int(quantity or 0)
     if qty_to_consume <= 0:
         raise ValidationError("quantity debe ser mayor a 0")
