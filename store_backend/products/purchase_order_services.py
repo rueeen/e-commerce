@@ -18,6 +18,19 @@ def _round_money(v):
     return _d(v).quantize(D('0.01'), rounding=ROUND_HALF_UP)
 
 
+def _item_field_names(item):
+    return {f.name for f in item._meta.fields}
+
+
+def _save_item_fields(item, candidate_fields):
+    available_fields = _item_field_names(item)
+    update_fields = [field for field in candidate_fields if field in available_fields]
+    if update_fields:
+        item.save(update_fields=update_fields)
+    else:
+        item.save()
+
+
 def calculate_suggested_price(real_unit_cost, margin_percent, rounding_to=100):
     price = _d(real_unit_cost) * (D('1') + (_d(margin_percent) / D('100')))
     rounded = int((price / D(str(rounding_to))).quantize(D('1'), rounding=ROUND_HALF_UP) * D(str(rounding_to)))
@@ -48,7 +61,7 @@ def allocate_extra_costs(order):
         for i in items:
             i.allocated_extra_cost_clp = 0
             i.real_unit_cost_clp = int(i.unit_cost_clp or 0)
-            i.save(update_fields=['allocated_extra_cost_clp', 'real_unit_cost_clp'])
+            _save_item_fields(i, ['allocated_extra_cost_clp', 'real_unit_cost_clp'])
         return totals
     for i in items:
         item_sub = _d(i.quantity_ordered) * _d(i.unit_cost_clp)
@@ -57,11 +70,11 @@ def allocate_extra_costs(order):
         i.allocated_extra_cost_clp = int(allocated)
         real_total = item_sub + allocated
         i.real_unit_cost_clp = int((real_total / _d(i.quantity_ordered)).quantize(D('1'), rounding=ROUND_HALF_UP))
-        margin = _d(i.margin_percent or 35)
+        margin = _d(getattr(i, 'margin_percent', 35) or 35)
         settings = PricingSettings.objects.filter(is_active=True).order_by('-updated_at').first()
         rounding_to = int(getattr(settings, 'rounding_to', 100) or 100)
         i.suggested_sale_price_clp = calculate_suggested_price(i.real_unit_cost_clp, margin, rounding_to)
-        i.save(update_fields=['allocated_extra_cost_clp', 'real_unit_cost_clp', 'suggested_sale_price_clp'])
+        _save_item_fields(i, ['allocated_extra_cost_clp', 'real_unit_cost_clp', 'suggested_sale_price_clp'])
     return totals
 
 
