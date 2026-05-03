@@ -1,5 +1,6 @@
 from django.db import IntegrityError, transaction
 from django.utils import timezone
+from decimal import Decimal
 from rest_framework import serializers
 
 from .models import BundleItem, Category, KardexMovement, MTGCard, PricingSettings, Product, PurchaseOrder, PurchaseOrderItem, SealedProduct, SingleCard, Supplier
@@ -103,6 +104,12 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             qty = int(it.get("quantity_ordered") or 0)
             if qty <= 0:
                 raise serializers.ValidationError({"items": ["quantity_ordered debe ser mayor a 0."]})
+            unit_price_original = it.get("unit_price_original")
+            if unit_price_original is None or unit_price_original < 0:
+                raise serializers.ValidationError({"items": ["unit_price_original debe ser mayor o igual a 0."]})
+            expected = (unit_price_original * qty).quantize(Decimal("0.01"))
+            if it.get("line_total_original") != expected:
+                raise serializers.ValidationError({"items": ["line_total_original debe coincidir con quantity_ordered * unit_price_original"]})
         return attrs
 
     def _generate_order_number(self):
@@ -122,9 +129,6 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"status": ["No se puede crear recibida directamente"]})
         order = PurchaseOrder.objects.create(**validated_data)
         for it in items_data:
-            expected = (it["unit_price_original"] * it["quantity_ordered"]).quantize(it["unit_price_original"].__class__('0.01'))
-            if it.get("line_total_original") != expected:
-                raise serializers.ValidationError({"items": ["line_total_original debe coincidir con quantity_ordered * unit_price_original"]})
             PurchaseOrderItem.objects.create(purchase_order=order, **it)
         recalculate_purchase_order(order)
         return order
