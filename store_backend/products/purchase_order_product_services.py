@@ -71,7 +71,7 @@ def resolve_purchase_order_product_category(category=None):
     return categories[0] if categories else None
 
 
-def ensure_item_has_scryfall_data(item):
+def resolve_purchase_order_item_scryfall(item):
     """
     Garantiza que el PurchaseOrderItem tenga datos suficientes de Scryfall.
 
@@ -100,37 +100,40 @@ def ensure_item_has_scryfall_data(item):
         or getattr(item, "is_foil", False)
     )
 
-    result = resolve_scryfall_card(
-        card_name=card_name,
-        set_hint=set_hint,
-        is_foil=is_foil,
-    )
-
-    if not result.get("found"):
-        message = result.get("message") or result.get("error") or "sin detalle"
+    try:
+        _card, card_data, warnings = resolve_scryfall_card(name=card_name)
+    except ValidationError as exc:
         raise ValidationError(
-            f"No se encontró coincidencia en Scryfall para '{card_name}': {message}"
-        )
+            f"No se pudo resolver Scryfall para item #{item.id}: "
+            f"{card_name} / set_hint={set_hint or '-'} ({exc})"
+        ) from exc
 
-    scryfall_id = result.get("scryfall_id") or result.get("id")
-
+    scryfall_id = card_data.get("id")
     if not scryfall_id:
         raise ValidationError(
-            f"Scryfall respondió sin ID para '{card_name}'."
+            f"No se pudo resolver Scryfall para item #{item.id}: "
+            f"{card_name} / set_hint={set_hint or '-'} (sin scryfall_id)"
         )
 
     item.scryfall_id = scryfall_id
-    item.scryfall_data = result
+    item.scryfall_data = {
+        "raw_data": card_data,
+        "warnings": warnings or [],
+        "set_hint": set_hint,
+        "is_foil_requested": is_foil,
+        "language": str(getattr(item, "language", "") or "EN").upper(),
+    }
 
     update_fields = ["scryfall_id", "scryfall_data"]
-
     if hasattr(item, "scryfall_status"):
         item.scryfall_status = "matched"
         update_fields.append("scryfall_status")
-
     item.save(update_fields=update_fields)
-
     return item
+
+
+def ensure_item_has_scryfall_data(item):
+    return resolve_purchase_order_item_scryfall(item)
 
 
 def _build_card_payload(item):
@@ -139,10 +142,13 @@ def _build_card_payload(item):
     if not isinstance(scryfall_data, dict):
         scryfall_data = {}
 
-    raw_data = scryfall_data.get("raw_data")
+    raw_data = scryfall_data.get("raw_data") or scryfall_data.get("card")
 
     if raw_data and isinstance(raw_data, dict):
         return raw_data
+
+    if isinstance(scryfall_data, dict) and scryfall_data.get("id"):
+        return scryfall_data
 
     scryfall_id = item.scryfall_id or scryfall_data.get("id")
 

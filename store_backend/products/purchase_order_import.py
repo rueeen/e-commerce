@@ -200,11 +200,19 @@ def _apply_non_product_line_to_totals(
         return
 
     if _is_fee_line(description):
+        normalized = str(description or "").strip().lower()
+
         if amount > 0:
-            totals["sales_tax_original"] += amount
+            if "tax" in normalized:
+                totals["sales_tax_original"] += amount
+            elif any(
+                token in normalized
+                for token in {"handling", "customs", "aduana", "duties", "fee"}
+            ):
+                totals["shipping_original"] += amount
 
         warnings.append(
-            f"Fila {row_number}: '{description}' fue tratado como cargo/impuesto, no como producto."
+            f"Fila {row_number}: '{description}' fue tratado como cargo logístico/impuesto, no como producto."
         )
 
 
