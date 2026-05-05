@@ -1197,6 +1197,42 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
             }
         )
 
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"items/(?P<item_id>[^/.]+)/link-product",
+    )
+    def link_product(self, request, pk=None, item_id=None):
+        purchase_order = self.get_object()
+
+        try:
+            item = purchase_order.items.get(id=item_id)
+        except PurchaseOrderItem.DoesNotExist:
+            return Response(
+                {"detail": "Item no encontrado en la orden."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        product_id = request.data.get("product_id")
+        product = Product.objects.filter(id=product_id).first()
+
+        if not product:
+            return Response(
+                {"detail": "product_id inválido."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        item.product = product
+        item.save(update_fields=["product"])
+
+        return Response(
+            {
+                "item_id": item.id,
+                "product_id": product.id,
+                "status": "linked",
+            }
+        )
+
     @action(detail=True, methods=["post"], url_path="create-missing-products")
     def create_missing_products(self, request, pk=None):
         purchase_order = self.get_object()
