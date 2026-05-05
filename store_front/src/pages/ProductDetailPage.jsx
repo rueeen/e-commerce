@@ -1,45 +1,269 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
+
 import { api } from '../api/endpoints';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { useCart } from '../hooks/useCart';
 
+const placeholderImage = 'https://placehold.co/900x600?text=Producto';
+
+const formatMoney = (value) => {
+  return `$${Number(value || 0).toLocaleString('es-CL')}`;
+};
+
+const formatDateTime = (value) => {
+  if (!value) return '-';
+
+  try {
+    return new Date(value).toLocaleString('es-CL');
+  } catch {
+    return value;
+  }
+};
+
+const getCard = (product) => {
+  return product?.single_card?.mtg_card || product?.mtg_card || null;
+};
+
+const getCondition = (product) => {
+  return product?.single_card?.condition || product?.condition || '-';
+};
+
+const getLanguage = (product) => {
+  return product?.single_card?.language || product?.language || '-';
+};
+
+const getIsFoil = (product) => {
+  if (product?.single_card && typeof product.single_card.is_foil === 'boolean') {
+    return product.single_card.is_foil;
+  }
+
+  return Boolean(product?.is_foil);
+};
+
+const getImage = (product, card) => {
+  return (
+    product?.image ||
+    card?.image_large ||
+    card?.image_normal ||
+    card?.image_small ||
+    placeholderImage
+  );
+};
+
 export default function ProductDetailPage() {
   const { id } = useParams();
+
   const [product, setProduct] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [kardex, setKardex] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+
   const { addItem } = useCart();
 
+  const card = useMemo(() => getCard(product), [product]);
+
+  const stock = Number(product?.stock || 0);
+  const margin = Number(product?.margin_clp || 0);
+  const isLoss = margin < 0;
+  const isFoil = getIsFoil(product);
+  const canBuy = stock > 0 && product?.is_active !== false;
+
   useEffect(() => {
-    api.productById(id).then(({ data }) => setProduct(data));
-    api.productKardex(id).then(({ data }) => setKardex(data || [])).catch(() => setKardex([]));
+    let alive = true;
+
+    const loadProduct = async () => {
+      setLoading(true);
+
+      try {
+        const { data } = await api.productById(id);
+
+        if (!alive) return;
+
+        setProduct(data);
+
+        try {
+          const kardexResponse = await api.productKardex(id);
+
+          if (alive) {
+            setKardex(kardexResponse.data || []);
+          }
+        } catch {
+          if (alive) {
+            setKardex([]);
+          }
+        }
+      } catch {
+        if (alive) {
+          setProduct(null);
+        }
+      } finally {
+        if (alive) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadProduct();
+
+    return () => {
+      alive = false;
+    };
   }, [id]);
 
-  if (!product) return <LoadingSpinner />;
-  const margin = Number(product.margin_clp || 0);
-  const isLoss = margin < 0;
+  const handleQuantityChange = (value) => {
+    const nextQuantity = Math.max(1, Number(value || 1));
+    const maxQuantity = Math.max(1, stock);
+
+    setQuantity(Math.min(nextQuantity, maxQuantity));
+  };
+
+  const handleAddToCart = async () => {
+    if (!canBuy) return;
+
+    setAdding(true);
+
+    try {
+      await addItem(product, quantity);
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  if (loading) {
+    return <LoadingSpinner />;
+  }
+
+  if (!product) {
+    return (
+      <div className="panel-card p-4 text-center text-muted">
+        No se pudo cargar el producto.
+      </div>
+    );
+  }
 
   return (
     <div className="row g-4 align-items-start">
-      <div className="col-lg-6"><img src={product.image || product.mtg_card?.image_normal || 'https://placehold.co/900x600?text=Producto'} className="img-fluid rounded-4 shadow-sm w-100" alt={product.name} /></div>
+      <div className="col-lg-6">
+        <div className="panel-card p-3">
+          <img
+            src={getImage(product, card)}
+            className="img-fluid rounded-4 w-100"
+            alt={product.name}
+          />
+        </div>
+      </div>
+
       <div className="col-lg-6">
         <div className="panel-card p-4">
+          <div className="d-flex flex-wrap gap-2 mb-3">
+            <span className="badge badge-soft">{product.product_type}</span>
+
+            {isFoil && <span className="badge badge-warning">Foil</span>}
+
+            {stock > 0 ? (
+              <span className="badge badge-success">Disponible</span>
+            ) : (
+              <span className="badge badge-error">Sin stock</span>
+            )}
+          </div>
+
           <h2>{product.name}</h2>
-          <p className="mb-1"><strong>Set:</strong> {product.mtg_card?.set_name} ({product.mtg_card?.set_code})</p>
-          <p className="mb-1"><strong>Rareza:</strong> {product.mtg_card?.rarity} | <strong>Condición:</strong> {product.condition}</p>
-          <p className="mb-1"><strong>Tipo:</strong> {product.mtg_card?.type_line}</p>
-          <p className="text-secondary">{product.mtg_card?.oracle_text || product.description}</p>
-          <p className="price-highlight">CLP ${product.price_clp}</p>
-          <p className="mb-1"><strong>Costo real:</strong> ${product.cost_real_clp || 0}</p>
-          <p className={`mb-1 ${isLoss ? 'text-danger' : 'text-success'}`}><strong>Margen:</strong> {margin >= 0 ? '+' : ''}${margin} ({product.margin_percentage || 0}%) {isLoss ? '⚠️ Estás perdiendo dinero' : '✅ Margen positivo'}</p>
-          <p className="mb-1"><strong>Precio sugerido:</strong> ${product.suggested_price_clp || 0}</p>
-          <p className="small text-muted">El costo real incluye envío, importación e impuestos.</p>
-          <p className="mb-3">Stock: {product.stock}</p>
-          <div className="mb-3 col-6"><label className="form-label">Cantidad</label><input type="number" min="1" max={Math.max(1, Number(product.stock || 1))} className="form-control" value={quantity} onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))} /></div>
-          <button className="btn btn-primary" onClick={() => addItem(product, quantity)} disabled={Number(product.stock || 0) <= 0}><i className="bi bi-cart-plus me-2" />Agregar al carrito</button>
+
+          {card && (
+            <>
+              <p className="mb-1">
+                <strong>Set:</strong> {card.set_name || '-'}{' '}
+                {card.set_code ? `(${String(card.set_code).toUpperCase()})` : ''}
+              </p>
+
+              <p className="mb-1">
+                <strong>Rareza:</strong> {card.rarity || '-'} |{' '}
+                <strong>Condición:</strong> {getCondition(product)} |{' '}
+                <strong>Idioma:</strong> {getLanguage(product)}
+              </p>
+
+              <p className="mb-1">
+                <strong>Tipo:</strong> {card.type_line || '-'}
+              </p>
+            </>
+          )}
+
+          <p className="text-secondary mt-3">
+            {card?.oracle_text || product.description || 'Sin descripción.'}
+          </p>
+
+          <p className="price-highlight mb-2">
+            {formatMoney(product.computed_price_clp || product.price_clp)}
+          </p>
+
+          <p className="mb-1">
+            <strong>Costo real:</strong> {formatMoney(product.cost_real_clp)}
+          </p>
+
+          <p className={`mb-1 ${isLoss ? 'text-danger' : 'text-success'}`}>
+            <strong>Margen:</strong> {margin >= 0 ? '+' : ''}
+            {formatMoney(margin)} ({product.margin_percentage || 0}%){' '}
+            {isLoss ? '⚠️ Estás perdiendo dinero' : '✅ Margen positivo'}
+          </p>
+
+          <p className="mb-1">
+            <strong>Precio sugerido:</strong>{' '}
+            {formatMoney(product.suggested_price_clp)}
+          </p>
+
+          <p className="small text-muted">
+            El costo real incluye envío, importación e impuestos cuando existe
+            información de compra registrada.
+          </p>
+
+          <p className="mb-3">
+            <strong>Stock:</strong> {stock}
+          </p>
+
+          <div className="mb-3 col-6">
+            <label className="form-label">Cantidad</label>
+            <input
+              type="number"
+              min="1"
+              max={Math.max(1, stock)}
+              className="form-control"
+              value={quantity}
+              onChange={(event) => handleQuantityChange(event.target.value)}
+              disabled={!canBuy || adding}
+            />
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handleAddToCart}
+            disabled={!canBuy || adding}
+          >
+            <i className="bi bi-cart-plus me-2" />
+            {adding ? 'Agregando...' : 'Agregar al carrito'}
+          </button>
         </div>
-        {kardex.length > 0 && <div className="panel-card p-4 mt-3"><h5>Kardex</h5><p><strong>Stock actual:</strong> {product.stock}</p><ul className="mb-0">{kardex.slice(0, 8).map((m) => <li key={m.id}>{m.movement_type} · {m.quantity} · {new Date(m.created_at).toLocaleString('es-CL')} (Stock: {m.previous_stock} → {m.new_stock})</li>)}</ul></div>}
+
+        {kardex.length > 0 && (
+          <div className="panel-card p-4 mt-3">
+            <h5>Kardex</h5>
+            <p>
+              <strong>Stock actual:</strong> {stock}
+            </p>
+
+            <ul className="mb-0">
+              {kardex.slice(0, 8).map((movement) => (
+                <li key={movement.id}>
+                  {movement.movement_type} · {movement.quantity} ·{' '}
+                  {formatDateTime(movement.created_at)} · Stock:{' '}
+                  {movement.previous_stock} → {movement.new_stock}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );

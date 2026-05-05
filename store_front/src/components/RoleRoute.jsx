@@ -1,12 +1,19 @@
 import { Navigate } from 'react-router-dom';
+
+import LoadingSpinner from './LoadingSpinner';
 import { useAuth } from '../hooks/useAuth';
 
 export default function RoleRoute({ children, allowRoles = [] }) {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, initializing, role } = useAuth();
 
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (initializing) {
+    return <LoadingSpinner text="Validando permisos..." />;
+  }
 
-  const role = user?.role || (user?.is_staff ? 'admin' : 'customer');
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
   if (!allowRoles.includes(role)) {
     return <Navigate to="/" replace />;
   }

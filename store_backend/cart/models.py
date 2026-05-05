@@ -8,7 +8,11 @@ from products.models import Product
 
 
 class Cart(models.Model):
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="cart")
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="cart",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -17,24 +21,45 @@ class Cart(models.Model):
 
     @property
     def total(self) -> Decimal:
-        return sum((item.subtotal for item in self.items.select_related("product")), Decimal("0"))
+        return sum(
+            (item.subtotal for item in self.items.select_related("product")),
+            Decimal("0"),
+        )
+
+    @property
+    def total_items(self) -> int:
+        return sum(item.quantity for item in self.items.all())
 
 
 class CartItem(models.Model):
-    cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name="items")
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="cart_items")
+    cart = models.ForeignKey(
+        Cart,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="cart_items",
+    )
     quantity = models.PositiveIntegerField(default=1)
 
     class Meta:
-        unique_together = ("cart", "product")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["cart", "product"],
+                name="unique_cart_product",
+            )
+        ]
 
     def clean(self):
         if self.quantity <= 0:
-            raise ValidationError({"quantity": "La cantidad debe ser mayor a 0."})
+            raise ValidationError(
+                {"quantity": "La cantidad debe ser mayor a 0."})
 
     def __str__(self) -> str:
         return f"{self.product.name} x {self.quantity}"
 
     @property
     def subtotal(self) -> Decimal:
-        return Decimal(self.product.computed_price_clp) * self.quantity
+        return Decimal(self.product.computed_price_clp or 0) * self.quantity

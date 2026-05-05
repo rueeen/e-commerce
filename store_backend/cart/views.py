@@ -4,23 +4,39 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import Cart, CartItem
-from .serializers import AddCartItemSerializer, CartSerializer, UpdateCartItemSerializer
+from .serializers import (
+    AddCartItemSerializer,
+    CartSerializer,
+    UpdateCartItemSerializer,
+)
 
 
-class CartView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_cart(self, user):
-        cart, _ = Cart.objects.get_or_create(user=user)
+class CartMixin:
+    def get_cart(self):
+        cart, _ = Cart.objects.prefetch_related(
+            "items__product"
+        ).get_or_create(
+            user=self.request.user
+        )
         return cart
 
+    def serialize_cart(self, cart, status_code=status.HTTP_200_OK):
+        serializer = CartSerializer(
+            cart,
+            context={"request": self.request},
+        )
+        return Response(serializer.data, status=status_code)
+
+
+class CartView(CartMixin, APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
     def get(self, request):
-        cart = self.get_cart(request.user)
-        serializer = CartSerializer(cart)
-        return Response(serializer.data)
+        cart = self.get_cart()
+        return self.serialize_cart(cart)
 
 
-class AddCartItemView(APIView):
+class AddCartItemView(CartMixin, APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @transaction.atomic
@@ -28,66 +44,96 @@ class AddCartItemView(APIView):
         serializer = AddCartItemSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        cart, _ = Cart.objects.get_or_create(user=request.user)
+        cart = self.get_cart()
         product = serializer.validated_data["product"]
         quantity = serializer.validated_data["quantity"]
 
-        if not product.is_active:
-            return Response({"detail": "No se puede comprar un producto inactivo."}, status=status.HTTP_400_BAD_REQUEST)
+        item, created = CartItem.objects.select_for_update().get_or_create(
+            cart=cart,
+            product=product,
+            defaults={"quantity": quantity},
+        )
 
-        if product.stock < quantity:
-            return Response({"detail": "Stock insuficiente para el producto."}, status=status.HTTP_400_BAD_REQUEST)
-
-        item, created = CartItem.objects.get_or_create(cart=cart, product=product, defaults={"quantity": quantity})
         if not created:
             new_quantity = item.quantity + quantity
+
             if product.stock < new_quantity:
-                return Response({"detail": "Stock insuficiente para actualizar la cantidad."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {
+                        "quantity": [
+                            "Stock insuficiente para actualizar la cantidad."
+                        ]
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             item.quantity = new_quantity
             item.save(update_fields=["quantity"])
 
-        return Response(CartSerializer(cart).data, status=status.HTTP_201_CREATED)
+        cart.refresh_from_db()
+
+        return self.serialize_cart(
+            cart,
+            status_code=status.HTTP_201_CREATED,
+        )
 
 
-class UpdateCartItemView(APIView):
+class UpdateCartItemView(CartMixin, APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     @transaction.atomic
     def patch(self, request, item_id):
-        serializer = UpdateCartItemSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        cart = self.get_cart()
 
-        cart, _ = Cart.objects.get_or_create(user=request.user)
         try:
             item = cart.items.select_related("product").get(pk=item_id)
         except CartItem.DoesNotExist:
-            return Response({"detail": "Item no encontrado en el carrito."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": "Item no encontrado en el carrito."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
-        quantity = serializer.validated_data["quantity"]
-        product = item.product
-        if product.stock < quantity:
-            return Response({"detail": "Stock insuficiente para el producto."}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = UpdateCartItemSerializer(
+            data=request.data,
+            context={"cart_item": item},
+        )
+        serializer.is_valid(raise_exception=True)
 
-        item.quantity = quantity
+        item.quantity = serializer.validated_data["quantity"]
         item.save(update_fields=["quantity"])
-        return Response(CartSerializer(cart).data)
+
+        cart.refresh_from_db()
+
+        return self.serialize_cart(cart)
 
 
-class RemoveCartItemView(APIView):
+class RemoveCartItemView(CartMixin, APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @transaction.atomic
     def delete(self, request, item_id):
-        cart, _ = Cart.objects.get_or_create(user=request.user)
-        deleted, _ = cart.items.filter(pk=item_id).delete()
-        if not deleted:
-            return Response({"detail": "Item no encontrado en el carrito."}, status=status.HTTP_404_NOT_FOUND)
+        cart = self.get_cart()
+
+        try:
+            item = cart.items.get(pk=item_id)
+        except CartItem.DoesNotExist:
+            return Response(
+                {"detail": "Item no encontrado en el carrito."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        item.delete()
+
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class ClearCartView(APIView):
+class ClearCartView(CartMixin, APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @transaction.atomic
     def delete(self, request):
-        cart, _ = Cart.objects.get_or_create(user=request.user)
+        cart = self.get_cart()
         cart.items.all().delete()
+        cart.touch()
+
         return Response(status=status.HTTP_204_NO_CONTENT)

@@ -1,8 +1,41 @@
 import re
 
+
 REMOVE_TOKENS = [
-    "Foil", "Variants", "Variant", "Commander Decks", "Commander Deck", "Eternal-Legal",
-    "Showcase", "Extended Art", "Borderless", "Retro Frame", "Alternate Art",
+    "Variants",
+    "Variant",
+    "Commander Decks",
+    "Commander Deck",
+    "Eternal-Legal",
+    "Showcase",
+    "Extended Art",
+    "Borderless",
+    "Retro Frame",
+    "Alternate Art",
+    "Etched",
+    "Surge Foil",
+    "Traditional Foil",
+    "Foil",
+]
+
+
+FOIL_TOKENS = [
+    "foil",
+    "surge foil",
+    "traditional foil",
+    "etched foil",
+]
+
+
+TREATMENT_TOKENS = [
+    "Showcase",
+    "Extended Art",
+    "Borderless",
+    "Retro Frame",
+    "Alternate Art",
+    "Etched",
+    "Surge Foil",
+    "Traditional Foil",
 ]
 
 
@@ -10,30 +43,80 @@ def _clean_spaces(value: str) -> str:
     return re.sub(r"\s+", " ", value or "").strip(" -:")
 
 
+def _contains_token(text: str, token: str) -> bool:
+    return bool(
+        re.search(
+            rf"\b{re.escape(token)}\b",
+            text or "",
+            flags=re.IGNORECASE,
+        )
+    )
+
+
+def _detect_foil(raw: str) -> bool:
+    text = raw or ""
+
+    return any(
+        _contains_token(text, token)
+        for token in FOIL_TOKENS
+    )
+
+
+def _detect_treatment(raw: str) -> str:
+    detected = []
+
+    for token in TREATMENT_TOKENS:
+        if _contains_token(raw, token):
+            detected.append(token)
+
+    return ", ".join(detected)
+
+
+def _remove_tokens(text: str) -> str:
+    cleaned = text or ""
+
+    for token in REMOVE_TOKENS:
+        cleaned = re.sub(
+            rf"\b{re.escape(token)}\b",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+
+    return _clean_spaces(cleaned)
+
+
 def normalize_card_description(raw_description: str) -> dict:
     raw = (raw_description or "").strip()
     warnings = []
-    is_foil = "foil" in raw.lower()
+
+    is_foil = _detect_foil(raw)
+    treatment = _detect_treatment(raw)
+
     set_name = ""
     card_name = raw
 
     if ":" in raw:
-        set_name = _clean_spaces(raw.rsplit(":", 1)[0])
-        card_name = raw.rsplit(":", 1)[1]
+        left, right = raw.rsplit(":", 1)
+        set_name = _clean_spaces(_remove_tokens(left))
+        card_name = right
 
+    # Elimina textos entre paréntesis como "(Extended Art)" o "(Foil)".
     card_name = re.sub(r"\([^)]*\)", "", card_name)
+
+    # Algunos listados traen puntos suspensivos o separadores raros.
     card_name = card_name.replace("...", " ")
-    for token in REMOVE_TOKENS:
-        card_name = re.sub(rf"\b{re.escape(token)}\b", "", card_name, flags=re.IGNORECASE)
-    card_name = _clean_spaces(card_name)
+
+    card_name = _remove_tokens(card_name)
 
     if not card_name:
-        warnings.append("No se pudo normalizar el nombre de carta")
+        warnings.append("No se pudo normalizar el nombre de carta.")
 
     return {
+        "raw_description": raw,
         "normalized_card_name": card_name,
         "set_name_detected": set_name,
         "is_foil_detected": is_foil,
-        "treatment_detected": "Foil" if is_foil else "",
+        "treatment_detected": treatment,
         "warnings": warnings,
     }

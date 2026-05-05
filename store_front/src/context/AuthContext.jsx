@@ -1,83 +1,208 @@
-import { createContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+
 import { api } from '../api/endpoints';
 import { notyf } from '../api/notifier';
 
 export const AuthContext = createContext(null);
 
+const getStoredUser = () => {
+  const rawUser = localStorage.getItem('authUser');
+
+  if (!rawUser) return null;
+
+  try {
+    return JSON.parse(rawUser);
+  } catch {
+    localStorage.removeItem('authUser');
+    return null;
+  }
+};
+
+const getUserRole = (user) => {
+  if (!user) return null;
+
+  if (user.role) return user.role;
+
+  if (user.is_staff || user.is_superuser) return 'admin';
+
+  return 'customer';
+};
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    const rawUser = localStorage.getItem('authUser');
-    return rawUser ? JSON.parse(rawUser) : null;
-  });
+  const [user, setUser] = useState(getStoredUser);
   const [token, setToken] = useState(() => localStorage.getItem('authToken'));
+  const [refreshToken, setRefreshToken] = useState(() =>
+    localStorage.getItem('refreshToken')
+  );
   const [loading, setLoading] = useState(false);
+  const [initializing, setInitializing] = useState(Boolean(token && !user));
+
+  const persistSession = useCallback(({ access, refresh, profile }) => {
+    if (access) {
+      localStorage.setItem('authToken', access);
+      setToken(access);
+    }
+
+    if (refresh) {
+      localStorage.setItem('refreshToken', refresh);
+      setRefreshToken(refresh);
+    }
+
+    if (profile) {
+      localStorage.setItem('authUser', JSON.stringify(profile));
+      setUser(profile);
+    }
+  }, []);
+
+  const logout = useCallback(({ silent = false } = {}) => {
+    setUser(null);
+    setToken(null);
+    setRefreshToken(null);
+
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('authUser');
+
+    if (!silent) {
+      notyf.success('Sesión cerrada.');
+    }
+  }, []);
 
   useEffect(() => {
-    if (!token || user) return;
+    if (!token) {
+      setInitializing(false);
+      return;
+    }
+
+    if (user) {
+      setInitializing(false);
+      return;
+    }
+
+    let alive = true;
 
     const loadUser = async () => {
+      setInitializing(true);
+
       try {
         const { data } = await api.me();
+
+        if (!alive) return;
+
         setUser(data);
         localStorage.setItem('authUser', JSON.stringify(data));
       } catch {
-        logout();
+        if (alive) {
+          logout({ silent: true });
+        }
+      } finally {
+        if (alive) {
+          setInitializing(false);
+        }
       }
     };
 
     loadUser();
-  }, [token]);
 
-  const login = async (credentials) => {
-    setLoading(true);
-    try {
-      const { data } = await api.login(credentials);
-      localStorage.setItem('authToken', data.access);
-      setToken(data.access);
-      const profile = data.user || (await api.me()).data;
-      setUser(profile);
-      localStorage.setItem('authUser', JSON.stringify(profile));
-      notyf.success('Login correcto');
-      return true;
-    } finally {
-      setLoading(false);
-    }
-  };
+    return () => {
+      alive = false;
+    };
+  }, [token, user, logout]);
 
-  const register = async (payload) => {
+  const login = useCallback(
+    async (credentials) => {
+      setLoading(true);
+
+      try {
+        const { data } = await api.login(credentials);
+
+        const access = data.access;
+        const refresh = data.refresh;
+
+        if (!access) {
+          notyf.error('El servidor no devolvió token de acceso.');
+          return false;
+        }
+
+        localStorage.setItem('authToken', access);
+        setToken(access);
+
+        if (refresh) {
+          localStorage.setItem('refreshToken', refresh);
+          setRefreshToken(refresh);
+        }
+
+        const profile = data.user || (await api.me()).data;
+
+        persistSession({
+          access,
+          refresh,
+          profile,
+        });
+
+        notyf.success('Login correcto.');
+        return true;
+      } catch {
+        return false;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [persistSession]
+  );
+
+  const register = useCallback(async (payload) => {
     setLoading(true);
+
     try {
       await api.register(payload);
-      notyf.success('Registro exitoso');
+      notyf.success('Registro exitoso.');
       return true;
+    } catch {
+      return false;
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const logout = () => {
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('authUser');
-    notyf.success('Sesión cerrada');
-  };
+  const role = getUserRole(user);
 
   const value = useMemo(
     () => ({
       user,
       token,
+      refreshToken,
       loading,
+      initializing,
+
       isAuthenticated: Boolean(token),
-      role: user?.role || (user?.is_staff ? 'admin' : 'customer'),
-      isAdmin: Boolean(user?.role === 'admin' || user?.is_staff || user?.is_superuser),
-      isWorker: Boolean(user?.role === 'worker'),
-      isCustomer: Boolean((user?.role || (user?.is_staff ? 'admin' : 'customer')) === 'customer'),
+      role,
+
+      isAdmin: role === 'admin',
+      isWorker: role === 'worker' || role === 'admin',
+      isCustomer: role === 'customer',
+
       login,
       register,
       logout,
     }),
-    [user, token, loading]
+    [
+      user,
+      token,
+      refreshToken,
+      loading,
+      initializing,
+      role,
+      login,
+      register,
+      logout,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

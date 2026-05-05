@@ -1,80 +1,259 @@
 import apiClient from './client';
 
+const appendFormData = (payload = {}) => {
+  const formData = new FormData();
+
+  Object.entries(payload || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      formData.append(key, value);
+    }
+  });
+
+  return formData;
+};
+
+const uploadConfig = {
+  headers: {
+    'Content-Type': 'multipart/form-data',
+  },
+};
+
 export const api = {
-  getProducts: (params = {}) => apiClient.get('/api/products/', { params }),
-  searchMtgCards: (q) => apiClient.get('/api/cards/', { params: { search: q } }),
-  searchScryfallCards: (q) => apiClient.get('/api/mtg/cards/search/', { params: { q } }),
-  importScryfallCard: (scryfall_id) => apiClient.post('/api/mtg/cards/import/', { scryfall_id }),
-  createSingleFromScryfall: (payload) => apiClient.post('/api/products/create-single-from-scryfall/', payload, { headers: { 'Content-Type': 'application/json' } }),
-  productById: (id) => apiClient.get(`/api/products/${id}/`),
-  createProduct: (payload) => apiClient.post('/api/products/', payload),
-  updateProduct: (id, payload) => apiClient.put(`/api/products/${id}/`, payload),
-  patchProduct: (id, payload) => apiClient.patch(`/api/products/${id}/`, payload),
-  deleteProduct: (id) => apiClient.delete(`/api/products/${id}/`),
+  // =========================
+  // Auth / Accounts
+  // =========================
+  register: (payload) => apiClient.post('/api/accounts/register/', payload),
+  login: (payload) => apiClient.post('/api/accounts/login/', payload),
+  me: () => apiClient.get('/api/accounts/me/'),
+
+  adminUsers: (params = {}) => apiClient.get('/api/accounts/users/', { params }),
+  adminUserById: (id) => apiClient.get(`/api/accounts/users/${id}/`),
+  adminUpdateUser: (id, payload) => apiClient.patch(`/api/accounts/users/${id}/`, payload),
+  adminUpdateUserRole: (id, role) =>
+    apiClient.patch(`/api/accounts/users/${id}/role/`, { role }),
+  adminUpdateUserStatus: (id, is_active) =>
+    apiClient.patch(`/api/accounts/users/${id}/status/`, { is_active }),
+
+  // =========================
+  // Products / Catalog
+  // =========================
+  getProducts: (params = {}) => apiClient.get('/api/products/products/', { params }),
+  productById: (id) => apiClient.get(`/api/products/products/${id}/`),
+  createProduct: (payload) => apiClient.post('/api/products/products/', payload),
+  updateProduct: (id, payload) => apiClient.put(`/api/products/products/${id}/`, payload),
+  patchProduct: (id, payload) => apiClient.patch(`/api/products/products/${id}/`, payload),
+  deleteProduct: (id) => apiClient.delete(`/api/products/products/${id}/`),
+
+  createSingleFromScryfall: (payload) =>
+    apiClient.post('/api/products/products/create-single-from-scryfall/', payload),
+
+  productKardex: (id) => apiClient.get(`/api/products/products/${id}/kardex/`),
+  productSuggestedPrice: (id, unit_cost_clp = 0) =>
+    apiClient.get(`/api/products/products/${id}/suggested-price/`, {
+      params: { unit_cost_clp },
+    }),
+
   importCatalogXlsx: (file) => {
     const formData = new FormData();
     formData.append('file', file);
-    return apiClient.post('/api/products/import-catalog-xlsx/', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+
+    return apiClient.post(
+      '/api/products/products/import-catalog-xlsx/',
+      formData,
+      uploadConfig
+    );
   },
 
-  purchaseOrderImportPreview: (payload) => {
-    const formData = new FormData();
-    Object.entries(payload || {}).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') formData.append(key, value);
-    });
-    return apiClient.post('/api/purchase-orders/import-preview/', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-  },
-  purchaseOrderImportCreate: (payload) => {
-    const formData = new FormData();
-    Object.entries(payload || {}).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') formData.append(key, value);
-    });
-    return apiClient.post('/api/purchase-orders/import-create/', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-  },
-  getCategories: (params = {}) => apiClient.get('/api/categories/', { params }),
-  createCategory: (payload) => apiClient.post('/api/categories/', payload),
-  updateCategory: (id, payload) => apiClient.put(`/api/categories/${id}/`, payload),
-  patchCategory: (id, payload) => apiClient.patch(`/api/categories/${id}/`, payload),
-  listPricingSettings: () => apiClient.get('/api/pricing-settings/'),
-  getActivePricingSettings: () => apiClient.get('/api/pricing-settings/active/'),
-  updatePricingSettings: (id, payload) => apiClient.patch(`/api/pricing-settings/${id}/`, payload),
-  createPricingSettings: (payload) => apiClient.post('/api/pricing-settings/', payload),
-  getKardex: (params = {}) => apiClient.get('/api/kardex/', { params }),
-  createKardexMovement: (payload) => apiClient.post('/api/kardex/movement/', payload),
-  productKardex: (id) => apiClient.get(`/api/products/${id}/kardex/`),
-  productSuggestedPrice: (id, unit_cost_clp = 0) => apiClient.get(`/api/products/${id}/suggested-price/`, { params: { unit_cost_clp } }),
+  // =========================
+  // Categories
+  // =========================
+  getCategories: (params = {}) => apiClient.get('/api/products/categories/', { params }),
+  createCategory: (payload) => apiClient.post('/api/products/categories/', payload),
+  updateCategory: (id, payload) =>
+    apiClient.put(`/api/products/categories/${id}/`, payload),
+  patchCategory: (id, payload) =>
+    apiClient.patch(`/api/products/categories/${id}/`, payload),
+  deleteCategory: (id) => apiClient.delete(`/api/products/categories/${id}/`),
 
-  getSuppliers: () => apiClient.get('/api/suppliers/'),
-  createSupplier: (payload) => apiClient.post('/api/suppliers/', payload),
-  getPurchaseOrders: () => apiClient.get('/api/purchase-orders/'),
-  getPurchaseOrderById: (id) => apiClient.get(`/api/purchase-orders/${id}/`),
-  createPurchaseOrder: (payload) => apiClient.post('/api/purchase-orders/', payload),
-  receivePurchaseOrder: (id) => apiClient.post(`/api/purchase-orders/${id}/receive/`),
-  recalculatePurchaseOrder: (id) => apiClient.post(`/api/purchase-orders/${id}/recalculate/`),
-  applySuggestedPricesToPurchaseOrder: (id) => apiClient.post(`/api/purchase-orders/${id}/apply-suggested-prices/`),
-  inventoryDashboard: () => apiClient.get('/api/inventory/dashboard/'),
+  // =========================
+  // MTG Cards local cache
+  // =========================
+  searchMtgCards: (q) =>
+    apiClient.get('/api/products/cards/', {
+      params: { search: q },
+    }),
 
+  // =========================
+  // Scryfall
+  // =========================
+  searchScryfallCards: (q) =>
+    apiClient.get('/api/products/scryfall/search/', {
+      params: { q },
+    }),
+
+  importScryfallCard: (scryfall_id) =>
+    apiClient.post('/api/products/scryfall/import/', { scryfall_id }),
+
+  // =========================
+  // Pricing Settings
+  // =========================
+  listPricingSettings: () => apiClient.get('/api/products/pricing-settings/'),
+  getActivePricingSettings: () => apiClient.get('/api/products/pricing-settings/active/'),
+  createPricingSettings: (payload) =>
+    apiClient.post('/api/products/pricing-settings/', payload),
+  updatePricingSettings: (id, payload) =>
+    apiClient.patch(`/api/products/pricing-settings/${id}/`, payload),
+
+  // =========================
+  // Kardex
+  // =========================
+  getKardex: (params = {}) => apiClient.get('/api/products/kardex/', { params }),
+  createKardexMovement: (payload) =>
+    apiClient.post('/api/products/kardex/movement/', payload),
+
+  // =========================
+  // Suppliers
+  // =========================
+  getSuppliers: (params = {}) => apiClient.get('/api/products/suppliers/', { params }),
+  supplierById: (id) => apiClient.get(`/api/products/suppliers/${id}/`),
+  createSupplier: (payload) => apiClient.post('/api/products/suppliers/', payload),
+  updateSupplier: (id, payload) =>
+    apiClient.put(`/api/products/suppliers/${id}/`, payload),
+  patchSupplier: (id, payload) =>
+    apiClient.patch(`/api/products/suppliers/${id}/`, payload),
+  deleteSupplier: (id) => apiClient.delete(`/api/products/suppliers/${id}/`),
+
+  // =========================
+  // Purchase Orders
+  // =========================
+  getPurchaseOrders: (params = {}) =>
+    apiClient.get('/api/products/purchase-orders/', { params }),
+
+  getPurchaseOrderById: (id) =>
+    apiClient.get(`/api/products/purchase-orders/${id}/`),
+
+  createPurchaseOrder: (payload) =>
+    apiClient.post('/api/products/purchase-orders/', payload),
+
+  updatePurchaseOrder: (id, payload) =>
+    apiClient.put(`/api/products/purchase-orders/${id}/`, payload),
+
+  patchPurchaseOrder: (id, payload) =>
+    apiClient.patch(`/api/products/purchase-orders/${id}/`, payload),
+
+  deletePurchaseOrder: (id) =>
+    apiClient.delete(`/api/products/purchase-orders/${id}/`),
+
+  receivePurchaseOrder: (id) =>
+    apiClient.post(`/api/products/purchase-orders/${id}/receive/`),
+
+  recalculatePurchaseOrder: (id) =>
+    apiClient.post(`/api/products/purchase-orders/${id}/recalculate/`),
+
+  scryfallMatchPurchaseOrderItem: (purchaseOrderId, payload) =>
+    apiClient.post(
+      `/api/products/purchase-orders/${purchaseOrderId}/scryfall-match/`,
+      payload
+    ),
+
+  createProductFromPurchaseOrderItem: (purchaseOrderId, itemId, payload = {}) =>
+    apiClient.post(
+      `/api/products/purchase-orders/${purchaseOrderId}/items/${itemId}/create-product/`,
+      payload
+    ),
+
+  createMissingProductsFromPurchaseOrder: (purchaseOrderId, payload = {}) =>
+    apiClient.post(
+      `/api/products/purchase-orders/${purchaseOrderId}/create-missing-products/`,
+      payload
+    ),
+
+  applySuggestedPricesToPurchaseOrder: (id) =>
+    apiClient.post(`/api/products/purchase-orders/${id}/apply-suggested-prices/`),
+
+  purchaseOrderImportPreview: (payload) =>
+    apiClient.post(
+      '/api/products/purchase-orders/import-preview/',
+      appendFormData(payload),
+      uploadConfig
+    ),
+
+  purchaseOrderImportCreate: (payload) =>
+    apiClient.post(
+      '/api/products/purchase-orders/import-create/',
+      appendFormData(payload),
+      uploadConfig
+    ),
+
+  purchaseOrderImport: (payload) =>
+    apiClient.post(
+      '/api/products/purchase-orders/import/',
+      appendFormData(payload),
+      uploadConfig
+    ),
+
+  purchaseOrderImportXlsx: (payload) =>
+    apiClient.post(
+      '/api/products/purchase-orders/import-xlsx/',
+      appendFormData(payload),
+      uploadConfig
+    ),
+
+  // =========================
+  // Inventory Dashboard
+  // =========================
+  inventoryDashboard: () => apiClient.get('/api/products/inventory/dashboard/'),
+
+  // =========================
+  // Cart
+  // =========================
+  cart: () => apiClient.get('/api/cart/'),
+
+  addToCart: (payload) => apiClient.post('/api/cart/items/', payload),
+
+  updateCart: (itemId, payload) =>
+    apiClient.patch(`/api/cart/items/${itemId}/`, payload),
+
+  removeFromCart: (itemId) =>
+    apiClient.delete(`/api/cart/items/${itemId}/remove/`),
+
+  clearCart: () => apiClient.delete('/api/cart/clear/'),
+
+  // =========================
+  // Customer Orders
+  // =========================
   orders: (params = {}) => apiClient.get('/api/orders/', { params }),
   orderById: (id) => apiClient.get(`/api/orders/${id}/`),
-  updateOrderStatus: (id, status) => apiClient.patch(`/api/orders/${id}/status/`, { status }),
 
-  adminUsers: () => apiClient.get('/api/auth/users/'),
-  adminUpdateUser: (id, payload) => apiClient.patch(`/api/auth/users/${id}/`, payload),
-  adminUpdateUserRole: (id, role) => apiClient.patch(`/api/auth/users/${id}/role/`, { role }),
-  adminUpdateUserStatus: (id, is_active) => apiClient.patch(`/api/auth/users/${id}/status/`, { is_active }),
+  createOrderFromCart: () => apiClient.post('/api/orders/from-cart/'),
 
-  cart: () => apiClient.get('/api/cart/'),
-  addToCart: (payload) => apiClient.post('/api/cart/add/', payload),
-  updateCart: (itemId, payload) => apiClient.patch(`/api/cart/items/${itemId}/`, payload),
-  removeFromCart: (itemId) => apiClient.delete(`/api/cart/items/${itemId}/remove/`),
-  clearCart: () => apiClient.delete('/api/cart/clear/'),
-  checkout: () => apiClient.post('/api/orders/checkout/'),
+  confirmOrderPayment: (id) =>
+    apiClient.post(`/api/orders/${id}/confirm-payment/`),
+
+  cancelOrder: (id) => apiClient.post(`/api/orders/${id}/cancel/`),
+
+  // =========================
+  // Assisted Orders
+  // =========================
+  assistedOrders: (params = {}) =>
+    apiClient.get('/api/orders/assisted/', { params }),
+
+  assistedOrderById: (id) =>
+    apiClient.get(`/api/orders/assisted/${id}/`),
+
+  createAssistedOrder: (payload) =>
+    apiClient.post('/api/orders/assisted/', payload),
+
+  updateAssistedOrder: (id, payload) =>
+    apiClient.patch(`/api/orders/assisted/${id}/`, payload),
+
+  recalculateAssistedOrder: (id) =>
+    apiClient.post(`/api/orders/assisted/${id}/recalculate/`),
+
+  // =========================
+  // Digital Library
+  // =========================
   digitalLibrary: () => apiClient.get('/api/library/'),
-  register: (payload) => apiClient.post('/api/auth/register/', payload),
-  login: (payload) => apiClient.post('/api/auth/login/', payload),
-  me: () => apiClient.get('/api/auth/me/'),
 };
+
+export default api;

@@ -2,32 +2,170 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/endpoints';
 import OrderTable from '../components/OrderTable';
 
+const normalizeList = (data) => data?.results || data || [];
+
+const formatMoney = (value) => {
+  return `$${Number(value || 0).toLocaleString('es-CL')}`;
+};
+
+const formatDate = (value) => {
+  if (!value) return '-';
+
+  try {
+    return new Date(value).toLocaleString('es-CL');
+  } catch {
+    return value;
+  }
+};
+
+const statusLabels = {
+  pending: 'Pendiente',
+  paid: 'Pagado',
+  processing: 'Procesando',
+  shipped: 'Enviado',
+  delivered: 'Entregado',
+  canceled: 'Cancelado',
+};
+
 export default function OrdersPage() {
   const [orders, setOrders] = useState([]);
   const [selected, setSelected] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const loadOrders = async () => {
+    setLoading(true);
+
+    try {
+      const { data } = await api.orders();
+      setOrders(normalizeList(data));
+    } catch {
+      // El apiClient ya muestra el error.
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    api.orders().then(({ data }) => setOrders(data.results || data));
+    loadOrders();
   }, []);
 
   return (
     <>
-      <h2>Mis pedidos</h2>
-      <OrderTable orders={orders} onView={setSelected} />
+      <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div>
+          <h2 className="mb-1">Mis pedidos</h2>
+          <p className="text-muted mb-0">
+            Revisa el estado de tus órdenes y el detalle de los productos comprados.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          className="btn btn-outline-secondary"
+          onClick={loadOrders}
+          disabled={loading}
+        >
+          {loading ? 'Actualizando...' : 'Actualizar'}
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="panel-card p-4 text-center text-muted">
+          Cargando pedidos...
+        </div>
+      ) : orders.length === 0 ? (
+        <div className="panel-card p-4 text-center text-muted">
+          Aún no tienes pedidos registrados.
+        </div>
+      ) : (
+        <OrderTable orders={orders} onView={setSelected} />
+      )}
 
       <div className="modal fade" id="orderDetailModal" tabIndex="-1">
-        <div className="modal-dialog modal-lg modal-dialog-centered">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h5 className="modal-title">Detalle pedido #{selected?.id}</h5>
-              <button className="btn-close" data-bs-dismiss="modal" />
+        <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+          <div className="modal-content bg-dark text-white border-secondary">
+            <div className="modal-header border-secondary">
+              <h5 className="modal-title">
+                Detalle pedido #{selected?.id || '-'}
+              </h5>
+
+              <button
+                type="button"
+                className="btn-close btn-close-white"
+                data-bs-dismiss="modal"
+                aria-label="Cerrar"
+              />
             </div>
+
             <div className="modal-body">
-              <p>Estado: {selected?.status}</p>
-              <p>Total: ${selected?.total_amount}</p>
-              <ul>
-                {selected?.items?.map((item) => <li key={item.id}>{item.product_name} x {item.quantity}</li>)}
-              </ul>
+              {!selected ? (
+                <p className="text-muted mb-0">Selecciona un pedido.</p>
+              ) : (
+                <>
+                  <div className="row g-2 mb-3">
+                    <div className="col-md-6">
+                      <strong>Estado:</strong>{' '}
+                      {statusLabels[selected.status] || selected.status}
+                    </div>
+
+                    <div className="col-md-6">
+                      <strong>Fecha:</strong> {formatDate(selected.created_at)}
+                    </div>
+
+                    <div className="col-md-6">
+                      <strong>Subtotal:</strong>{' '}
+                      {formatMoney(selected.subtotal_clp)}
+                    </div>
+
+                    <div className="col-md-6">
+                      <strong>Total:</strong> {formatMoney(selected.total_clp)}
+                    </div>
+                  </div>
+
+                  <h6>Productos</h6>
+
+                  <div className="table-responsive">
+                    <table className="table table-dark table-sm align-middle mb-0">
+                      <thead>
+                        <tr>
+                          <th>Producto</th>
+                          <th>Tipo</th>
+                          <th>Cantidad</th>
+                          <th>Precio unitario</th>
+                          <th>Subtotal</th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {(selected.items || []).map((item) => (
+                          <tr key={item.id}>
+                            <td>
+                              {item.product_name_snapshot ||
+                                item.product_name ||
+                                item.product?.name ||
+                                'Producto'}
+                            </td>
+                            <td>{item.product_type_snapshot || '-'}</td>
+                            <td>{item.quantity}</td>
+                            <td>{formatMoney(item.unit_price_clp)}</td>
+                            <td>{formatMoney(item.subtotal_clp)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="modal-footer border-secondary">
+              <button
+                type="button"
+                className="btn btn-outline-light"
+                data-bs-dismiss="modal"
+              >
+                Cerrar
+              </button>
             </div>
           </div>
         </div>

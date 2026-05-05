@@ -1,36 +1,104 @@
 import axios from 'axios';
 import { notyf } from './notifier';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const rawBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+export const API_BASE_URL = rawBaseUrl.replace(/\/+$/, '');
+
+const getAuthToken = () => localStorage.getItem('authToken');
+
+export const setAuthSession = ({ token, user }) => {
+  if (token) {
+    localStorage.setItem('authToken', token);
+  }
+
+  if (user) {
+    localStorage.setItem('authUser', JSON.stringify(user));
+  }
+};
+
+export const clearAuthSession = () => {
+  localStorage.removeItem('authToken');
+  localStorage.removeItem('authUser');
+};
+
+const extractErrorMessage = (error) => {
+  const data = error.response?.data;
+
+  if (!data) {
+    return 'No se pudo conectar con el servidor.';
+  }
+
+  if (typeof data === 'string') {
+    return data;
+  }
+
+  if (Array.isArray(data)) {
+    return data.join(', ');
+  }
+
+  if (data.detail) {
+    return Array.isArray(data.detail) ? data.detail.join(', ') : data.detail;
+  }
+
+  if (data.message) {
+    return Array.isArray(data.message) ? data.message.join(', ') : data.message;
+  }
+
+  const fieldErrors = Object.entries(data)
+    .map(([field, messages]) => {
+      if (Array.isArray(messages)) {
+        return `${field}: ${messages.join(', ')}`;
+      }
+
+      if (typeof messages === 'object' && messages !== null) {
+        return `${field}: ${JSON.stringify(messages)}`;
+      }
+
+      return `${field}: ${messages}`;
+    })
+    .join(' | ');
+
+  return fieldErrors || 'La solicitud falló.';
+};
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('authToken');
+  const token = getAuthToken();
+
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
   return config;
 });
 
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    const detail = error.response?.data?.detail;
-    const message = Array.isArray(detail)
-      ? detail.join(', ')
-      : detail || error.response?.data?.message || 'Request failed';
+    const status = error.response?.status;
+    const silent = error.config?.silent === true;
 
-    if (error.response?.status === 401) {
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('authUser');
+    if (status === 401) {
+      clearAuthSession();
+
+      if (!silent) {
+        notyf.error('Tu sesión expiró. Inicia sesión nuevamente.');
+      }
+
       return Promise.reject(error);
     }
 
-    notyf.error(message);
+    if (!silent) {
+      notyf.error(extractErrorMessage(error));
+    }
+
     return Promise.reject(error);
   }
 );

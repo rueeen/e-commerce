@@ -1,27 +1,128 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
-const items = [
-  ['/admin/dashboard', 'bi-speedometer2', 'Dashboard'],
-  ['/admin/productos', 'bi-box-seam', 'Productos'],
-  ['/admin/categorias', 'bi-tags', 'Categorías'],
-  ['/admin/usuarios', 'bi-people', 'Usuarios'],
-  ['/admin/pedidos', 'bi-receipt', 'Pedidos'],
-  ['/admin/importar-excel', 'bi-file-earmark-excel', 'Importar productos Excel'],
-  ['/admin/scryfall-single', 'bi-stars', 'Crear single desde Scryfall'],
-  ['/admin/pricing-settings', 'bi-cash-stack', 'Configuración de precios'],
-  ['/admin/kardex', 'bi-journal-text', 'Kardex'],
-  ['/admin/suppliers', 'bi-truck', 'Proveedores'],
-  ['/admin/purchase-orders', 'bi-bag-check', 'Órdenes de compra'],
+const menuItems = [
+  {
+    to: '/admin/dashboard',
+    icon: 'bi-speedometer2',
+    label: 'Dashboard',
+    roles: ['admin', 'worker'],
+  },
+  {
+    to: '/admin/productos',
+    icon: 'bi-box-seam',
+    label: 'Productos',
+    roles: ['admin', 'worker'],
+  },
+  {
+    to: '/admin/categorias',
+    icon: 'bi-tags',
+    label: 'Categorías',
+    roles: ['admin', 'worker'],
+  },
+  {
+    to: '/admin/pedidos',
+    icon: 'bi-receipt',
+    label: 'Pedidos',
+    roles: ['admin', 'worker'],
+  },
+  {
+    to: '/admin/kardex',
+    icon: 'bi-journal-text',
+    label: 'Kardex',
+    roles: ['admin', 'worker'],
+  },
+  {
+    to: '/admin/proveedores',
+    icon: 'bi-truck',
+    label: 'Proveedores',
+    roles: ['admin', 'worker'],
+  },
+  {
+    to: '/admin/ordenes-compra',
+    icon: 'bi-bag-check',
+    label: 'Órdenes de compra',
+    roles: ['admin', 'worker'],
+  },
+  {
+    to: '/admin/ordenes-compra/importar',
+    icon: 'bi-file-earmark-excel',
+    label: 'Importar orden Excel',
+    roles: ['admin', 'worker'],
+  },
+  {
+    to: '/admin/importar-excel',
+    icon: 'bi-box-arrow-in-down',
+    label: 'Importar productos Excel',
+    roles: ['admin', 'worker'],
+  },
+  {
+    to: '/admin/usuarios',
+    icon: 'bi-people',
+    label: 'Usuarios',
+    roles: ['admin'],
+  },
+  {
+    to: '/admin/scryfall-single',
+    icon: 'bi-stars',
+    label: 'Crear single desde Scryfall',
+    roles: ['admin'],
+  },
+  {
+    to: '/admin/pricing-settings',
+    icon: 'bi-cash-stack',
+    label: 'Configuración de precios',
+    roles: ['admin'],
+  },
 ];
 
 export default function AdminSidebar({ open, onClose }) {
-  const { logout, isAdmin } = useAuth();
-  const nav = useNavigate();
+  const { logout, role, isAdmin, isWorker } = useAuth();
+  const navigate = useNavigate();
 
-  return <aside className={`admin-sidebar ${open ? 'open' : ''}`}>
-    <div className="admin-brand">ManaMarket Admin</div>
-    <nav className="d-flex flex-column gap-1">{items.filter((item) => isAdmin || item[0] !== '/admin/usuarios').map(([to, icon, label]) => <NavLink key={to} to={to} onClick={onClose} className="admin-link"><i className={`bi ${icon}`} />{label}</NavLink>)}</nav>
-    <div className="mt-auto d-grid gap-2"><NavLink className="btn btn-outline-secondary" to="/">Volver a la tienda</NavLink><button className="btn btn-primary" onClick={() => { logout(); nav('/login'); }}>Cerrar sesión</button></div>
-  </aside>;
+  const canSee = (item) => {
+    if (isAdmin) return true;
+    if (isWorker) return item.roles.includes('worker');
+    return item.roles.includes(role);
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
+
+  return (
+    <aside className={`admin-sidebar ${open ? 'open' : ''}`}>
+      <div className="admin-brand">
+        <i className="bi bi-magic me-2" />
+        ManaMarket Admin
+      </div>
+
+      <nav className="d-flex flex-column gap-1">
+        {menuItems.filter(canSee).map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            onClick={onClose}
+            className={({ isActive }) =>
+              `admin-link ${isActive ? 'active' : ''}`
+            }
+          >
+            <i className={`bi ${item.icon}`} />
+            <span>{item.label}</span>
+          </NavLink>
+        ))}
+      </nav>
+
+      <div className="mt-auto d-grid gap-2 pt-3">
+        <NavLink className="btn btn-outline-secondary" to="/" onClick={onClose}>
+          Volver a la tienda
+        </NavLink>
+
+        <button type="button" className="btn btn-primary" onClick={handleLogout}>
+          Cerrar sesión
+        </button>
+      </div>
+    </aside>
+  );
 }

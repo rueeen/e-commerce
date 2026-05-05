@@ -2,19 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/endpoints';
 import { notyf } from '../api/notifier';
 
-const conditions = ['NM', 'LP', 'MP', 'HP', 'DMG'];
-
-function getCardImage(card) {
-  return (
-    card?.image_uris?.large ||
-    card?.image_uris?.normal ||
-    card?.image_uris?.small ||
-    card?.card_faces?.[0]?.image_uris?.large ||
-    card?.card_faces?.[0]?.image_uris?.normal ||
-    card?.card_faces?.[0]?.image_uris?.small ||
-    ''
-  );
-}
+const CONDITIONS = ['NM', 'LP', 'MP', 'HP', 'DMG'];
+const LANGUAGES = ['EN', 'ES', 'JP', 'DE', 'FR', 'IT', 'PT'];
 
 const initialForm = {
   category_id: '',
@@ -26,106 +15,578 @@ const initialForm = {
   notes: '',
 };
 
+const fallbackPricing = {
+  usd_to_clp: 1000,
+  import_factor: 1.3,
+  risk_factor: 1.1,
+  margin_factor: 1.25,
+  rounding_to: 100,
+};
+
+const normalizeList = (data) => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.results)) return data.results;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
+};
+
+const normalizeCategoryName = (value) =>
+  String(value || '').trim().toLowerCase();
+
+const slugify = (value) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+const formatMoney = (value) =>
+  `$${Number(value || 0).toLocaleString('es-CL')}`;
+
+function getCardImage(card) {
+  return (
+    card?.image_large ||
+    card?.image_normal ||
+    card?.image_small ||
+    card?.image_uris?.large ||
+    card?.image_uris?.normal ||
+    card?.image_uris?.small ||
+    card?.card_faces?.[0]?.image_uris?.large ||
+    card?.card_faces?.[0]?.image_uris?.normal ||
+    card?.card_faces?.[0]?.image_uris?.small ||
+    ''
+  );
+}
+
+function getCardPrices(card) {
+  const prices = card?.prices || {};
+
+  return {
+    usd: Number(card?.usd_price || prices.usd || 0),
+    usdFoil: Number(card?.usd_foil_price || prices.usd_foil || 0),
+    usdEtched: Number(card?.usd_etched_price || prices.usd_etched || 0),
+  };
+}
+
+function getUsdReference(card, isFoil) {
+  const { usd, usdFoil, usdEtched } = getCardPrices(card);
+
+  if (isFoil) {
+    return usdFoil || usdEtched || usd || 0;
+  }
+
+  return usd || usdFoil || usdEtched || 0;
+}
+
+function roundTo(value, roundingTo) {
+  const base = Number(roundingTo || 1);
+
+  if (base <= 1) {
+    return Math.round(value);
+  }
+
+  return Math.round(value / base) * base;
+}
+
+function calculateSuggestedPrice(card, isFoil, pricing) {
+  const usd = getUsdReference(card, isFoil);
+  const settings = pricing || fallbackPricing;
+
+  const raw =
+    usd *
+    Number(settings.usd_to_clp || fallbackPricing.usd_to_clp) *
+    Number(settings.import_factor || fallbackPricing.import_factor) *
+    Number(settings.risk_factor || fallbackPricing.risk_factor) *
+    Number(settings.margin_factor || fallbackPricing.margin_factor);
+
+  return {
+    usd,
+    suggested: roundTo(raw, settings.rounding_to || 100),
+  };
+}
+
+function findSingleCategory(categories) {
+  const preferredNames = [
+    'cartas individuales',
+    'carta individual',
+    'singles',
+    'single',
+  ];
+
+  return categories.find((category) =>
+    preferredNames.includes(normalizeCategoryName(category.name))
+  );
+}
+
 export default function ScryfallSingleCreate() {
   const [q, setQ] = useState('');
   const [results, setResults] = useState([]);
   const [selected, setSelected] = useState(null);
+
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+
   const [categories, setCategories] = useState([]);
+  const [pricingSettings, setPricingSettings] = useState(fallbackPricing);
+
   const [form, setForm] = useState(initialForm);
   const [pricingPreview, setPricingPreview] = useState(null);
   const [missingSingleCategory, setMissingSingleCategory] = useState(false);
 
-  const normalizeCategories = (data) => {
-    if (Array.isArray(data)) return data;
-    if (Array.isArray(data?.results)) return data.results;
-    if (Array.isArray(data?.data)) return data.data;
-    return [];
-  };
-
-  const findSingleCategory = (list) => list.find((cat) => cat?.name?.trim()?.toLowerCase() === 'cartas individuales');
+  const selectedImage = useMemo(() => getCardImage(selected), [selected]);
 
   const loadCategories = async () => {
     const { data } = await api.getCategories();
-    const loaded = normalizeCategories(data);
+    const loaded = normalizeList(data);
+
     setCategories(loaded);
+
     const singleCategory = findSingleCategory(loaded);
     setMissingSingleCategory(!singleCategory);
+
     if (singleCategory) {
-      setForm((prev) => ({ ...prev, category_id: Number(singleCategory.id) }));
+      setForm((current) => ({
+        ...current,
+        category_id: String(singleCategory.id),
+      }));
+    }
+  };
+
+  const loadPricingSettings = async () => {
+    try {
+      const { data } = await api.getActivePricingSettings();
+
+      setPricingSettings({
+        ...fallbackPricing,
+        ...data,
+      });
+    } catch {
+      setPricingSettings(fallbackPricing);
     }
   };
 
   useEffect(() => {
-    loadCategories()
-      .catch(() => notyf.error('No se pudieron cargar categorías'));
+    loadCategories();
+    loadPricingSettings();
   }, []);
+
+  const updateForm = (field, value) => {
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
 
   const createSingleCategory = async () => {
     setSaving(true);
-    api.getCategories()
-      .then(() => api.createCategory({ name: 'Cartas individuales' }))
-      .then(() => loadCategories())
-      .then(() => notyf.success('Categoría Cartas individuales creada correctamente'))
-      .catch((e) => notyf.error(e?.response?.data?.detail || 'No se pudo crear la categoría'))
-      .finally(() => setSaving(false));
+
+    try {
+      await api.createCategory({
+        name: 'Cartas individuales',
+        slug: 'cartas-individuales',
+        description: 'Cartas single de Magic: The Gathering.',
+        is_active: true,
+      });
+
+      await loadCategories();
+      notyf.success('Categoría Cartas individuales creada correctamente.');
+    } catch {
+      // El apiClient ya muestra el error.
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const selectedImage = useMemo(() => getCardImage(selected), [selected]);
-
   const search = async () => {
-    if (!q.trim()) return;
+    const query = q.trim();
+
+    if (!query) {
+      notyf.error('Ingresa una carta para buscar.');
+      return;
+    }
+
     setLoading(true);
+    setResults([]);
+
     try {
-      const { data } = await api.searchScryfallCards(q.trim());
-      setResults(data?.data || data?.results || []);
-    } catch { notyf.error('No se pudo buscar en Scryfall'); } finally { setLoading(false); }
+      const { data } = await api.searchScryfallCards(query);
+      setResults(normalizeList(data));
+    } catch {
+      // El apiClient ya muestra el error.
+    } finally {
+      setLoading(false);
+    }
   };
 
   const openCreateModal = (card) => {
-    const usd = Number(card?.prices?.usd || 0);
-    const suggested = Math.round((usd * 1000 * 1.3 * 1.1 * 1.25) / 100) * 100;
-    setPricingPreview({ usd, suggested });
+    const preview = calculateSuggestedPrice(
+      card,
+      Boolean(initialForm.is_foil),
+      pricingSettings
+    );
+
+    setPricingPreview(preview);
     setSelected(card);
-    setForm((prev) => ({ ...initialForm, category_id: prev.category_id, price_clp: suggested || 0 }));
+
+    setForm((current) => ({
+      ...initialForm,
+      category_id: current.category_id,
+      price_clp: preview.suggested || 0,
+    }));
+  };
+
+  const handleFoilChange = (checked) => {
+    updateForm('is_foil', checked);
+
+    if (selected) {
+      const preview = calculateSuggestedPrice(selected, checked, pricingSettings);
+      setPricingPreview(preview);
+      updateForm('price_clp', preview.suggested || 0);
+    }
+  };
+
+  const closeModal = () => {
+    setSelected(null);
+    setPricingPreview(null);
+    setForm((current) => ({
+      ...initialForm,
+      category_id: current.category_id,
+    }));
   };
 
   const submit = async () => {
     if (!selected) return;
-    if (!form.category_id) return notyf.error('Debes seleccionar una categoría');
-    if (form.price_clp === '') return notyf.error('Debes ingresar un precio final válido');
+
+    if (!form.category_id) {
+      notyf.error('Debes seleccionar una categoría.');
+      return;
+    }
+
+    if (form.price_clp === '' || Number(form.price_clp) < 0) {
+      notyf.error('Debes ingresar un precio final válido.');
+      return;
+    }
+
     setSaving(true);
+
     try {
-      console.log('Creando single con Scryfall ID:', selected.id);
-      await api.createSingleFromScryfall({ ...form, scryfall_id: selected.id, category_id: Number(form.category_id), price_clp: Number(form.price_clp) });
-      notyf.success('Single creado/actualizado correctamente');
-      setSelected(null);
-      setForm(initialForm);
-      setPricingPreview(null);
-    } catch (e) {
-      notyf.error(e?.response?.data?.detail || e?.response?.data?.message || 'Error al crear single');
-    } finally { setSaving(false); }
+      await api.createSingleFromScryfall({
+        scryfall_id: selected.id || selected.scryfall_id,
+        category_id: Number(form.category_id),
+        price_clp: Number(form.price_clp || 0),
+        condition: form.condition,
+        language: String(form.language || 'EN').trim().toUpperCase(),
+        is_foil: Boolean(form.is_foil),
+        is_active: Boolean(form.is_active),
+        notes: form.notes || '',
+      });
+
+      notyf.success('Single creado correctamente.');
+      closeModal();
+    } catch {
+      // El apiClient ya muestra el error.
+    } finally {
+      setSaving(false);
+    }
   };
 
-  return <div><h3>Crear single desde Scryfall</h3>
-    <div className="alert alert-info">El stock se ingresa mediante Orden de Compra.</div><div className="input-group mb-3"><input className="form-control" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar: Cloud, Sauron..." /><button className="btn btn-primary" onClick={search} disabled={loading}><i className="bi bi-search" /> Buscar</button></div>
-    <div className="row g-3">{results.map((c) => <div className="col-md-3" key={c.id}><div className="card h-100 bg-dark text-light"><img src={getCardImage(c)} className="card-img-top scryfall-card-img" alt={c.name} /><div className="card-body"><h6>{c.name}</h6><small>{c.set?.toUpperCase()} #{c.collector_number} · {c.rarity}</small><button className="btn btn-outline-light btn-sm mt-2 w-100" onClick={() => openCreateModal(c)}>Crear single</button></div></div></div>)}</div>
-    {missingSingleCategory && <div className="alert alert-warning d-flex justify-content-between align-items-center">
-      <span>No existe la categoría Cartas individuales. Créala antes de publicar singles.</span>
-      <button className="btn btn-sm btn-outline-warning" type="button" onClick={createSingleCategory} disabled={saving}>
-        <i className="bi bi-plus-circle me-1" />
-        Crear categoría Cartas individuales
-      </button>
-    </div>}
-    {selected && <div className="modal d-block" tabIndex="-1" role="dialog"><div className="modal-dialog modal-lg modal-dialog-centered" role="document"><div className="modal-content bg-dark text-light"><div className="modal-header"><h5 className="modal-title">Crear single: {selected.name}</h5><button type="button" className="btn-close btn-close-white" aria-label="Close" onClick={() => setSelected(null)} /></div><div className="modal-body"><div className="row g-3"><div className="col-md-4">{selectedImage && <img src={selectedImage} className="img-fluid scryfall-card-img" alt={selected.name} />}</div><div className="col-md-8"><div className="row g-2">
-      <div className="col-md-6"><label className="form-label">Categoría</label><select className="form-select" value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}><option value="">Selecciona categoría</option>{categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select></div>
-      <div className="col-12"><div className="alert alert-info"><strong>Precio base:</strong> ${pricingPreview?.usd || 0} USD<br /><strong>Precio sugerido:</strong> ${Number(pricingPreview?.suggested || 0).toLocaleString('es-CL')} CLP <span title="Este precio considera costos de importación, tipo de cambio y margen del negocio">ⓘ</span><br /><small>Tipo cambio: 1000 · Importación: +30% · Riesgo: +10% · Margen: +25%</small></div></div>
-      <div className="col-md-6"><label className="form-label">Precio CLP final (editable)</label><input type="number" min="0" className="form-control" value={form.price_clp} onChange={(e) => setForm({ ...form, price_clp: Number(e.target.value) })} /></div>
-            <div className="col-md-6"><label className="form-label">Condición</label><select className="form-select" value={form.condition} onChange={(e) => setForm({ ...form, condition: e.target.value })}>{conditions.map((it) => <option key={it}>{it}</option>)}</select></div>
-      <div className="col-md-6"><label className="form-label">Idioma</label><input className="form-control" value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value })} /></div>
-      <div className="col-md-6 d-flex gap-3 align-items-center"><div className="form-check"><input className="form-check-input" type="checkbox" checked={form.is_foil} onChange={(e) => setForm({ ...form, is_foil: e.target.checked })} /><label className="form-check-label">Foil</label></div><div className="form-check"><input className="form-check-input" type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} /><label className="form-check-label">Activo</label></div></div>
-      <div className="col-12"><label className="form-label">Notas</label><textarea className="form-control" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
-    </div></div></div></div><div className="modal-footer"><button type="button" className="btn btn-secondary" onClick={() => setSelected(null)}>Cancelar</button><button type="button" className="btn btn-success" onClick={submit} disabled={saving}>{saving ? 'Guardando...' : 'Guardar single'}</button></div></div></div></div>}
-  </div>;
+  return (
+    <div>
+      <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div>
+          <h3 className="mb-1">Crear single desde Scryfall</h3>
+          <p className="text-muted mb-0">
+            Busca una carta en Scryfall y crea un producto single sin modificar stock.
+          </p>
+        </div>
+      </div>
+
+      <div className="alert alert-info">
+        El stock se ingresa mediante orden de compra, recepción, lotes FIFO y Kardex.
+      </div>
+
+      {missingSingleCategory && (
+        <div className="alert alert-warning d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <span>
+            No existe una categoría para singles. Créala antes de publicar cartas individuales.
+          </span>
+
+          <button
+            className="btn btn-sm btn-outline-warning"
+            type="button"
+            onClick={createSingleCategory}
+            disabled={saving}
+          >
+            <i className="bi bi-plus-circle me-1" />
+            Crear categoría Cartas individuales
+          </button>
+        </div>
+      )}
+
+      <div className="input-group mb-3">
+        <input
+          className="form-control"
+          value={q}
+          onChange={(event) => setQ(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') search();
+          }}
+          placeholder="Buscar: Cloud, Sauron, Lightning Bolt..."
+        />
+
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={search}
+          disabled={loading}
+        >
+          <i className="bi bi-search me-1" />
+          {loading ? 'Buscando...' : 'Buscar'}
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="panel-card p-4 text-center text-muted">
+          Buscando cartas en Scryfall...
+        </div>
+      ) : results.length === 0 ? (
+        <div className="panel-card p-4 text-center text-muted">
+          No hay resultados para mostrar.
+        </div>
+      ) : (
+        <div className="row g-3">
+          {results.map((card) => (
+            <div className="col-md-3" key={card.id || card.scryfall_id}>
+              <div className="card h-100">
+                {getCardImage(card) ? (
+                  <img
+                    src={getCardImage(card)}
+                    className="card-img-top scryfall-card-img"
+                    alt={card.name}
+                  />
+                ) : (
+                  <div className="scryfall-card-img d-flex align-items-center justify-content-center text-muted">
+                    Sin imagen
+                  </div>
+                )}
+
+                <div className="card-body">
+                  <h6>{card.name}</h6>
+
+                  <small className="text-muted">
+                    {(card.set || card.set_code || '').toUpperCase()} #
+                    {card.collector_number} · {card.rarity}
+                  </small>
+
+                  <button
+                    type="button"
+                    className="btn btn-outline-light btn-sm mt-2 w-100"
+                    onClick={() => openCreateModal(card)}
+                  >
+                    Crear single
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {selected && (
+        <div
+          className="modal d-block"
+          tabIndex="-1"
+          role="dialog"
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.65)' }}
+        >
+          <div className="modal-dialog modal-lg modal-dialog-centered" role="document">
+            <div className="modal-content bg-dark text-light border-secondary">
+              <div className="modal-header border-secondary">
+                <h5 className="modal-title">Crear single: {selected.name}</h5>
+
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  aria-label="Cerrar"
+                  onClick={closeModal}
+                />
+              </div>
+
+              <div className="modal-body">
+                <div className="row g-3">
+                  <div className="col-md-4">
+                    {selectedImage && (
+                      <img
+                        src={selectedImage}
+                        className="img-fluid scryfall-card-img"
+                        alt={selected.name}
+                      />
+                    )}
+                  </div>
+
+                  <div className="col-md-8">
+                    <div className="row g-2">
+                      <div className="col-md-6">
+                        <label className="form-label">Categoría</label>
+                        <select
+                          className="form-select"
+                          value={form.category_id}
+                          onChange={(event) =>
+                            updateForm('category_id', event.target.value)
+                          }
+                        >
+                          <option value="">Selecciona categoría</option>
+                          {categories.map((category) => (
+                            <option key={category.id} value={category.id}>
+                              {category.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="col-md-6">
+                        <label className="form-label">Condición</label>
+                        <select
+                          className="form-select"
+                          value={form.condition}
+                          onChange={(event) =>
+                            updateForm('condition', event.target.value)
+                          }
+                        >
+                          {CONDITIONS.map((condition) => (
+                            <option key={condition} value={condition}>
+                              {condition}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="col-12">
+                        <div className="alert alert-info">
+                          <strong>Precio base:</strong>{' '}
+                          {pricingPreview?.usd || 0} USD
+                          <br />
+                          <strong>Precio sugerido:</strong>{' '}
+                          {formatMoney(pricingPreview?.suggested)}
+                          <br />
+                          <small>
+                            Tipo cambio: {pricingSettings.usd_to_clp} ·
+                            Importación: +{Math.round((pricingSettings.import_factor - 1) * 100)}% ·
+                            Riesgo: +{Math.round((pricingSettings.risk_factor - 1) * 100)}% ·
+                            Margen: +{Math.round((pricingSettings.margin_factor - 1) * 100)}% ·
+                            Redondeo: {pricingSettings.rounding_to}
+                          </small>
+                        </div>
+                      </div>
+
+                      <div className="col-md-6">
+                        <label className="form-label">Precio CLP final</label>
+                        <input
+                          type="number"
+                          min="0"
+                          className="form-control"
+                          value={form.price_clp}
+                          onChange={(event) =>
+                            updateForm('price_clp', event.target.value)
+                          }
+                        />
+                      </div>
+
+                      <div className="col-md-6">
+                        <label className="form-label">Idioma</label>
+                        <select
+                          className="form-select"
+                          value={form.language}
+                          onChange={(event) =>
+                            updateForm('language', event.target.value)
+                          }
+                        >
+                          {LANGUAGES.map((language) => (
+                            <option key={language} value={language}>
+                              {language}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="col-md-6 d-flex gap-3 align-items-center">
+                        <div className="form-check">
+                          <input
+                            id="single-is-foil"
+                            className="form-check-input"
+                            type="checkbox"
+                            checked={form.is_foil}
+                            onChange={(event) =>
+                              handleFoilChange(event.target.checked)
+                            }
+                          />
+
+                          <label
+                            className="form-check-label"
+                            htmlFor="single-is-foil"
+                          >
+                            Foil
+                          </label>
+                        </div>
+
+                        <div className="form-check">
+                          <input
+                            id="single-is-active"
+                            className="form-check-input"
+                            type="checkbox"
+                            checked={form.is_active}
+                            onChange={(event) =>
+                              updateForm('is_active', event.target.checked)
+                            }
+                          />
+
+                          <label
+                            className="form-check-label"
+                            htmlFor="single-is-active"
+                          >
+                            Activo
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="col-12">
+                        <label className="form-label">Notas</label>
+                        <textarea
+                          className="form-control"
+                          value={form.notes}
+                          onChange={(event) => updateForm('notes', event.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-footer border-secondary">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={closeModal}
+                  disabled={saving}
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-success"
+                  onClick={submit}
+                  disabled={saving}
+                >
+                  {saving ? 'Guardando...' : 'Guardar single'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
