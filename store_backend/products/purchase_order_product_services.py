@@ -5,8 +5,11 @@ from django.db import transaction
 from django.utils.dateparse import parse_date
 
 from .models import Category, MTGCard, Product, SingleCard
-from .services import extract_usd_price, get_scryfall_card_by_id
-
+from .services import (
+    extract_usd_price,
+    get_scryfall_card_by_id,
+    resolve_scryfall_card,
+)
 
 PREFERRED_SINGLE_CATEGORY_NAMES = {
     "singles",
@@ -66,6 +69,68 @@ def resolve_purchase_order_product_category(category=None):
             return cat
 
     return categories[0] if categories else None
+
+
+def ensure_item_has_scryfall_data(item):
+    """
+    Garantiza que el PurchaseOrderItem tenga datos suficientes de Scryfall.
+
+    Si el importador solo dejó normalized_card_name/set_name_detected,
+    este método busca la carta en Scryfall y guarda scryfall_id/scryfall_data
+    en el item para que luego se pueda crear MTGCard/Product/SingleCard.
+    """
+    if item.scryfall_id or item.scryfall_data:
+        return item
+
+    card_name = (
+        item.normalized_card_name
+        or item.raw_description
+        or ""
+    ).strip()
+
+    if not card_name:
+        raise ValidationError(
+            "El item no tiene nombre de carta para buscar en Scryfall."
+        )
+
+    set_hint = str(getattr(item, "set_name_detected", "") or "").strip()
+
+    is_foil = bool(
+        getattr(item, "is_foil_detected", False)
+        or getattr(item, "is_foil", False)
+    )
+
+    result = resolve_scryfall_card(
+        card_name=card_name,
+        set_hint=set_hint,
+        is_foil=is_foil,
+    )
+
+    if not result.get("found"):
+        message = result.get("message") or result.get("error") or "sin detalle"
+        raise ValidationError(
+            f"No se encontró coincidencia en Scryfall para '{card_name}': {message}"
+        )
+
+    scryfall_id = result.get("scryfall_id") or result.get("id")
+
+    if not scryfall_id:
+        raise ValidationError(
+            f"Scryfall respondió sin ID para '{card_name}'."
+        )
+
+    item.scryfall_id = scryfall_id
+    item.scryfall_data = result
+
+    update_fields = ["scryfall_id", "scryfall_data"]
+
+    if hasattr(item, "scryfall_status"):
+        item.scryfall_status = "matched"
+        update_fields.append("scryfall_status")
+
+    item.save(update_fields=update_fields)
+
+    return item
 
 
 def _build_card_payload(item):
@@ -170,8 +235,11 @@ def _get_language_and_foil(item):
     if not isinstance(scryfall_data, dict):
         scryfall_data = {}
 
-    language = str(scryfall_data.get("language")
-                   or "EN").strip().upper() or "EN"
+    language = str(
+        scryfall_data.get("language")
+        or getattr(item, "language", "")
+        or "EN"
+    ).strip().upper() or "EN"
 
     is_foil = bool(
         scryfall_data.get("is_foil_detected")
@@ -234,12 +302,15 @@ def create_product_from_purchase_order_item(item, *, category=None, created_by=N
     Crea o reutiliza un producto single desde un PurchaseOrderItem.
 
     Reglas:
+    - Si falta Scryfall, intenta resolverlo automáticamente.
     - Usa datos de Scryfall para poblar MTGCard.
     - Evita duplicar SingleCard para la misma carta, condición, idioma y foil.
     - Crea Product inactivo para que el administrador revise antes de publicar.
     - No modifica stock. El stock debe entrar por recepción de orden/lotes/Kardex.
     """
     del created_by
+
+    item = ensure_item_has_scryfall_data(item)
 
     if not item.scryfall_id and not item.scryfall_data:
         raise ValidationError("El item no tiene scryfall_id ni scryfall_data.")

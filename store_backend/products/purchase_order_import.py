@@ -23,6 +23,46 @@ VALID_CONDITIONS = {"NM", "LP", "MP", "HP", "DMG"}
 
 TOLERANCE = D("0.02")
 
+SHIPPING_LINE_TOKENS = {
+    "ups",
+    "worldwide saver",
+    "shipping",
+    "shipment",
+    "delivery",
+    "freight",
+    "envio",
+    "envío",
+    "courier",
+    "dhl",
+    "fedex",
+    "usps",
+}
+
+FEE_LINE_TOKENS = {
+    "handling",
+    "customs",
+    "aduana",
+    "tax",
+    "sales tax",
+    "fee",
+    "duties",
+    "import duties",
+}
+
+
+def _is_shipping_line(description: str) -> bool:
+    text = str(description or "").strip().lower()
+    return any(token in text for token in SHIPPING_LINE_TOKENS)
+
+
+def _is_fee_line(description: str) -> bool:
+    text = str(description or "").strip().lower()
+    return any(token in text for token in FEE_LINE_TOKENS)
+
+
+def _is_non_product_line(description: str) -> bool:
+    return _is_shipping_line(description) or _is_fee_line(description)
+
 
 def _to_decimal(value):
     if value is None:
@@ -130,6 +170,44 @@ def _is_header_row(row):
     ]
 
 
+def _apply_non_product_line_to_totals(
+    *,
+    description,
+    amount,
+    totals,
+    warnings,
+    row_number,
+):
+    """
+    Evita que líneas logísticas del Excel se transformen en productos.
+
+    Ejemplos:
+    - UPS Worldwide Saver
+    - Shipping
+    - Handling
+    - Sales Tax
+    - Customs
+    """
+    amount = D(amount or 0)
+
+    if _is_shipping_line(description):
+        if amount > 0:
+            totals["shipping_original"] += amount
+
+        warnings.append(
+            f"Fila {row_number}: '{description}' fue tratado como envío, no como producto."
+        )
+        return
+
+    if _is_fee_line(description):
+        if amount > 0:
+            totals["sales_tax_original"] += amount
+
+        warnings.append(
+            f"Fila {row_number}: '{description}' fue tratado como cargo/impuesto, no como producto."
+        )
+
+
 def _parse_normalized_workbook(wb):
     if (
         "purchase_order" not in wb.sheetnames
@@ -168,7 +246,8 @@ def _parse_normalized_workbook(wb):
 
     if not header_row:
         raise ValidationError(
-            "La hoja purchase_order_items no tiene encabezados.")
+            "La hoja purchase_order_items no tiene encabezados."
+        )
 
     headers = [
         str(cell.value or "").strip().lower()
@@ -215,6 +294,27 @@ def _parse_normalized_workbook(wb):
             )
             or ""
         ).strip()
+
+        if _is_non_product_line(raw):
+            total_value = _to_decimal(
+                _get_cell_by_header(
+                    row,
+                    idx,
+                    "total_original",
+                    "line_total_original",
+                    "total",
+                    default=0,
+                )
+            )
+
+            _apply_non_product_line_to_totals(
+                description=raw,
+                amount=total_value,
+                totals=totals,
+                warnings=warnings,
+                row_number=row_number,
+            )
+            continue
 
         norm = str(
             _get_cell_by_header(
@@ -438,10 +538,23 @@ def parse_purchase_order_excel(file, fallback_currency="CLP"):
                     currency = detected_currency
 
             totals[f"{key.replace(' ', '_')}_original"] = _to_decimal(
-                raw_total)
+                raw_total
+            )
             continue
 
         description = first
+
+        if _is_non_product_line(description):
+            total = _to_decimal(_safe_cell(row, 4, 0))
+
+            _apply_non_product_line_to_totals(
+                description=description,
+                amount=total,
+                totals=totals,
+                warnings=warnings,
+                row_number=row_number,
+            )
+            continue
 
         qty = int(
             _to_decimal(
