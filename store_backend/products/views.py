@@ -1082,13 +1082,17 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
         )
 
         with transaction.atomic():
+            currency = str(parsed.get("currency") or "USD").upper()
+            exchange_rate = self._get_exchange_rate_for_currency(currency)
+
             purchase_order = PurchaseOrder.objects.create(
                 supplier=supplier,
                 order_number=self._generate_order_number(),
                 created_by=request.user,
                 source_store=request.data.get("source_store", "Card Kingdom"),
                 status=PurchaseOrder.Status.DRAFT,
-                original_currency=parsed.get("currency", "CLP"),
+                original_currency=currency,
+                exchange_rate_snapshot_clp=exchange_rate,
                 subtotal_original=Decimal(
                     parsed["totals"]["subtotal_original"]),
                 shipping_original=Decimal(

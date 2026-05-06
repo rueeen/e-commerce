@@ -97,7 +97,14 @@ def calculate_purchase_order_totals(order):
     No guarda la orden, pero sí actualiza líneas item.line_total_clp
     e item.unit_price_clp.
     """
+    currency = str(order.original_currency or "CLP").upper()
     rate = _d(order.exchange_rate_snapshot_clp or 1)
+
+    if currency == "USD" and rate <= D("1"):
+        raise ValidationError(
+            "La orden está en USD, pero el tipo de cambio snapshot es inválido."
+        )
+
     subtotal_clp = 0
 
     for item in order.items.all():
@@ -105,7 +112,7 @@ def calculate_purchase_order_totals(order):
 
         line_clp = convert_money_to_clp(
             item.line_total_original,
-            order.original_currency,
+            currency,
             rate,
         )
 
@@ -122,12 +129,12 @@ def calculate_purchase_order_totals(order):
 
     shipping_clp = convert_money_to_clp(
         order.shipping_original,
-        order.original_currency,
+        currency,
         rate,
     )
     sales_tax_clp = convert_money_to_clp(
         order.sales_tax_original,
-        order.original_currency,
+        currency,
         rate,
     )
 
@@ -314,8 +321,13 @@ def receive_purchase_order(order, user):
 
         if unit_cost <= 0:
             raise ValidationError(
-                f"Costo unitario inválido para item {item.id}: "
-                "real_unit_cost_clp debe ser mayor a 0."
+                f"Costo unitario inválido para item {item.id} "
+                f"({item.normalized_card_name or item.raw_description}): "
+                "real_unit_cost_clp debe ser mayor a 0. "
+                f"currency={purchase_order.original_currency}, "
+                f"exchange_rate={purchase_order.exchange_rate_snapshot_clp}, "
+                f"unit_price_original={item.unit_price_original}, "
+                f"real_unit_cost_clp={item.real_unit_cost_clp}"
             )
 
         create_stock_movement(
