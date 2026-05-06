@@ -12,6 +12,7 @@ import ProductForm, {
 import ProductTable from '../components/ProductTable';
 
 const normalizeList = (data) => data?.results || data || [];
+const text = (value) => String(value ?? '').toLowerCase();
 
 const normalizeProductForForm = (product) => {
   const singleCard = product.single_card || {};
@@ -327,11 +328,11 @@ export default function AdminProductsPage() {
   };
 
   const filtered = useMemo(() => {
-    const search = filters.q.trim().toLowerCase();
+    const search = text(filters.q.trim());
 
     return products.filter((product) => {
-      const name = String(product.name || '').toLowerCase();
-      const description = String(product.description || '').toLowerCase();
+      const name = text(product.name);
+      const description = text(product.description);
 
       const matchesSearch =
         !search ||
@@ -344,7 +345,7 @@ export default function AdminProductsPage() {
 
       const matchesType =
         !filters.type ||
-        product.product_type === filters.type;
+        text(product.product_type) === text(filters.type);
 
       const matchesActive =
         !filters.active ||
@@ -352,7 +353,7 @@ export default function AdminProductsPage() {
 
       const matchesCondition =
         !filters.condition ||
-        getProductCondition(product) === filters.condition;
+        text(getProductCondition(product)) === text(filters.condition);
 
       const matchesFoil =
         !filters.is_foil ||
@@ -360,7 +361,7 @@ export default function AdminProductsPage() {
 
       const matchesLanguage =
         !filters.language ||
-        getProductLanguage(product) === filters.language;
+        text(getProductLanguage(product)) === text(filters.language);
 
       return (
         matchesSearch &&
