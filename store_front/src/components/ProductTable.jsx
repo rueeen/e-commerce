@@ -128,7 +128,7 @@ export default function ProductTable({
   }
 
   return (
-    <div className="table-responsive">
+    <div className="table-responsive admin-products-table">
       <table ref={tableRef} className="table align-middle mb-0">
         <thead>
           <tr>

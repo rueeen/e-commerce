@@ -370,9 +370,14 @@ export default function AdminProductsPage() {
 
       {showProductModal && (
         <>
-          <div className="modal fade show d-block" tabIndex="-1" role="dialog" aria-modal="true">
+          <div
+            className="modal fade show d-block admin-product-modal"
+            tabIndex="-1"
+            role="dialog"
+            aria-modal="true"
+          >
             <div className="modal-dialog modal-xl modal-dialog-scrollable">
-              <div className="modal-content admin-modal">
+              <div className="modal-content">
                 <div className="modal-header">
                   <h5 className="modal-title">
                     {editingProduct ? 'Editar producto' : 'Crear producto'}
@@ -404,7 +409,7 @@ export default function AdminProductsPage() {
               </div>
             </div>
           </div>
-          <div className="modal-backdrop fade show" />
+          <div className="modal-backdrop fade show admin-product-modal-backdrop" />
         </>
       )}
     </>

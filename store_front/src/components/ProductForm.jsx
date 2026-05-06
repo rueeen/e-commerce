@@ -84,7 +84,7 @@ export default function ProductForm({
   const isSealed = form.product_type === 'sealed';
 
   return (
-    <form className="panel-card p-3" onSubmit={onSubmit}>
+    <form className="panel-card p-3 admin-product-form" onSubmit={onSubmit}>
       <div className="row g-3">
         <div className="col-md-3">
           <label className="form-label">Tipo de producto</label>
@@ -403,7 +403,7 @@ export default function ProductForm({
           </div>
         </div>
 
-        <div className="col-12 d-flex gap-2">
+        <div className="col-12 d-flex gap-2 product-form-actions">
           <button type="submit" className="btn btn-primary" disabled={saving}>
             {saving ? 'Guardando...' : submitLabel}
           </button>
