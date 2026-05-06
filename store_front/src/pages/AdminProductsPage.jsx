@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/endpoints';
 import { fetchAllPaginated } from '../api/pagination';
 import { notyf } from '../api/notifier';
-import ExcelImportBox from '../components/ExcelImportBox';
 import ProductForm, {
   initialFormState,
 } from '../components/ProductForm';
@@ -79,11 +78,9 @@ export default function AdminProductsPage() {
   const [editingProduct, setEditingProduct] = useState(null);
   const [form, setForm] = useState(initialFormState);
 
-  const [importResult, setImportResult] = useState(null);
   const [cards, setCards] = useState([]);
   const [cardQuery, setCardQuery] = useState('');
 
-  const [isImporting, setIsImporting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -209,23 +206,6 @@ export default function AdminProductsPage() {
     onChange('set_code', card.set_code || form.set_code);
   };
 
-  const onImport = async (file) => {
-    if (isImporting) return;
-
-    setIsImporting(true);
-
-    try {
-      const { data } = await api.importCatalogXlsx(file);
-      setImportResult(data);
-      notyf.success('Importación completada.');
-      await load();
-    } catch {
-      // El apiClient ya muestra el error.
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
   const toggleActive = async (product) => {
     const nextActive = !product.is_active;
     const margin = Number(product.margin_clp || 0);
@@ -287,7 +267,7 @@ export default function AdminProductsPage() {
         <div>
           <h2 className="mb-1">Mantenedor de productos MTG</h2>
           <p className="text-muted mb-0">
-            Administra singles, productos sellados, bundles e importaciones del catálogo.
+            Administra singles y productos sellados. Para compras a proveedores usa órdenes de compra.
           </p>
         </div>
 
@@ -308,31 +288,6 @@ export default function AdminProductsPage() {
           {loading ? 'Actualizando...' : 'Actualizar'}
         </button>
       </div>
-
-      <ExcelImportBox
-        title="Importar catálogo"
-        columns={[
-          'type',
-          'name',
-          'category',
-          'description',
-          'price_clp',
-          'image',
-          'is_active',
-          'notes',
-          'scryfall_id',
-          'condition',
-          'language',
-          'is_foil',
-          'sealed_kind',
-          'set_code',
-          'set_name',
-        ]}
-        buttonLabel="Importar XLSX"
-        onImport={onImport}
-        result={importResult}
-        isImporting={isImporting}
-      />
 
       <div className="panel-card p-3 mt-4">
         <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">

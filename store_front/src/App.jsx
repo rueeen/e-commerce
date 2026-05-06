@@ -117,7 +117,7 @@ export default function App() {
           }
         />
 
-        <Route path="importar-excel" element={<Navigate to="productos" replace />} />
+        <Route path="importar-excel" element={<Navigate to="ordenes-compra" replace />} />
 
         <Route path="suppliers" element={<Navigate to="proveedores" replace />} />
         <Route path="purchase-orders" element={<Navigate to="ordenes-compra" replace />} />
