@@ -75,7 +75,8 @@ export default function AdminProductsPage() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
 
-  const [editing, setEditing] = useState(null);
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
   const [form, setForm] = useState(initialFormState);
 
   const [importResult, setImportResult] = useState(null);
@@ -116,10 +117,20 @@ export default function AdminProductsPage() {
   };
 
   const resetForm = () => {
-    setEditing(null);
+    setEditingProduct(null);
     setForm(initialFormState);
     setCards([]);
     setCardQuery('');
+  };
+
+  const closeProductModal = () => {
+    setShowProductModal(false);
+    resetForm();
+  };
+
+  const openCreateProductModal = () => {
+    resetForm();
+    setShowProductModal(true);
   };
 
   const submit = async (event) => {
@@ -150,15 +161,15 @@ export default function AdminProductsPage() {
     setSaving(true);
 
     try {
-      if (editing) {
-        await api.patchProduct(editing.id, payload);
+      if (editingProduct) {
+        await api.patchProduct(editingProduct.id, payload);
         notyf.success('Producto actualizado correctamente.');
       } else {
         await api.createProduct(payload);
         notyf.success('Producto creado correctamente.');
       }
 
-      resetForm();
+      closeProductModal();
       await load();
     } catch {
       // El apiClient ya muestra el error.
@@ -168,13 +179,9 @@ export default function AdminProductsPage() {
   };
 
   const onEdit = (product) => {
-    setEditing(product);
+    setEditingProduct(product);
     setForm(normalizeProductForForm(product));
-
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth',
-    });
+    setShowProductModal(true);
   };
 
   const searchCards = async () => {
@@ -286,6 +293,14 @@ export default function AdminProductsPage() {
 
         <button
           type="button"
+          className="btn btn-primary"
+          onClick={openCreateProductModal}
+        >
+          Nuevo producto
+        </button>
+
+        <button
+          type="button"
           className="btn btn-outline-secondary"
           onClick={load}
           disabled={loading}
@@ -317,21 +332,6 @@ export default function AdminProductsPage() {
         onImport={onImport}
         result={importResult}
         isImporting={isImporting}
-      />
-
-      <ProductForm
-        form={form}
-        categories={categories}
-        cards={cards}
-        cardQuery={cardQuery}
-        setCardQuery={setCardQuery}
-        onCardSearch={searchCards}
-        onCardSelect={selectCard}
-        onChange={onChange}
-        onSubmit={submit}
-        submitLabel={editing ? 'Actualizar producto' : 'Crear producto'}
-        saving={saving}
-        onCancel={editing ? resetForm : null}
       />
 
       <div className="panel-card p-3 mt-4">
@@ -367,6 +367,46 @@ export default function AdminProductsPage() {
           />
         )}
       </div>
+
+      {showProductModal && (
+        <>
+          <div className="modal fade show d-block" tabIndex="-1" role="dialog" aria-modal="true">
+            <div className="modal-dialog modal-xl modal-dialog-scrollable">
+              <div className="modal-content admin-modal">
+                <div className="modal-header">
+                  <h5 className="modal-title">
+                    {editingProduct ? 'Editar producto' : 'Crear producto'}
+                  </h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    aria-label="Cerrar"
+                    onClick={closeProductModal}
+                  />
+                </div>
+
+                <div className="modal-body">
+                  <ProductForm
+                    form={form}
+                    categories={categories}
+                    cards={cards}
+                    cardQuery={cardQuery}
+                    setCardQuery={setCardQuery}
+                    onCardSearch={searchCards}
+                    onCardSelect={selectCard}
+                    onChange={onChange}
+                    onSubmit={submit}
+                    submitLabel={editingProduct ? 'Actualizar producto' : 'Guardar'}
+                    saving={saving}
+                    onCancel={closeProductModal}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="modal-backdrop fade show" />
+        </>
+      )}
     </>
   );
 }
