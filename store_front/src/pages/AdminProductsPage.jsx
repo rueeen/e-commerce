@@ -1,18 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api/endpoints';
 import { fetchAllPaginated } from '../api/pagination';
 import { notyf } from '../api/notifier';
 import ExcelImportBox from '../components/ExcelImportBox';
 import ProductForm, {
-  CONDITION_OPTIONS,
-  LANGUAGE_OPTIONS,
-  PRODUCT_TYPE_OPTIONS,
   initialFormState,
 } from '../components/ProductForm';
 import ProductTable from '../components/ProductTable';
 
 const normalizeList = (data) => data?.results || data || [];
-const text = (value) => String(value ?? '').toLowerCase();
 
 const normalizeProductForForm = (product) => {
   const singleCard = product.single_card || {};
@@ -49,26 +45,6 @@ const normalizeProductForForm = (product) => {
     sealed_kind: product.sealed_product?.sealed_kind || initialFormState.sealed_kind,
     set_code: product.sealed_product?.set_code || '',
   };
-};
-
-const getProductCategoryId = (product) => {
-  return String(product.category_id || product.category?.id || '');
-};
-
-const getProductCondition = (product) => {
-  return product.single_card?.condition || product.condition || '';
-};
-
-const getProductLanguage = (product) => {
-  return product.single_card?.language || product.language || '';
-};
-
-const getProductIsFoil = (product) => {
-  if (product.single_card && typeof product.single_card.is_foil === 'boolean') {
-    return product.single_card.is_foil;
-  }
-
-  return Boolean(product.is_foil);
 };
 
 const buildProductPayload = (form) => {
@@ -109,16 +85,6 @@ export default function AdminProductsPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  const [filters, setFilters] = useState({
-    q: '',
-    category: '',
-    type: '',
-    active: '',
-    condition: '',
-    is_foil: '',
-    language: '',
-  });
 
   const load = async () => {
     setLoading(true);
@@ -308,73 +274,6 @@ export default function AdminProductsPage() {
     }
   };
 
-  const updateFilter = (key, value) => {
-    setFilters((previous) => ({
-      ...previous,
-      [key]: value,
-    }));
-  };
-
-  const clearFilters = () => {
-    setFilters({
-      q: '',
-      category: '',
-      type: '',
-      active: '',
-      condition: '',
-      is_foil: '',
-      language: '',
-    });
-  };
-
-  const filtered = useMemo(() => {
-    const search = text(filters.q.trim());
-
-    return products.filter((product) => {
-      const name = text(product.name);
-      const description = text(product.description);
-
-      const matchesSearch =
-        !search ||
-        name.includes(search) ||
-        description.includes(search);
-
-      const matchesCategory =
-        !filters.category ||
-        getProductCategoryId(product) === filters.category;
-
-      const matchesType =
-        !filters.type ||
-        text(product.product_type) === text(filters.type);
-
-      const matchesActive =
-        !filters.active ||
-        String(product.is_active) === filters.active;
-
-      const matchesCondition =
-        !filters.condition ||
-        text(getProductCondition(product)) === text(filters.condition);
-
-      const matchesFoil =
-        !filters.is_foil ||
-        String(getProductIsFoil(product)) === filters.is_foil;
-
-      const matchesLanguage =
-        !filters.language ||
-        text(getProductLanguage(product)) === text(filters.language);
-
-      return (
-        matchesSearch &&
-        matchesCategory &&
-        matchesType &&
-        matchesActive &&
-        matchesCondition &&
-        matchesFoil &&
-        matchesLanguage
-      );
-    });
-  }, [products, filters]);
-
   return (
     <>
       <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
@@ -440,114 +339,11 @@ export default function AdminProductsPage() {
           <div>
             <h5 className="mb-1">Listado de productos</h5>
             <p className="text-muted mb-0">
-              {filtered.length} producto(s) filtrados de {products.length}.
+              {products.length} producto(s) encontrados.
             </p>
             <p className="text-warning small mb-0">
               Solo los productos activos aparecen en la tienda pública.
             </p>
-          </div>
-
-          <button
-            type="button"
-            className="btn btn-outline-secondary btn-sm"
-            onClick={clearFilters}
-          >
-            Limpiar filtros
-          </button>
-        </div>
-
-        <div className="row g-2 mb-3">
-          <div className="col-md-3">
-            <input
-              className="form-control"
-              placeholder="Buscar por nombre"
-              value={filters.q}
-              onChange={(event) => updateFilter('q', event.target.value)}
-            />
-          </div>
-
-          <div className="col-md-2">
-            <select
-              className="form-select"
-              value={filters.category}
-              onChange={(event) => updateFilter('category', event.target.value)}
-            >
-              <option value="">Categorías</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="col-md-2">
-            <select
-              className="form-select"
-              value={filters.type}
-              onChange={(event) => updateFilter('type', event.target.value)}
-            >
-              <option value="">Tipos</option>
-              {PRODUCT_TYPE_OPTIONS.map((type) => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="col-md-2">
-            <select
-              className="form-select"
-              value={filters.active}
-              onChange={(event) => updateFilter('active', event.target.value)}
-            >
-              <option value="">Estado</option>
-              <option value="true">Activos</option>
-              <option value="false">Inactivos</option>
-            </select>
-          </div>
-
-          <div className="col-md-1">
-            <select
-              className="form-select"
-              value={filters.condition}
-              onChange={(event) => updateFilter('condition', event.target.value)}
-            >
-              <option value="">Cond.</option>
-              {CONDITION_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.value}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="col-md-1">
-            <select
-              className="form-select"
-              value={filters.is_foil}
-              onChange={(event) => updateFilter('is_foil', event.target.value)}
-            >
-              <option value="">Foil</option>
-              <option value="true">Sí</option>
-              <option value="false">No</option>
-            </select>
-          </div>
-
-          <div className="col-md-1">
-            <select
-              className="form-select"
-              value={filters.language}
-              onChange={(event) => updateFilter('language', event.target.value)}
-            >
-              <option value="">Idioma</option>
-              {LANGUAGE_OPTIONS.map((language) => (
-                <option key={language} value={language}>
-                  {language}
-                </option>
-              ))}
-            </select>
           </div>
         </div>
 
@@ -557,7 +353,7 @@ export default function AdminProductsPage() {
           </div>
         ) : (
           <ProductTable
-            products={filtered}
+            products={products}
             onEdit={onEdit}
             onToggleActive={toggleActive}
             onDelete={deleteProduct}
