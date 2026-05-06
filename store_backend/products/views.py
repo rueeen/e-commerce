@@ -31,6 +31,7 @@ from .permissions import IsAdminOrWorkerOrReadOnly
 from .purchase_order_import import parse_purchase_order_excel
 from .purchase_order_product_services import (
     create_product_from_purchase_order_item,
+    find_existing_single_product_for_purchase_item,
     resolve_purchase_order_product_category,
 )
 from .purchase_order_services import (
@@ -1016,26 +1017,6 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
-    def _find_existing_single_product(
-        self,
-        scryfall_id,
-        condition,
-        language="EN",
-        is_foil=False,
-    ):
-        single = (
-            SingleCard.objects.filter(
-                mtg_card__scryfall_id=scryfall_id,
-                condition=condition,
-                language=language,
-                is_foil=is_foil,
-            )
-            .select_related("product")
-            .first()
-        )
-
-        return single.product if single else None
-
     def _match_item_with_scryfall(
         self,
         item,
@@ -1072,18 +1053,12 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
 
         condition = _normalize_condition(item.style_condition)
 
-        product = self._find_existing_single_product(
-            result.get("scryfall_id", ""),
-            condition,
-            language,
-            is_foil,
-        )
-
         item.normalized_card_name = normalized_name
         item.set_name_detected = set_name or item.set_name_detected
         item.style_condition = condition
         item.scryfall_id = result["scryfall_id"]
         item.scryfall_data = result
+        product = find_existing_single_product_for_purchase_item(item)
 
         if product:
             item.product = product
@@ -1365,6 +1340,14 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
                             exc,
                         )
 
+                if not item.product_id:
+                    existing_product = find_existing_single_product_for_purchase_item(
+                        item
+                    )
+                    if existing_product:
+                        item.product = existing_product
+                        item.save(update_fields=["product"])
+
             if create_missing_products:
                 category = resolve_purchase_order_product_category(None)
 
@@ -1525,6 +1508,21 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
 
         for item in items:
             try:
+                existing_product = find_existing_single_product_for_purchase_item(item)
+                if existing_product:
+                    item.product = existing_product
+                    item.save(update_fields=["product"])
+                    linked_existing_count += 1
+                    results.append(
+                        {
+                            "item_id": item.id,
+                            "status": "linked_existing",
+                            "product_id": existing_product.id,
+                            "product_name": existing_product.name,
+                        }
+                    )
+                    continue
+
                 product, created = create_product_from_purchase_order_item(
                     item,
                     category=category,
