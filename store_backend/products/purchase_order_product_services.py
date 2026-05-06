@@ -210,6 +210,114 @@ def ensure_item_has_scryfall_data(item):
     return resolve_purchase_order_item_scryfall(item)
 
 
+def find_existing_single_product_for_purchase_item(item):
+    """
+    Busca un Product single existente para el item sin crear datos nuevos.
+
+    Matching principal:
+    - mtg_card.scryfall_id
+    - condition
+    - language
+    - is_foil
+    """
+
+    warning_added = False
+
+    def _append_warning(message):
+        nonlocal warning_added
+        data = item.scryfall_data if isinstance(item.scryfall_data, dict) else {}
+        warnings = data.get("warnings") if isinstance(data.get("warnings"), list) else []
+        warnings.append(message)
+        data["warnings"] = warnings
+        item.scryfall_data = data
+        warning_added = True
+
+    def _single_candidate(queryset, step_label):
+        matches = list(queryset.select_related("product")[:2])
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            _append_warning(
+                f"múltiples coincidencias en {step_label} para item #{item.id}"
+            )
+        return None
+
+    language, is_foil = _get_language_and_foil(item)
+    condition = normalize_condition(item.style_condition or Product.CardCondition.NM)
+
+    def _query_by_base_filters(queryset):
+        return queryset.filter(
+            condition=condition,
+            language=language,
+            is_foil=is_foil,
+        )
+
+    # 1) scryfall_id ya presente
+    if item.scryfall_id:
+        single = _single_candidate(
+            _query_by_base_filters(
+                SingleCard.objects.filter(
+                    mtg_card__scryfall_id=item.scryfall_id,
+                )
+            ),
+            "scryfall_id",
+        )
+        if single:
+            return single.product
+
+    # 2) intentar resolver scryfall y reintentar por scryfall_id
+    if not item.scryfall_id:
+        try:
+            ensure_item_has_scryfall_data(item)
+        except ValidationError:
+            pass
+
+        if item.scryfall_id:
+            single = _single_candidate(
+                _query_by_base_filters(
+                    SingleCard.objects.filter(
+                        mtg_card__scryfall_id=item.scryfall_id,
+                    )
+                ),
+                "scryfall_id_resuelto",
+            )
+            if single:
+                return single.product
+
+    # 3) fallback por nombre exacto (case-insensitive)
+    normalized_name = str(item.normalized_card_name or "").strip()
+    if normalized_name:
+        base_qs = _query_by_base_filters(
+            SingleCard.objects.filter(
+                mtg_card__name__iexact=normalized_name,
+            )
+        )
+        single = _single_candidate(base_qs, "nombre")
+        if single:
+            return single.product
+
+        # 4) fallback con set detectado si existe
+        set_hint = str(item.set_name_detected or "").strip()
+        if set_hint:
+            set_code_hint = set_hint.upper() if 2 <= len(set_hint) <= 6 else ""
+            set_filtered = base_qs.filter(
+                mtg_card__set_name__icontains=set_hint
+            )
+            if set_code_hint:
+                set_filtered = set_filtered | base_qs.filter(
+                    mtg_card__set_code__iexact=set_code_hint
+                )
+
+            single = _single_candidate(set_filtered, "nombre+set")
+            if single:
+                return single.product
+
+    if warning_added:
+        item.save(update_fields=["scryfall_data"])
+
+    return None
+
+
 def _build_card_payload(item):
     scryfall_data = item.scryfall_data or {}
 
