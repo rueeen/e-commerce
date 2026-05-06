@@ -227,13 +227,11 @@ class Product(models.Model):
         return int(calculate_suggested_price_from_real_cost(int(self.cost_real_clp or 0)) or 0)
 
     def get_precio_sugerido_clp(self):
-        usd = Decimal(str(self.price_external_usd or 0))
-        rate = Decimal(str(self.exchange_rate_usd_clp or 0))
-        return int((usd * rate).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        return int(self.suggested_price_clp or 0)
 
     @property
     def precio_sugerido_clp(self):
-        return self.get_precio_sugerido_clp()
+        return int(self.suggested_price_clp or 0)
 
     def clean(self):
         super().clean()
