@@ -560,6 +560,7 @@ export default function AdminProductsPage() {
             onEdit={onEdit}
             onToggleActive={toggleActive}
             onDelete={deleteProduct}
+            onApplySuggestedPrice={applySuggestedPrice}
             onViewKardex={(product) =>
               window.location.assign(`/admin/kardex?product_id=${product.id}`)
             }

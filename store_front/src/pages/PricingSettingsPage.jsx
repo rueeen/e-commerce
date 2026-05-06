@@ -18,6 +18,13 @@ const initial = {
 };
 
 const ROUNDING_OPTIONS = [10, 50, 100, 500, 1000];
+const PRODUCT_TYPE_OPTIONS = [
+  { value: '', label: 'Todos los tipos' },
+  { value: 'single', label: 'Single' },
+  { value: 'sealed', label: 'Sellado' },
+  { value: 'bundle', label: 'Bundle' },
+  { value: 'accessory', label: 'Accesorio' },
+];
 
 const normalizeList = (data) => data?.results || data || [];
 
@@ -446,6 +453,127 @@ export default function PricingSettingsPage() {
             >
               {saving ? 'Guardando...' : 'Guardar configuración'}
             </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="panel-card p-3 mt-4">
+        <div className="d-flex justify-content-between align-items-center gap-2 mb-3">
+          <div>
+            <h5 className="mb-1">Recalcular precios de productos</h5>
+            <p className="text-muted mb-0">
+              Ejecuta recálculo masivo con filtros opcionales, sin tocar stock ni Kardex.
+            </p>
+          </div>
+        </div>
+
+        <div className="row g-3">
+          <div className="col-md-4">
+            <div className="form-check">
+              <input
+                id="apply_to_sale_price"
+                className="form-check-input"
+                type="checkbox"
+                checked={recalcOptions.apply_to_sale_price}
+                onChange={(event) =>
+                  setRecalcOptions((current) => ({
+                    ...current,
+                    apply_to_sale_price: event.target.checked,
+                  }))
+                }
+                disabled={recalcLoading}
+              />
+              <label htmlFor="apply_to_sale_price" className="form-check-label">
+                apply_to_sale_price
+              </label>
+            </div>
+          </div>
+
+          <div className="col-md-4">
+            <div className="form-check">
+              <input
+                id="only_negative_margin"
+                className="form-check-input"
+                type="checkbox"
+                checked={recalcOptions.only_negative_margin}
+                onChange={(event) =>
+                  setRecalcOptions((current) => ({
+                    ...current,
+                    only_negative_margin: event.target.checked,
+                  }))
+                }
+                disabled={recalcLoading}
+              />
+              <label htmlFor="only_negative_margin" className="form-check-label">
+                only_negative_margin
+              </label>
+            </div>
+          </div>
+
+          <div className="col-md-4">
+            <div className="form-check">
+              <input
+                id="only_with_stock"
+                className="form-check-input"
+                type="checkbox"
+                checked={recalcOptions.only_with_stock}
+                onChange={(event) =>
+                  setRecalcOptions((current) => ({
+                    ...current,
+                    only_with_stock: event.target.checked,
+                  }))
+                }
+                disabled={recalcLoading}
+              />
+              <label htmlFor="only_with_stock" className="form-check-label">
+                only_with_stock
+              </label>
+            </div>
+          </div>
+
+          <div className="col-md-4">
+            <label className="form-label">product_type</label>
+            <select
+              className="form-select"
+              value={recalcOptions.product_type}
+              onChange={(event) =>
+                setRecalcOptions((current) => ({
+                  ...current,
+                  product_type: event.target.value,
+                }))
+              }
+              disabled={recalcLoading}
+            >
+              {PRODUCT_TYPE_OPTIONS.map((option) => (
+                <option key={option.value || 'all'} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="col-12">
+            <button
+              type="button"
+              className="btn btn-warning"
+              onClick={recalculatePrices}
+              disabled={recalcLoading}
+            >
+              {recalcLoading ? 'Recalculando...' : 'Recalcular precios'}
+            </button>
+          </div>
+
+          <div className="col-12">
+            <div className="alert alert-secondary mb-0">
+              <strong>Resultado:</strong>{' '}
+              {recalcResult ? (
+                <pre className="mb-0 mt-2">
+                  {JSON.stringify(recalcResult, null, 2)}
+                </pre>
+              ) : (
+                <span className="text-muted">Aún no se ha ejecutado el recálculo.</span>
+              )}
+            </div>
           </div>
         </div>
       </div>

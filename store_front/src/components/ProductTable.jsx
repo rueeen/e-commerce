@@ -158,7 +158,11 @@ export default function ProductTable({
             const isFoil = getIsFoil(product);
             const precioVenta = Number(product.computed_price_clp || product.price_clp || 0);
             const costoReal = Number(product.cost_real_clp || 0);
-            const sugeridoClp = Number(product.precio_sugerido_clp || product.price_clp_suggested || product.suggested_price_clp || 0);
+            const sugeridoClp = Number(
+              product.price_clp_suggested ?? product.suggested_price_clp ?? product.precio_sugerido_clp ?? 0
+            );
+            const marginClp = product.margin_clp ?? product.margen_clp;
+            const marginPercentage = product.margin_percentage ?? product.margen_pct;
             const alertClass = getPriceAlertClass(precioVenta, sugeridoClp, costoReal);
 
             return (
@@ -215,8 +219,8 @@ export default function ProductTable({
                 <td>{formatMoney(costoReal)}</td>
 
                 <td>
-                  <span className={`badge ${Number(product.margin_clp || 0) < 0 ? "badge-error" : "badge-success"}`}>
-                    {formatMoney(product.margin_clp)} ({Number(product.margin_percentage || 0).toFixed(2)}%)
+                  <span className={`badge ${Number(marginClp || 0) < 0 ? "badge-error" : "badge-success"}`}>
+                    {formatMoney(marginClp)} ({Number(marginPercentage || 0).toFixed(2)}%)
                   </span>
                 </td>
 
