@@ -37,6 +37,16 @@ export default function PricingSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const [recalcOptions, setRecalcOptions] = useState({
+    apply_to_sale_price: false,
+    only_negative_margin: true,
+    only_with_stock: true,
+    only_active: false,
+    product_type: '',
+  });
+  const [recalcLoading, setRecalcLoading] = useState(false);
+  const [recalcResult, setRecalcResult] = useState(null);
+
   const help = useMemo(
     () => ({
       importPct: formatPercentage(settings.import_factor),
@@ -171,6 +181,30 @@ export default function PricingSettingsPage() {
       // El apiClient ya muestra el error.
     } finally {
       setSaving(false);
+    }
+  };
+
+
+  const recalculatePrices = async () => {
+    const warning = recalcOptions.apply_to_sale_price
+      ? 'Esta opción cambiará el precio visible en tienda. ¿Deseas continuar?'
+      : 'Esta acción recalculará precios sugeridos usando la configuración activa. No modificará stock ni Kardex. ¿Deseas continuar?';
+
+    if (!window.confirm(warning)) return;
+
+    setRecalcLoading(true);
+    try {
+      const payload = {
+        ...recalcOptions,
+        product_type: recalcOptions.product_type || null,
+      };
+      const { data } = await api.recalculateProductPrices(payload);
+      setRecalcResult(data);
+      notyf.success('Recalculo ejecutado correctamente.');
+    } catch {
+      // El apiClient ya muestra el error.
+    } finally {
+      setRecalcLoading(false);
     }
   };
 
