@@ -1,3 +1,8 @@
+import { useEffect, useRef } from 'react';
+import DataTable from 'datatables.net-bs5';
+
+import 'datatables.net-bs5/css/dataTables.bootstrap5.css';
+
 import { PRODUCT_TYPE_OPTIONS } from './ProductForm';
 
 const typeLabel = Object.fromEntries(
@@ -65,6 +70,47 @@ export default function ProductTable({
   onViewKardex,
   onCreatePO,
 }) {
+  const tableRef = useRef(null);
+  const dataTableRef = useRef(null);
+
+  useEffect(() => {
+    if (!tableRef.current || !products.length) return;
+
+    if (dataTableRef.current) {
+      dataTableRef.current.destroy();
+      dataTableRef.current = null;
+    }
+
+    dataTableRef.current = new DataTable(tableRef.current, {
+      paging: true,
+      searching: true,
+      ordering: true,
+      pageLength: 25,
+      lengthMenu: [10, 25, 50, 100],
+      responsive: true,
+      language: {
+        search: 'Buscar:',
+        lengthMenu: 'Mostrar _MENU_ productos',
+        info: 'Mostrando _START_ a _END_ de _TOTAL_ productos',
+        infoEmpty: 'Sin productos',
+        zeroRecords: 'No se encontraron productos',
+        paginate: {
+          first: 'Primero',
+          last: 'Último',
+          next: 'Siguiente',
+          previous: 'Anterior',
+        },
+      },
+    });
+
+    return () => {
+      if (dataTableRef.current) {
+        dataTableRef.current.destroy();
+        dataTableRef.current = null;
+      }
+    };
+  }, [products]);
+
   if (!products.length) {
     return (
       <div className="panel-card p-4 text-center text-muted">
@@ -75,7 +121,7 @@ export default function ProductTable({
 
   return (
     <div className="table-responsive">
-      <table className="table align-middle mb-0">
+      <table ref={tableRef} className="table align-middle mb-0">
         <thead>
           <tr>
             <th>ID</th>
@@ -162,6 +208,9 @@ export default function ProductTable({
                   <span className={`badge ${product.is_active ? 'badge-success' : 'badge-soft'}`}>
                     {product.is_active ? 'Activo' : 'Inactivo'}
                   </span>
+                  <div className="small text-muted mt-1">
+                    {product.is_active ? 'Visible en tienda' : 'No visible en tienda'}
+                  </div>
                 </td>
 
                 <td className="text-end">
