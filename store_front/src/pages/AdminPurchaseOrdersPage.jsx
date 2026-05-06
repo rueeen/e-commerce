@@ -480,6 +480,9 @@ export default function AdminPurchaseOrdersPage() {
           <p className="text-muted mb-0">
             Gestiona compras a proveedores, recepción de stock, lotes FIFO y Kardex.
           </p>
+          <p className="text-info mb-0 small">
+            Para ingresar productos desde proveedores, importa una orden de compra Excel. Los productos se crearán o vincularán automáticamente.
+          </p>
         </div>
 
         <div className="d-flex flex-wrap gap-2">

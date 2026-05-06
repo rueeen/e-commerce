@@ -51,12 +51,6 @@ const menuItems = [
     roles: ['admin', 'worker'],
   },
   {
-    to: '/admin/importar-excel',
-    icon: 'bi-box-arrow-in-down',
-    label: 'Importar productos Excel',
-    roles: ['admin', 'worker'],
-  },
-  {
     to: '/admin/usuarios',
     icon: 'bi-people',
     label: 'Usuarios',
