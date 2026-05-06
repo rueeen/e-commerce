@@ -144,7 +144,6 @@ class ProductSerializer(serializers.ModelSerializer):
             "image",
             "is_active",
             "notes",
-            "price_clp_suggested",
             "price_external_usd",
             "exchange_rate_usd_clp",
             "pricing_source",

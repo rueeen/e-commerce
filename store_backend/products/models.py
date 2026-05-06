@@ -106,7 +106,13 @@ class Product(models.Model):
     image = models.URLField(blank=True)
     is_active = models.BooleanField(default=True)
     notes = models.TextField(blank=True)
-    price_clp_suggested = models.PositiveIntegerField(default=0)
+    # Precio de referencia externo (USD) sin conversión ni margen local.
+    price_clp_reference = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
     # Precio crudo desde proveedor externo en USD.
     price_external_usd = models.DecimalField(
         max_digits=12,
@@ -209,7 +215,16 @@ class Product(models.Model):
 
     @property
     def suggested_price_clp(self):
-        return int(round(int(self.cost_real_clp or 0) * 1.3))
+        """
+        Precio sugerido calculado desde el costo real usando la configuración activa
+        de PricingSettings (margin_factor + rounding_to).
+
+        Import lazy para evitar dependencias circulares en import time con
+        purchase_order_services.
+        """
+        from .purchase_order_services import calculate_suggested_price_from_real_cost
+
+        return int(calculate_suggested_price_from_real_cost(int(self.cost_real_clp or 0)) or 0)
 
     def get_precio_sugerido_clp(self):
         usd = Decimal(str(self.price_external_usd or 0))
