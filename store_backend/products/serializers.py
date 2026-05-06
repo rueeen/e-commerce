@@ -191,7 +191,7 @@ class ProductSerializer(serializers.ModelSerializer):
         return round((self.get_margen_clp(obj) / cost) * 100, 2)
 
     def get_precio_sugerido_clp(self, obj):
-        return int(obj.get_precio_sugerido_clp() or 0)
+        return int(obj.suggested_price_clp or 0)
 
 
 
