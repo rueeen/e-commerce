@@ -69,6 +69,7 @@ export default function ProductTable({
   onDelete,
   onViewKardex,
   onCreatePO,
+  onApplySuggestedPrice,
 }) {
   const tableRef = useRef(null);
   const dataTableRef = useRef(null);
@@ -133,6 +134,9 @@ export default function ProductTable({
             <th>Foil</th>
             <th>Idioma</th>
             <th>Precio CLP</th>
+            <th>Costo real</th>
+            <th>Margen</th>
+            <th>Precio sugerido</th>
             <th>Stock</th>
             <th>Estado</th>
             <th className="text-end">Acciones</th>
@@ -198,6 +202,16 @@ export default function ProductTable({
 
                 <td>{formatMoney(product.computed_price_clp || product.price_clp)}</td>
 
+                <td>{formatMoney(product.cost_real_clp)}</td>
+
+                <td>
+                  <span className={`badge ${Number(product.margin_clp || 0) < 0 ? "badge-error" : "badge-success"}`}>
+                    {formatMoney(product.margin_clp)} ({Number(product.margin_percentage || 0).toFixed(2)}%)
+                  </span>
+                </td>
+
+                <td>{formatMoney(product.price_clp_suggested || product.suggested_price_clp)}</td>
+
                 <td>
                   <span className={`badge ${stockClass(stock, minimum)}`}>
                     {stock}
@@ -238,6 +252,16 @@ export default function ProductTable({
                     >
                       Editar
                     </button>
+
+                    {Number(product.margin_clp || 0) < 0 && (
+                      <button
+                        type="button"
+                        className="btn btn-outline-danger btn-sm"
+                        onClick={() => onApplySuggestedPrice?.(product)}
+                      >
+                        Aplicar sugerido
+                      </button>
+                    )}
 
                     <button
                       type="button"

@@ -48,6 +48,8 @@ export const api = {
     apiClient.post('/api/products/products/create-single-from-scryfall/', payload),
 
   productKardex: (id) => apiClient.get(`/api/products/products/${id}/kardex/`),
+  applySuggestedPrice: (id) =>
+    apiClient.post(`/api/products/products/${id}/apply-suggested-price/`),
   productSuggestedPrice: (id, unit_cost_clp = 0) =>
     apiClient.get(`/api/products/products/${id}/suggested-price/`, {
       params: { unit_cost_clp },

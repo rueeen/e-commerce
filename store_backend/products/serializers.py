@@ -113,6 +113,7 @@ class ProductSerializer(serializers.ModelSerializer):
     margin_clp = serializers.IntegerField(read_only=True)
     margin_percentage = serializers.FloatField(read_only=True)
     suggested_price_clp = serializers.IntegerField(read_only=True)
+    is_profitable = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -133,6 +134,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "margin_clp",
             "margin_percentage",
             "suggested_price_clp",
+            "is_profitable",
             "image",
             "is_active",
             "notes",
@@ -152,12 +154,23 @@ class ProductSerializer(serializers.ModelSerializer):
             "margin_clp",
             "margin_percentage",
             "suggested_price_clp",
+            "is_profitable",
             "created_at",
             "updated_at",
             "single_card",
             "sealed_product",
             "bundle_items",
         )
+
+    def get_is_profitable(self, obj):
+        cost = int(getattr(obj, "cost_real_clp", 0) or 0)
+        price = int(getattr(obj, "computed_price_clp", 0) or 0)
+
+        if cost <= 0:
+            return True
+
+        return price >= cost
+
 
 
 class ProductCatalogSerializer(serializers.ModelSerializer):

@@ -352,17 +352,23 @@ def receive_purchase_order(order, user):
         )
 
         if purchase_order.update_prices_on_receive:
-            sale_price = int(
-                item.sale_price_to_apply_clp
-                or item.suggested_sale_price_clp
-                or 0
-            )
+            real_cost = int(item.real_unit_cost_clp or unit_cost or 0)
+            suggested_price = int(item.suggested_sale_price_clp or 0)
+            manual_sale_price = int(item.sale_price_to_apply_clp or 0)
+            sale_price = manual_sale_price if manual_sale_price > 0 else suggested_price
+
+            update_payload = {
+                "price_clp_suggested": suggested_price,
+                "last_purchase_cost_clp": max(real_cost, 0),
+            }
 
             if sale_price > 0:
-                Product.objects.filter(pk=item.product_id).update(
-                    price_clp=sale_price,
-                    price_clp_suggested=sale_price,
-                )
+                update_payload["price_clp"] = sale_price
+
+            if real_cost > 0 and sale_price > 0 and sale_price < real_cost:
+                update_payload["is_active"] = False
+
+            Product.objects.filter(pk=item.product_id).update(**update_payload)
 
         item.quantity_received = int(item.quantity_received or 0) + qty
         item.save(update_fields=["quantity_received"])
