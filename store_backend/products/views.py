@@ -314,6 +314,22 @@ class ProductViewSet(viewsets.ModelViewSet):
         if params.get("active") in {"true", "false"}:
             queryset = queryset.filter(is_active=params["active"] == "true")
 
+        if params.get("available") == "true":
+            queryset = queryset.filter(
+                is_active=True,
+                stock__gt=0,
+                price_clp__gt=0,
+            ).exclude(
+                last_purchase_cost_clp__gt=0,
+                price_clp__lt=models.F("last_purchase_cost_clp"),
+            )
+
+        if params.get("profitable") == "true":
+            queryset = queryset.exclude(
+                last_purchase_cost_clp__gt=0,
+                price_clp__lt=models.F("last_purchase_cost_clp"),
+            )
+
         if params.get("rarity"):
             queryset = queryset.filter(
                 single_card__mtg_card__rarity__iexact=params["rarity"]
@@ -495,6 +511,29 @@ class ProductViewSet(viewsets.ModelViewSet):
                 unit_cost_clp=unit_cost_clp,
             )
         )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="apply-suggested-price",
+        permission_classes=[IsAdminOrWorkerUser],
+    )
+    def apply_suggested_price(self, request, pk=None):
+        product = self.get_object()
+        suggested_price = int(product.price_clp_suggested or product.suggested_price_clp or 0)
+
+        if suggested_price <= 0:
+            return Response(
+                {"detail": "El producto no tiene precio sugerido válido."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        product.price_clp = suggested_price
+        if int(product.last_purchase_cost_clp or 0) > 0 and suggested_price < int(product.last_purchase_cost_clp or 0):
+            product.is_active = False
+        product.save(update_fields=["price_clp", "is_active", "updated_at"])
+
+        return Response(self.get_serializer(product).data)
 
     @action(
         detail=True,

@@ -253,17 +253,38 @@ export default function AdminProductsPage() {
   };
 
   const toggleActive = async (product) => {
+    const nextActive = !product.is_active;
+    const margin = Number(product.margin_clp || 0);
+
+    if (nextActive && margin < 0) {
+      const ok = window.confirm('Este producto tiene margen negativo. ¿Activar de todas formas?');
+      if (!ok) return;
+    }
+
     try {
       await api.patchProduct(product.id, {
-        is_active: !product.is_active,
+        is_active: nextActive,
       });
 
       notyf.success(
         product.is_active
           ? 'Producto desactivado correctamente.'
-          : 'Producto activado correctamente.'
+          : margin < 0
+            ? 'Producto activado con advertencia de margen negativo.'
+            : 'Producto activado correctamente.'
       );
 
+      await load();
+    } catch {
+      // El apiClient ya muestra el error.
+    }
+  };
+
+
+  const applySuggestedPrice = async (product) => {
+    try {
+      await api.applySuggestedPrice(product.id);
+      notyf.success('Precio sugerido aplicado correctamente.');
       await load();
     } catch {
       // El apiClient ya muestra el error.

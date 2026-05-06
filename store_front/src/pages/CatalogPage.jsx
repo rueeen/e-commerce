@@ -45,6 +45,7 @@ export default function CatalogPage() {
     try {
       const data = await fetchAllPaginated(api.getProducts, {
         active: 'true',
+        available: 'true',
       });
 
       setProducts(data);
