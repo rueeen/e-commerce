@@ -210,6 +210,51 @@ def ensure_item_has_scryfall_data(item):
     return resolve_purchase_order_item_scryfall(item)
 
 
+def find_existing_single_product(
+    *,
+    scryfall_id=None,
+    mtg_card=None,
+    card_name=None,
+    condition="NM",
+    language="EN",
+    is_foil=False,
+    set_hint=None,
+):
+    condition = normalize_condition(condition)
+    language = str(language or "EN").strip().upper() or "EN"
+    is_foil = bool(is_foil)
+    base_qs = SingleCard.objects.select_related("product").filter(
+        condition=condition, language=language, is_foil=is_foil
+    )
+
+    def _pick(queryset, label):
+        matches = list(queryset[:2])
+        if len(matches) == 1:
+            return matches[0].product, None
+        if len(matches) > 1:
+            return None, f"múltiples coincidencias en {label}"
+        return None, None
+
+    if mtg_card is not None:
+        return _pick(base_qs.filter(mtg_card=mtg_card), "mtg_card")
+    if scryfall_id:
+        product, warning = _pick(base_qs.filter(mtg_card__scryfall_id=scryfall_id), "scryfall_id")
+        if product or warning:
+            return product, warning
+    if card_name:
+        product, warning = _pick(base_qs.filter(mtg_card__name__iexact=str(card_name).strip()), "nombre")
+        if product or warning:
+            return product, warning
+        if set_hint:
+            set_hint = str(set_hint).strip()
+            set_code_hint = set_hint.upper() if 2 <= len(set_hint) <= 6 else ""
+            qs = base_qs.filter(mtg_card__name__iexact=str(card_name).strip(), mtg_card__set_name__icontains=set_hint)
+            if set_code_hint:
+                qs = qs | base_qs.filter(mtg_card__name__iexact=str(card_name).strip(), mtg_card__set_code__iexact=set_code_hint)
+            return _pick(qs, "nombre+set")
+    return None, None
+
+
 def find_existing_single_product_for_purchase_item(item):
     """
     Busca un Product single existente para el item sin crear datos nuevos.
@@ -232,38 +277,17 @@ def find_existing_single_product_for_purchase_item(item):
         item.scryfall_data = data
         warning_added = True
 
-    def _single_candidate(queryset, step_label):
-        matches = list(queryset.select_related("product")[:2])
-        if len(matches) == 1:
-            return matches[0]
-        if len(matches) > 1:
-            _append_warning(
-                f"múltiples coincidencias en {step_label} para item #{item.id}"
-            )
-        return None
-
     language, is_foil = _get_language_and_foil(item)
     condition = normalize_condition(item.style_condition or Product.CardCondition.NM)
 
-    def _query_by_base_filters(queryset):
-        return queryset.filter(
-            condition=condition,
-            language=language,
-            is_foil=is_foil,
-        )
-
     # 1) scryfall_id ya presente
-    if item.scryfall_id:
-        single = _single_candidate(
-            _query_by_base_filters(
-                SingleCard.objects.filter(
-                    mtg_card__scryfall_id=item.scryfall_id,
-                )
-            ),
-            "scryfall_id",
-        )
-        if single:
-            return single.product
+    product, warning = find_existing_single_product(
+        scryfall_id=item.scryfall_id, condition=condition, language=language, is_foil=is_foil
+    )
+    if product:
+        return product
+    if warning:
+        _append_warning(f"{warning} para item #{item.id}")
 
     # 2) intentar resolver scryfall y reintentar por scryfall_id
     if not item.scryfall_id:
@@ -273,44 +297,28 @@ def find_existing_single_product_for_purchase_item(item):
             pass
 
         if item.scryfall_id:
-            single = _single_candidate(
-                _query_by_base_filters(
-                    SingleCard.objects.filter(
-                        mtg_card__scryfall_id=item.scryfall_id,
-                    )
-                ),
-                "scryfall_id_resuelto",
+            product, warning = find_existing_single_product(
+                scryfall_id=item.scryfall_id, condition=condition, language=language, is_foil=is_foil
             )
-            if single:
-                return single.product
+            if product:
+                return product
+            if warning:
+                _append_warning(f"{warning} para item #{item.id}")
 
     # 3) fallback por nombre exacto (case-insensitive)
     normalized_name = str(item.normalized_card_name or "").strip()
     if normalized_name:
-        base_qs = _query_by_base_filters(
-            SingleCard.objects.filter(
-                mtg_card__name__iexact=normalized_name,
-            )
+        product, warning = find_existing_single_product(
+            card_name=normalized_name,
+            set_hint=item.set_name_detected,
+            condition=condition,
+            language=language,
+            is_foil=is_foil,
         )
-        single = _single_candidate(base_qs, "nombre")
-        if single:
-            return single.product
-
-        # 4) fallback con set detectado si existe
-        set_hint = str(item.set_name_detected or "").strip()
-        if set_hint:
-            set_code_hint = set_hint.upper() if 2 <= len(set_hint) <= 6 else ""
-            set_filtered = base_qs.filter(
-                mtg_card__set_name__icontains=set_hint
-            )
-            if set_code_hint:
-                set_filtered = set_filtered | base_qs.filter(
-                    mtg_card__set_code__iexact=set_code_hint
-                )
-
-            single = _single_candidate(set_filtered, "nombre+set")
-            if single:
-                return single.product
+        if product:
+            return product
+        if warning:
+            _append_warning(f"{warning} para item #{item.id}")
 
     if warning_added:
         item.save(update_fields=["scryfall_data"])
@@ -530,21 +538,18 @@ def create_product_from_purchase_order_item(item, *, category=None, created_by=N
 
     language, is_foil = _get_language_and_foil(item)
 
-    existing = (
-        SingleCard.objects.select_related("product")
-        .filter(
-            mtg_card=card,
-            condition=item.style_condition,
-            language=language,
-            is_foil=is_foil,
-        )
-        .first()
+    existing_product, warning = find_existing_single_product(
+        mtg_card=card,
+        condition=item.style_condition,
+        language=language,
+        is_foil=is_foil,
     )
-
-    if existing:
-        item.product = existing.product
+    if warning:
+        raise ValidationError(f"No se pudo elegir un single existente para item #{item.id}: {warning}.")
+    if existing_product:
+        item.product = existing_product
         item.save(update_fields=["product"])
-        return existing.product, False
+        return existing_product, False
 
     category = resolve_purchase_order_product_category(category)
 
