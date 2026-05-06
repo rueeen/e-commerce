@@ -21,8 +21,58 @@ const getProductEdition = (product) => {
   );
 };
 
+const normalizeText = (value) =>
+  String(value ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9# ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const getProductSearchText = (product) =>
+  normalizeText(
+    [
+      product?.id,
+      product?.name,
+      product?.product_type,
+      product?.single_card?.mtg_card?.name,
+      product?.single_card?.mtg_card?.set_code,
+      product?.single_card?.mtg_card?.collector_number,
+      product?.single_card?.condition,
+      product?.single_card?.language,
+      product?.single_card?.is_foil ? 'foil' : 'non foil',
+    ]
+      .filter(Boolean)
+      .join(' ')
+  );
+
+const buildProductMeta = (product) => {
+  const setCode =
+    product?.single_card?.mtg_card?.set_code ||
+    product?.sealed_product?.set_code ||
+    '-';
+  const collectorNumber = product?.single_card?.mtg_card?.collector_number || '-';
+  const condition = product?.single_card?.condition || '-';
+  const foilText = product?.single_card?.is_foil ? 'Foil' : 'Non Foil';
+  const stock =
+    product?.stock ??
+    product?.stock_qty ??
+    product?.quantity_available ??
+    product?.inventory_quantity ??
+    0;
+
+  return {
+    setCode,
+    collectorNumber,
+    condition,
+    foilText,
+    stock,
+  };
+};
+
 const buildSearchText = (product) => {
-  return [
+  return normalizeText([
     product?.id,
     product?.name,
     product?.description,
@@ -39,8 +89,7 @@ const buildSearchText = (product) => {
     product?.edition,
   ]
     .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
+    .join(' '));
 };
 
 export default function ProductAutocomplete({
@@ -56,13 +105,19 @@ export default function ProductAutocomplete({
   const [open, setOpen] = useState(false);
 
   const filtered = useMemo(() => {
-    const search = query.trim().toLowerCase();
-
-    if (!search) return [];
+    const normalizedQuery = normalizeText(query);
+    if (!normalizedQuery) return [];
+    const words = normalizedQuery.split(' ').filter(Boolean);
 
     return products
-      .filter((product) => buildSearchText(product).includes(search))
-      .slice(0, 8);
+      .filter((product) => {
+        const searchableText = `${getProductSearchText(product)} ${buildSearchText(
+          product
+        )}`.trim();
+        if (searchableText.includes(normalizedQuery)) return true;
+        return words.every((word) => searchableText.includes(word));
+      })
+      .slice(0, 10);
   }, [products, query]);
 
   useEffect(() => {
@@ -151,6 +206,10 @@ export default function ProductAutocomplete({
           {filtered.map((product) => {
             const image = getProductImage(product);
             const edition = getProductEdition(product);
+            const { setCode, collectorNumber, condition, foilText, stock } =
+              buildProductMeta(product);
+            const price = Number(product?.price_clp || 0);
+            const cost = Number(product?.last_purchase_cost_clp || 0);
 
             return (
               <button
@@ -183,10 +242,18 @@ export default function ProductAutocomplete({
                   )}
 
                   <div>
-                    <div className="fw-semibold">{product.name}</div>
+                    <div className="fw-semibold">
+                      {product.name} - {setCode} #{collectorNumber} ({condition}{' '}
+                      {foilText})
+                    </div>
                     <small className="text-muted">
-                      {product.product_type || 'producto'} · Set:{' '}
-                      {edition || '-'} · ID: {product.id}
+                      {product.product_type || 'producto'} · Set: {edition || '-'} ·
+                      ID: {product.id}
+                    </small>
+                    <small className="text-muted d-block">
+                      Stock: {stock} · Precio: $
+                      {price.toLocaleString('es-CL')} · Costo: $
+                      {cost.toLocaleString('es-CL')}
                     </small>
                   </div>
                 </div>
