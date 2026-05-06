@@ -1,4 +1,4 @@
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -71,23 +71,21 @@ def convert_money_to_clp(amount, currency, exchange_rate):
     return _clp(_d(amount) * _d(exchange_rate))
 
 
-def calculate_suggested_price(real_unit_cost_clp, margin_percent, rounding_to):
+def calculate_suggested_price_from_real_cost(real_unit_cost_clp):
     """
-    Calcula precio sugerido aplicando margen porcentual.
+    Calcula precio sugerido usando PricingSettings activo.
 
-    Ejemplo:
-    costo 1000, margen 35 → 1350.
+    Fórmula:
+    suggested = real_unit_cost_clp * margin_factor
+    redondeado hacia arriba al múltiplo de rounding_to.
     """
-    raw = _d(real_unit_cost_clp) * (
-        D("1") + (_d(margin_percent) / D("100"))
-    )
+    pricing_settings = get_active_pricing_settings()
+    margin_factor = _d(getattr(pricing_settings, "margin_factor", D("1.25")))
+    rounding_to = max(int(getattr(pricing_settings, "rounding_to", 100) or 100), 1)
 
-    step = max(int(rounding_to or 100), 1)
-
-    return int(
-        (raw / D(step)).quantize(D("1"), rounding=ROUND_HALF_UP)
-        * D(step)
-    )
+    raw = _d(real_unit_cost_clp) * margin_factor
+    rounded = (raw / D(rounding_to)).quantize(D("1"), rounding=ROUND_CEILING)
+    return int(rounded * D(rounding_to))
 
 
 def calculate_purchase_order_totals(order):
@@ -177,9 +175,6 @@ def allocate_extra_costs(order):
     if subtotal <= 0 or not items:
         return
 
-    pricing_settings = get_active_pricing_settings()
-    rounding_to = getattr(pricing_settings, "rounding_to", 100)
-
     allocated = 0
 
     for index, item in enumerate(items):
@@ -211,10 +206,8 @@ def allocate_extra_costs(order):
                 )
                 / _d(qty)
             )
-            item.suggested_sale_price_clp = calculate_suggested_price(
+            item.suggested_sale_price_clp = calculate_suggested_price_from_real_cost(
                 item.real_unit_cost_clp,
-                item.margin_percent,
-                rounding_to,
             )
 
         item.save(
@@ -351,24 +344,41 @@ def receive_purchase_order(order, user):
             received_at=timezone.now(),
         )
 
-        if purchase_order.update_prices_on_receive:
-            real_cost = int(item.real_unit_cost_clp or unit_cost or 0)
-            suggested_price = int(item.suggested_sale_price_clp or 0)
-            manual_sale_price = int(item.sale_price_to_apply_clp or 0)
-            sale_price = manual_sale_price if manual_sale_price > 0 else suggested_price
+        real_cost = int(item.real_unit_cost_clp or unit_cost or 0)
+        suggested_price = int(
+            item.suggested_sale_price_clp
+            or calculate_suggested_price_from_real_cost(real_cost)
+            or 0
+        )
 
-            update_payload = {
-                "price_clp_suggested": suggested_price,
-                "last_purchase_cost_clp": max(real_cost, 0),
-            }
+        if suggested_price != int(item.suggested_sale_price_clp or 0):
+            item.suggested_sale_price_clp = suggested_price
+            item.save(update_fields=["suggested_sale_price_clp"])
+
+        update_payload = {
+            "price_clp_suggested": suggested_price,
+            "last_purchase_cost_clp": max(real_cost, 0),
+        }
+
+        if purchase_order.update_prices_on_receive:
+            manual_sale_price = int(item.sale_price_to_apply_clp or 0)
+
+            if manual_sale_price > 0 and manual_sale_price >= real_cost:
+                sale_price = manual_sale_price
+            else:
+                sale_price = suggested_price
 
             if sale_price > 0:
-                update_payload["price_clp"] = sale_price
+                update_payload["price_clp"] = max(sale_price, real_cost)
 
-            if real_cost > 0 and sale_price > 0 and sale_price < real_cost:
+            if real_cost > 0 and int(update_payload.get("price_clp", 0)) < real_cost:
+                update_payload["is_active"] = False
+        else:
+            current_price = int(item.product.price_clp or 0)
+            if real_cost > 0 and current_price < real_cost:
                 update_payload["is_active"] = False
 
-            Product.objects.filter(pk=item.product_id).update(**update_payload)
+        Product.objects.filter(pk=item.product_id).update(**update_payload)
 
         item.quantity_received = int(item.quantity_received or 0) + qty
         item.save(update_fields=["quantity_received"])
