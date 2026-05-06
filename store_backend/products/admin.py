@@ -182,7 +182,6 @@ class ProductAdmin(admin.ModelAdmin):
                 "fields": (
                     "price_clp",
                     "computed_price_display",
-                    "price_clp_suggested",
                     "suggested_price_display",
                     "stock",
                     "stock_minimum",

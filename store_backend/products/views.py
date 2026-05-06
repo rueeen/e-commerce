@@ -521,7 +521,8 @@ class ProductViewSet(viewsets.ModelViewSet):
     )
     def apply_suggested_price(self, request, pk=None):
         product = self.get_object()
-        suggested_price = int(product.price_clp_suggested or product.suggested_price_clp or 0)
+        # Fuente única de verdad para sugerido: property sugerida del modelo.
+        suggested_price = int(product.suggested_price_clp or 0)
 
         if suggested_price <= 0:
             return Response(

@@ -445,7 +445,9 @@ def create_product_from_purchase_order_item(item, *, category=None, created_by=N
         product_type=Product.ProductType.SINGLE,
         category=category,
         price_clp=_get_sale_price(item),
-        price_clp_suggested=_get_suggested_price(item),
+        # Guardamos referencia externa USD (Scryfall/proveedor),
+        # no el sugerido CLP calculado localmente.
+        price_clp_reference=Decimal(str(extract_usd_price(card_data, is_foil=is_foil) or 0)),
         stock=0,
         image=card.image_large or card.image_normal or card.image_small,
         is_active=False,

@@ -356,7 +356,7 @@ def receive_purchase_order(order, user):
             item.save(update_fields=["suggested_sale_price_clp"])
 
         update_payload = {
-            "price_clp_suggested": suggested_price,
+            # Ya no persistimos un sugerido CLP en Product; se calcula dinámicamente.
             "last_purchase_cost_clp": max(real_cost, 0),
         }
 
