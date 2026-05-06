@@ -1,5 +1,5 @@
 import logging
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
@@ -504,6 +504,10 @@ class ProductViewSet(viewsets.ModelViewSet):
         only_negative_margin = _to_bool(payload.get("only_negative_margin"), False)
         category_id = payload.get("category_id")
         product_type = (payload.get("product_type") or "").strip()
+        mode = (payload.get("mode") or "real_cost").strip()
+        allowed_modes = {"real_cost", "current_usd"}
+        if mode not in allowed_modes:
+            return Response({"detail": "mode inválido. Usa real_cost o current_usd."}, status=status.HTTP_400_BAD_REQUEST)
 
         pricing_settings = PricingSettings.objects.filter(is_active=True).order_by("-updated_at", "-id").first()
         if not pricing_settings:
@@ -536,6 +540,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         results = []
 
         rounding_to = int(pricing_settings.rounding_to or 100)
+        usd_to_clp = Decimal(str(pricing_settings.usd_to_clp or 0))
         if rounding_to <= 0:
             rounding_to = 100
             warnings.append("rounding_to inválido en configuración activa. Se usó 100 por defecto.")
@@ -543,12 +548,32 @@ class ProductViewSet(viewsets.ModelViewSet):
         for product in queryset:
             cost_real = int(product.cost_real_clp or 0)
             fallback_cost = int(product.last_purchase_cost_clp or product.average_cost_clp or 0)
-            base_cost = cost_real if cost_real > 0 else fallback_cost
+            usd_reference = None
+
+            if mode == "current_usd":
+                if hasattr(product, "single_card") and product.single_card:
+                    usd_reference = Decimal(str(product.single_card.price_usd_reference or 0))
+                if (usd_reference is None or usd_reference <= 0) and Decimal(str(product.price_external_usd or 0)) > 0:
+                    usd_reference = Decimal(str(product.price_external_usd or 0))
+
+                if usd_reference is None or usd_reference <= 0:
+                    skipped_count += 1
+                    warnings.append(f"Producto {product.id} sin USD de referencia, no se puede recalcular en mode=current_usd.")
+                    results.append({"product_id": product.id, "name": product.name, "status": "skipped", "mode": mode})
+                    continue
+
+                if usd_to_clp <= 0:
+                    return Response({"detail": "usd_to_clp debe ser mayor a 0 para mode=current_usd."}, status=status.HTTP_400_BAD_REQUEST)
+
+                base_cost_decimal = usd_reference * usd_to_clp
+                base_cost = int(base_cost_decimal.quantize(Decimal("1")))
+            else:
+                base_cost = cost_real if cost_real > 0 else fallback_cost
 
             if base_cost <= 0:
                 skipped_count += 1
-                warnings.append(f"Producto {product.id} sin costo real, no se puede calcular precio sugerido.")
-                results.append({"product_id": product.id, "name": product.name, "status": "skipped"})
+                warnings.append(f"Producto {product.id} sin costo base, no se puede calcular precio sugerido.")
+                results.append({"product_id": product.id, "name": product.name, "status": "skipped", "mode": mode})
                 continue
 
             old_price = int(product.price_clp or 0)
@@ -556,7 +581,15 @@ class ProductViewSet(viewsets.ModelViewSet):
             if old_price < base_cost:
                 negative_before += 1
 
-            new_suggested = int(calculate_suggested_price_from_real_cost(base_cost) or 0)
+            if mode == "current_usd":
+                raw = Decimal(str(base_cost))
+                raw *= Decimal(str(pricing_settings.import_factor or 1))
+                raw *= Decimal(str(pricing_settings.risk_factor or 1))
+                raw *= Decimal(str(pricing_settings.margin_factor or 1))
+                new_suggested = int((raw / Decimal(str(rounding_to))).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * Decimal(str(rounding_to)))
+            else:
+                new_suggested = int(calculate_suggested_price_from_real_cost(base_cost) or 0)
+
             if new_suggested < base_cost:
                 new_suggested = base_cost
 
@@ -574,8 +607,11 @@ class ProductViewSet(viewsets.ModelViewSet):
             results.append({
                 "product_id": product.id,
                 "name": product.name,
+                "mode": mode,
+                "usd_to_clp": float(usd_to_clp) if mode == "current_usd" else None,
                 "cost_real_clp": cost_real,
                 "base_cost_clp": base_cost,
+                "usd_reference": float(usd_reference) if usd_reference is not None else None,
                 "old_price_clp": old_price,
                 "old_suggested_price_clp": old_suggested,
                 "new_suggested_price_clp": new_suggested,
@@ -584,6 +620,8 @@ class ProductViewSet(viewsets.ModelViewSet):
             })
 
         return Response({
+            "mode": mode,
+            "usd_to_clp_used": float(usd_to_clp) if mode == "current_usd" else None,
             "processed_count": processed_count,
             "updated_count": updated_count,
             "skipped_count": skipped_count,

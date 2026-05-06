@@ -50,6 +50,7 @@ export default function PricingSettingsPage() {
     only_with_stock: true,
     only_active: false,
     product_type: '',
+    mode: 'real_cost',
   });
   const [recalcLoading, setRecalcLoading] = useState(false);
   const [recalcResult, setRecalcResult] = useState(null);
@@ -468,6 +469,23 @@ export default function PricingSettingsPage() {
         </div>
 
         <div className="row g-3">
+          <div className="col-md-6">
+            <label className="form-label">Modo de recálculo</label>
+            <select
+              className="form-select"
+              value={recalcOptions.mode}
+              onChange={(event) =>
+                setRecalcOptions((current) => ({
+                  ...current,
+                  mode: event.target.value,
+                }))
+              }
+              disabled={recalcLoading}
+            >
+              <option value="real_cost">Desde costo real histórico</option>
+              <option value="current_usd">Desde dólar actual / precio USD referencia</option>
+            </select>
+          </div>
           <div className="col-md-4">
             <div className="form-check">
               <input
