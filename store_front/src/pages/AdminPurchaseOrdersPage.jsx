@@ -72,6 +72,50 @@ const buildItemSubtotal = (item) => {
   return toNumber(item.quantity_ordered) * toNumber(item.unit_price_original);
 };
 
+const MARGIN_FACTOR_PREVIEW = 1.09;
+
+const roundUp = (value) => Math.ceil(Number(value || 0));
+
+const estimateSuggestedPrice = (unitCost) => {
+  return roundUp(toNumber(unitCost) * MARGIN_FACTOR_PREVIEW);
+};
+
+const buildManualItemFromProduct = (product) => {
+  const costUnit = Number(
+    product.last_purchase_cost_clp ??
+      product.average_cost_clp ??
+      product.cost_real_clp ??
+      product.computed_price_clp ??
+      product.price_clp ??
+      0
+  );
+
+  const suggestedPrice = Number(
+    product.price_clp_suggested ??
+      product.suggested_price_clp ??
+      product.precio_sugerido_clp ??
+      product.computed_price_clp ??
+      product.price_clp ??
+      0
+  );
+
+  const quantity = 1;
+
+  return {
+    product: product.id,
+    name: product.name,
+    quantity_ordered: String(quantity),
+    unit_price_original: String(costUnit || 0),
+    subtotal_clp: costUnit * quantity,
+    current_price: product.price_clp || 0,
+    suggested_sale_price_clp: suggestedPrice || 0,
+    sale_price_to_apply_clp: suggestedPrice || 0,
+    suggested: suggestedPrice
+      ? { suggested_price_clp: suggestedPrice, min_price_clp: 0, source: 'product' }
+      : null,
+  };
+};
+
 const getMissingProductsCount = (order) => {
   const value = Number(order?.missing_products_count);
 
@@ -159,19 +203,7 @@ export default function AdminPurchaseOrdersPage() {
 
       return {
         ...current,
-        items: [
-          ...current.items,
-          {
-            product: product.id,
-            name: product.name,
-            quantity_ordered: '1',
-            unit_price_original: product.last_purchase_cost_clp
-              ? String(product.last_purchase_cost_clp)
-              : '',
-            current_price: product.price_clp || 0,
-            suggested: null,
-          },
-        ],
+        items: [...current.items, buildManualItemFromProduct(product)],
       };
     });
   }, [search, products]);
@@ -228,14 +260,26 @@ export default function AdminPurchaseOrdersPage() {
       setForm((current) => ({
         ...current,
         items: current.items.map((row, rowIndex) =>
-          rowIndex === index ? { ...row, suggested: data } : row
+          rowIndex === index
+            ? {
+                ...row,
+                suggested: data,
+                suggested_sale_price_clp: data?.suggested_price_clp || 0,
+              }
+            : row
         ),
       }));
     } catch {
       setForm((current) => ({
         ...current,
         items: current.items.map((row, rowIndex) =>
-          rowIndex === index ? { ...row, suggested: null } : row
+          rowIndex === index
+            ? {
+                ...row,
+                suggested: null,
+                suggested_sale_price_clp: estimateSuggestedPrice(row.unit_price_original),
+              }
+            : row
         ),
       }));
     }
@@ -248,26 +292,14 @@ export default function AdminPurchaseOrdersPage() {
     }
 
     const index = form.items.length;
-    const unitCost = product.last_purchase_cost_clp
-      ? String(product.last_purchase_cost_clp)
-      : '';
+    const newItem = buildManualItemFromProduct(product);
 
     setForm((current) => ({
       ...current,
-      items: [
-        ...current.items,
-        {
-          product: product.id,
-          name: product.name,
-          quantity_ordered: '1',
-          unit_price_original: unitCost,
-          current_price: product.price_clp || 0,
-          suggested: null,
-        },
-      ],
+      items: [...current.items, newItem],
     }));
 
-    setTimeout(() => fetchSuggested(index, unitCost), 0);
+    fetchSuggested(index, newItem.unit_price_original);
   };
 
   const removeItem = (index) => {
@@ -349,35 +381,6 @@ export default function AdminPurchaseOrdersPage() {
     }
   };
 
-  const applySuggestedPriceToProduct = async (item, index) => {
-    const suggestedPrice = item.suggested?.suggested_price_clp;
-
-    if (!suggestedPrice) {
-      notyf.error('No hay precio sugerido para este producto.');
-      return;
-    }
-
-    const ok = window.confirm(
-      `¿Actualizar precio de venta de este producto a ${formatMoney(suggestedPrice)}?`
-    );
-
-    if (!ok) return;
-
-    try {
-      await api.patchProduct(item.product, {
-        price_clp: suggestedPrice,
-        price_clp_suggested: suggestedPrice,
-      });
-
-      updateItem(index, {
-        current_price: suggestedPrice,
-      });
-
-      notyf.success('Precio de venta actualizado.');
-    } catch {
-      // El apiClient ya muestra el error.
-    }
-  };
 
   const validateForm = () => {
     if (!form.supplier) {
@@ -400,11 +403,11 @@ export default function AdminPurchaseOrdersPage() {
     }
 
     const invalidCost = form.items.some(
-      (item) => Number(item.unit_price_original || 0) < 0
+      (item) => Number(item.unit_price_original || 0) <= 0
     );
 
     if (invalidCost) {
-      notyf.error('El costo unitario debe ser mayor o igual a 0.');
+      notyf.error('Ingresa costo unitario de compra.');
       return false;
     }
 
@@ -451,7 +454,13 @@ export default function AdminPurchaseOrdersPage() {
           quantity_received: 0,
           unit_price_original: Number(item.unit_price_original || 0),
           line_total_original: buildItemSubtotal(item),
-          sale_price_to_apply_clp: item.suggested?.suggested_price_clp || 0,
+          suggested_sale_price_clp:
+            item.suggested_sale_price_clp || item.suggested?.suggested_price_clp || 0,
+          sale_price_to_apply_clp:
+            item.sale_price_to_apply_clp ||
+            item.suggested_sale_price_clp ||
+            item.suggested?.suggested_price_clp ||
+            0,
         })),
       };
 
@@ -602,9 +611,10 @@ export default function AdminPurchaseOrdersPage() {
                 <tr>
                   <th>Producto</th>
                   <th>Cantidad</th>
-                  <th>Costo unitario</th>
-                  <th>Subtotal</th>
-                  <th>Precio sugerido</th>
+                  <th>Costo unitario compra</th>
+                  <th>Subtotal compra</th>
+                  <th>Precio sugerido venta</th>
+                  <th>Precio venta a aplicar</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
@@ -612,7 +622,7 @@ export default function AdminPurchaseOrdersPage() {
               <tbody>
                 {form.items.length === 0 && (
                   <tr>
-                    <td colSpan="6" className="text-center text-muted py-4">
+                    <td colSpan="7" className="text-center text-muted py-4">
                       Aún no has agregado productos.
                     </td>
                   </tr>
@@ -631,6 +641,9 @@ export default function AdminPurchaseOrdersPage() {
                         onChange={(event) =>
                           updateItem(index, {
                             quantity_ordered: event.target.value,
+                            subtotal_clp:
+                              toNumber(event.target.value) *
+                              toNumber(item.unit_price_original),
                           })
                         }
                       />
@@ -645,8 +658,12 @@ export default function AdminPurchaseOrdersPage() {
                         onChange={(event) => {
                           const value = event.target.value;
 
+                          const estimatedSuggested = estimateSuggestedPrice(value);
+
                           updateItem(index, {
                             unit_price_original: value,
+                            subtotal_clp: toNumber(item.quantity_ordered) * toNumber(value),
+                            suggested_sale_price_clp: estimatedSuggested,
                           });
 
                           fetchSuggested(index, value);
@@ -657,28 +674,63 @@ export default function AdminPurchaseOrdersPage() {
                     <td>{formatMoney(buildItemSubtotal(item))}</td>
 
                     <td>
-                      {item.suggested ? (
+                      {(item.suggested || item.suggested_sale_price_clp) ? (
                         <div>
                           <strong className="text-success">
-                            {formatMoney(item.suggested.suggested_price_clp)}
+                            {formatMoney(item.suggested_sale_price_clp || item.suggested?.suggested_price_clp || 0)}
                           </strong>
 
                           <div className="small text-muted">
                             Mínimo:{' '}
-                            {formatMoney(item.suggested.min_price_clp || 0)}
+                            {formatMoney(item.suggested?.min_price_clp || 0)}
                           </div>
 
                           {item.current_price > 0 &&
-                            item.suggested.min_price_clp > 0 &&
-                            item.current_price < item.suggested.min_price_clp && (
+                            (item.suggested?.min_price_clp || 0) > 0 &&
+                            item.current_price < (item.suggested?.min_price_clp || 0) && (
                               <div className="small text-danger">
                                 Precio actual bajo margen mínimo
                               </div>
                             )}
+
+                          {toNumber(item.suggested_sale_price_clp || item.suggested?.suggested_price_clp) > 0 &&
+                            toNumber(item.suggested_sale_price_clp || item.suggested?.suggested_price_clp) <
+                              toNumber(item.unit_price_original) && (
+                              <span className="badge text-bg-warning">Sugerido menor al costo</span>
+                            )}
+
+                          {!toNumber(item.unit_price_original) && (
+                            <div className="small text-warning">Ingresa costo unitario de compra.</div>
+                          )}
                         </div>
                       ) : (
-                        <span className="text-muted">—</span>
+                        <div>
+                          {!toNumber(item.unit_price_original) && (
+                            <div className="small text-warning">Ingresa costo unitario de compra.</div>
+                          )}
+                          {toNumber(item.suggested_sale_price_clp) > 0 &&
+                            toNumber(item.suggested_sale_price_clp) <
+                              toNumber(item.unit_price_original) && (
+                              <span className="badge text-bg-warning">
+                                Sugerido menor al costo
+                              </span>
+                            )}
+                        </div>
                       )}
+                    </td>
+
+                    <td>
+                      <input
+                        type="number"
+                        min="0"
+                        className="form-control"
+                        value={item.sale_price_to_apply_clp || 0}
+                        onChange={(event) =>
+                          updateItem(index, {
+                            sale_price_to_apply_clp: Number(event.target.value || 0),
+                          })
+                        }
+                      />
                     </td>
 
                     <td>
@@ -686,9 +738,16 @@ export default function AdminPurchaseOrdersPage() {
                         <button
                           type="button"
                           className="btn btn-outline-success btn-sm"
-                          onClick={() => applySuggestedPriceToProduct(item, index)}
+                          onClick={() =>
+                            updateItem(index, {
+                              sale_price_to_apply_clp:
+                                item.suggested_sale_price_clp ||
+                                item.suggested?.suggested_price_clp ||
+                                0,
+                            })
+                          }
                         >
-                          Usar precio sugerido
+                          Aplicar sugerido de venta
                         </button>
 
                         <button
