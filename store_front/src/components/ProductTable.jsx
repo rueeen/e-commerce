@@ -13,6 +13,12 @@ const formatMoney = (value) => {
   return `$${Number(value || 0).toLocaleString('es-CL')}`;
 };
 
+const getPriceAlertClass = (priceClp, suggestedClp, costClp) => {
+  if (Number(priceClp || 0) < Number(costClp || 0)) return 'text-danger fw-bold';
+  if (Number(priceClp || 0) < Number(suggestedClp || 0)) return 'text-warning fw-bold';
+  return '';
+};
+
 const getCategoryName = (product) => {
   if (typeof product.category === 'object' && product.category !== null) {
     return product.category.name || '-';
@@ -150,6 +156,10 @@ export default function ProductTable({
             const image = getCardImage(product);
             const isSingle = product.product_type === 'single';
             const isFoil = getIsFoil(product);
+            const precioVenta = Number(product.computed_price_clp || product.price_clp || 0);
+            const costoReal = Number(product.cost_real_clp || 0);
+            const sugeridoClp = Number(product.precio_sugerido_clp || product.price_clp_suggested || product.suggested_price_clp || 0);
+            const alertClass = getPriceAlertClass(precioVenta, sugeridoClp, costoReal);
 
             return (
               <tr key={product.id}>
@@ -200,9 +210,9 @@ export default function ProductTable({
 
                 <td>{isSingle ? getLanguage(product) : '-'}</td>
 
-                <td>{formatMoney(product.computed_price_clp || product.price_clp)}</td>
+                <td className={alertClass}>{formatMoney(precioVenta)}</td>
 
-                <td>{formatMoney(product.cost_real_clp)}</td>
+                <td>{formatMoney(costoReal)}</td>
 
                 <td>
                   <span className={`badge ${Number(product.margin_clp || 0) < 0 ? "badge-error" : "badge-success"}`}>
@@ -210,7 +220,9 @@ export default function ProductTable({
                   </span>
                 </td>
 
-                <td>{formatMoney(product.price_clp_suggested || product.suggested_price_clp)}</td>
+                <td className={precioVenta < sugeridoClp ? 'text-warning fw-bold' : ''}>
+                  {formatMoney(sugeridoClp)}
+                </td>
 
                 <td>
                   <span className={`badge ${stockClass(stock, minimum)}`}>

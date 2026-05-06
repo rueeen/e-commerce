@@ -1,3 +1,5 @@
+from decimal import Decimal, ROUND_HALF_UP
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
@@ -105,6 +107,18 @@ class Product(models.Model):
     is_active = models.BooleanField(default=True)
     notes = models.TextField(blank=True)
     price_clp_suggested = models.PositiveIntegerField(default=0)
+    # Precio crudo desde proveedor externo en USD.
+    price_external_usd = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+    )
+    # Tasa snapshot usada durante la sincronización.
+    exchange_rate_usd_clp = models.DecimalField(
+        max_digits=12,
+        decimal_places=4,
+        default=Decimal("0.0000"),
+    )
     pricing_source = models.CharField(
         max_length=20,
         choices=PricingSource.choices,
@@ -196,6 +210,29 @@ class Product(models.Model):
     @property
     def suggested_price_clp(self):
         return int(round(int(self.cost_real_clp or 0) * 1.3))
+
+    def get_precio_sugerido_clp(self):
+        usd = Decimal(str(self.price_external_usd or 0))
+        rate = Decimal(str(self.exchange_rate_usd_clp or 0))
+        return int((usd * rate).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+    @property
+    def precio_sugerido_clp(self):
+        return self.get_precio_sugerido_clp()
+
+    def clean(self):
+        super().clean()
+        costo_real = int(self.cost_real_clp or 0)
+        sugerido = int(self.get_precio_sugerido_clp() or 0)
+        if costo_real > 0 and sugerido > 0 and sugerido < costo_real:
+            raise ValidationError(
+                {
+                    "price_external_usd": (
+                        "El precio sugerido calculado es menor al costo real. "
+                        "Revisa precio externo o tipo de cambio."
+                    )
+                }
+            )
 
 
 class SingleCard(models.Model):
