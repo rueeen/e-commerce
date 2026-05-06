@@ -90,7 +90,7 @@ export default function ProductTable({
 
     dataTableRef.current = new DataTable(tableRef.current, {
       paging: true,
-      searching: true,
+      searching: false,
       ordering: true,
       pageLength: 25,
       lengthMenu: [10, 25, 50, 100],
