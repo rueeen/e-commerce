@@ -18,6 +18,8 @@ const uploadConfig = {
   },
 };
 
+const extractPaginatedResults = (data) => data?.results || data || [];
+
 export const api = {
   // =========================
   // Auth / Accounts
@@ -38,6 +40,24 @@ export const api = {
   // Products / Catalog
   // =========================
   getProducts: (params = {}) => apiClient.get('/api/products/products/', { params }),
+  fetchAllProducts: async (params = {}) => {
+    let page = 1;
+    let hasNext = true;
+    let allProducts = [];
+
+    while (hasNext) {
+      const { data } = await apiClient.get('/api/products/products/', {
+        params: { ...params, page },
+      });
+      const results = extractPaginatedResults(data);
+
+      allProducts = [...allProducts, ...results];
+      hasNext = Boolean(data?.next);
+      page += 1;
+    }
+
+    return allProducts;
+  },
   productById: (id) => apiClient.get(`/api/products/products/${id}/`),
   createProduct: (payload) => apiClient.post('/api/products/products/', payload),
   updateProduct: (id, payload) => apiClient.put(`/api/products/products/${id}/`, payload),

@@ -120,16 +120,16 @@ export default function AdminPurchaseOrdersPage() {
     setLoading(true);
 
     try {
-      const [{ data: ordersData }, { data: suppliersData }, { data: productsData }] =
+      const [{ data: ordersData }, { data: suppliersData }, allProducts] =
         await Promise.all([
           api.getPurchaseOrders(),
           api.getSuppliers(),
-          api.getProducts(),
+          api.fetchAllProducts(),
         ]);
 
       setOrders(normalizeList(ordersData));
       setSuppliers(normalizeList(suppliersData));
-      setProducts(normalizeList(productsData));
+      setProducts(Array.isArray(allProducts) ? allProducts : []);
     } catch {
       // El apiClient ya muestra el error.
     } finally {
