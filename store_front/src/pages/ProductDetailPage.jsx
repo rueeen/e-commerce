@@ -65,8 +65,6 @@ export default function ProductDetailPage() {
   const card = useMemo(() => getCard(product), [product]);
 
   const stock = Number(product?.stock || 0);
-  const margin = Number(product?.margin_clp || 0);
-  const isLoss = margin < 0;
   const isFoil = getIsFoil(product);
   const canBuy = stock > 0 && product?.is_active !== false;
 
@@ -196,26 +194,6 @@ export default function ProductDetailPage() {
 
           <p className="price-highlight mb-2">
             {formatMoney(product.computed_price_clp || product.price_clp)}
-          </p>
-
-          <p className="mb-1">
-            <strong>Costo real:</strong> {formatMoney(product.cost_real_clp)}
-          </p>
-
-          <p className={`mb-1 ${isLoss ? 'text-danger' : 'text-success'}`}>
-            <strong>Margen:</strong> {margin >= 0 ? '+' : ''}
-            {formatMoney(margin)} ({product.margin_percentage || 0}%){' '}
-            {isLoss ? '⚠️ Estás perdiendo dinero' : '✅ Margen positivo'}
-          </p>
-
-          <p className="mb-1">
-            <strong>Precio sugerido:</strong>{' '}
-            {formatMoney(product.suggested_price_clp)}
-          </p>
-
-          <p className="small text-muted">
-            El costo real incluye envío, importación e impuestos cuando existe
-            información de compra registrada.
           </p>
 
           <p className="mb-3">
