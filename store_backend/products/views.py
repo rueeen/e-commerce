@@ -31,6 +31,7 @@ from .permissions import IsAdminOrWorkerOrReadOnly
 from .purchase_order_import import parse_purchase_order_excel
 from .purchase_order_product_services import (
     create_product_from_purchase_order_item,
+    find_existing_single_product,
     find_existing_single_product_for_purchase_item,
     resolve_purchase_order_product_category,
 )
@@ -424,6 +425,32 @@ class ProductViewSet(viewsets.ModelViewSet):
             card_data = get_scryfall_card_by_id(scryfall_id)
             card = _update_or_create_mtg_card(card_data)
             usd_ref = extract_usd_price(card_data, is_foil=is_foil)
+            existing_product, warning = find_existing_single_product(
+                mtg_card=card,
+                condition=condition,
+                language=language,
+                is_foil=is_foil,
+            )
+            if warning:
+                return Response(
+                    {"detail": f"No se pudo seleccionar producto existente: {warning}."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            if existing_product:
+                return Response(
+                    {
+                        "id": existing_product.id,
+                        "name": existing_product.name,
+                        "price_clp": existing_product.price_clp,
+                        "stock": existing_product.stock,
+                        "mtg_card": existing_product.single_card.mtg_card_id,
+                        "image": existing_product.image,
+                        "category": existing_product.category_id,
+                        "created": False,
+                        "reused": True,
+                    },
+                    status=status.HTTP_200_OK,
+                )
 
             with transaction.atomic():
                 product = Product.objects.create(
