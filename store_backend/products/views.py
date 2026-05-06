@@ -1080,6 +1080,10 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
             request.data.get("create_missing_products"),
             False,
         )
+        activate_products = _to_bool(
+            request.data.get("activate_products"),
+            False,
+        )
 
         with transaction.atomic():
             currency = str(parsed.get("currency") or "USD").upper()
@@ -1152,11 +1156,15 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
 
                 for item in purchase_order.items.filter(product__isnull=True):
                     try:
-                        create_product_from_purchase_order_item(
+                        product, _ = create_product_from_purchase_order_item(
                             item,
                             category=category,
                             created_by=request.user,
                         )
+
+                        if activate_products:
+                            product.is_active = True
+                            product.save(update_fields=["is_active"])
                     except Exception as exc:
                         logger.warning(
                             "No se pudo crear producto desde item_id=%s error=%s",

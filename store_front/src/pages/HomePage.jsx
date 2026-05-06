@@ -2,11 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { api } from '../api/endpoints';
+import { fetchAllPaginated } from '../api/pagination';
 import ProductCarousel from '../components/ProductCarousel';
 import ProductSlider from '../components/ProductSlider';
 import { useCart } from '../hooks/useCart';
-
-const normalizeList = (data) => data?.results || data || [];
 
 export default function HomePage() {
   const [products, setProducts] = useState([]);
@@ -30,11 +29,11 @@ export default function HomePage() {
     setLoading(true);
 
     try {
-      const { data } = await api.getProducts({
+      const data = await fetchAllPaginated(api.getProducts, {
         active: 'true',
       });
 
-      setProducts(normalizeList(data));
+      setProducts(data);
     } catch {
       // El apiClient ya muestra el error.
     } finally {

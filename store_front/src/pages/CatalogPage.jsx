@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/endpoints';
+import { fetchAllPaginated } from '../api/pagination';
 import ProductSlider from '../components/ProductSlider';
 import { useCart } from '../hooks/useCart';
 
@@ -15,8 +16,6 @@ const RARITIES = [
   { value: 'rare', label: 'Rare' },
   { value: 'mythic', label: 'Mythic' },
 ];
-
-const normalizeList = (data) => data?.results || data || [];
 
 const getProductRarity = (product) => {
   return product.single_card?.mtg_card?.rarity || product.mtg_card?.rarity || '';
@@ -44,11 +43,11 @@ export default function CatalogPage() {
     setLoading(true);
 
     try {
-      const { data } = await api.getProducts({
+      const data = await fetchAllPaginated(api.getProducts, {
         active: 'true',
       });
 
-      setProducts(normalizeList(data));
+      setProducts(data);
     } catch {
       // El apiClient ya muestra el error.
     } finally {
@@ -78,7 +77,9 @@ export default function CatalogPage() {
       const matchesFoil =
         !foil || String(getProductIsFoil(product)) === foil;
 
-      return matchesSearch && matchesType && matchesRarity && matchesFoil;
+      const hasStock = Number(product.stock || 0) > 0;
+
+      return matchesSearch && matchesType && matchesRarity && matchesFoil && hasStock;
     });
   }, [products, query, type, rarity, foil]);
 

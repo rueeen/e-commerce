@@ -46,6 +46,7 @@ export default function PurchaseOrderImport() {
   const [updatePricesOnReceive, setUpdatePricesOnReceive] = useState(false);
   const [autoMatchScryfall, setAutoMatchScryfall] = useState(true);
   const [createMissingProducts, setCreateMissingProducts] = useState(false);
+  const [activateCreatedProducts, setActivateCreatedProducts] = useState(false);
 
   const [extraCosts, setExtraCosts] = useState(initialExtraCosts);
 
@@ -116,6 +117,7 @@ export default function PurchaseOrderImport() {
     update_prices_on_receive: updatePricesOnReceive,
     auto_match_scryfall: autoMatchScryfall,
     create_missing_products: createMissingProducts,
+    activate_products: activateCreatedProducts,
     ...Object.fromEntries(
       Object.entries(extraCosts).map(([key, value]) => [
         key,
@@ -423,6 +425,22 @@ export default function PurchaseOrderImport() {
               Crear productos faltantes automáticamente
             </label>
           </div>
+
+          {createMissingProducts && (
+            <div className="form-check mb-3">
+              <input
+                id="activate-created-products"
+                type="checkbox"
+                className="form-check-input"
+                checked={activateCreatedProducts}
+                onChange={(event) => setActivateCreatedProducts(event.target.checked)}
+              />
+
+              <label className="form-check-label" htmlFor="activate-created-products">
+                Activar productos creados automáticamente
+              </label>
+            </div>
+          )}
 
           <button
             type="button"

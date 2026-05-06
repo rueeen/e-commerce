@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/endpoints';
+import { fetchAllPaginated } from '../api/pagination';
 import { notyf } from '../api/notifier';
 import ExcelImportBox from '../components/ExcelImportBox';
 import ProductForm, {
@@ -122,13 +123,12 @@ export default function AdminProductsPage() {
     setLoading(true);
 
     try {
-      const [{ data: productsData }, { data: categoriesData }] =
-        await Promise.all([
-          api.getProducts(),
-          api.getCategories(),
-        ]);
+      const [productsData, { data: categoriesData }] = await Promise.all([
+        fetchAllPaginated(api.getProducts),
+        api.getCategories(),
+      ]);
 
-      setProducts(normalizeList(productsData));
+      setProducts(productsData);
       setCategories(normalizeList(categoriesData));
     } catch {
       // El apiClient ya muestra el error.
@@ -418,7 +418,10 @@ export default function AdminProductsPage() {
           <div>
             <h5 className="mb-1">Listado de productos</h5>
             <p className="text-muted mb-0">
-              {filtered.length} producto(s) encontrados.
+              {filtered.length} producto(s) filtrados de {products.length}.
+            </p>
+            <p className="text-warning small mb-0">
+              Solo los productos activos aparecen en la tienda pública.
             </p>
           </div>
 
