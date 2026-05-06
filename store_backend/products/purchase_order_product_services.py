@@ -5,11 +5,13 @@ from django.db import transaction
 from django.utils.dateparse import parse_date
 
 from .models import Category, MTGCard, Product, SingleCard
+from .scryfall_normalizer import normalize_card_description
 from .services import (
     extract_usd_price,
     get_scryfall_card_by_id,
     resolve_scryfall_card,
 )
+
 
 PREFERRED_SINGLE_CATEGORY_NAMES = {
     "singles",
@@ -71,6 +73,56 @@ def resolve_purchase_order_product_category(category=None):
     return categories[0] if categories else None
 
 
+def _has_usable_scryfall_data(item):
+    if item.scryfall_id:
+        return True
+
+    data = item.scryfall_data or {}
+
+    if not isinstance(data, dict):
+        return False
+
+    raw_data = data.get("raw_data")
+    if isinstance(raw_data, dict) and raw_data.get("id"):
+        return True
+
+    card_data = data.get("card")
+    if isinstance(card_data, dict) and card_data.get("id"):
+        return True
+
+    if data.get("id") or data.get("scryfall_id"):
+        return True
+
+    return False
+
+
+def _get_clean_card_name_candidates_from_item(item):
+    candidates = []
+
+    normalized_name = str(item.normalized_card_name or "").strip()
+    raw_description = str(item.raw_description or "").strip()
+
+    if normalized_name:
+        candidates.append(normalized_name)
+
+        cleaned_normalized = normalize_card_description(normalized_name).get(
+            "normalized_card_name"
+        )
+
+        if cleaned_normalized and cleaned_normalized not in candidates:
+            candidates.append(cleaned_normalized)
+
+    if raw_description:
+        cleaned_raw = normalize_card_description(raw_description).get(
+            "normalized_card_name"
+        )
+
+        if cleaned_raw and cleaned_raw not in candidates:
+            candidates.append(cleaned_raw)
+
+    return candidates
+
+
 def resolve_purchase_order_item_scryfall(item):
     """
     Garantiza que el PurchaseOrderItem tenga datos suficientes de Scryfall.
@@ -79,18 +131,14 @@ def resolve_purchase_order_item_scryfall(item):
     este método busca la carta en Scryfall y guarda scryfall_id/scryfall_data
     en el item para que luego se pueda crear MTGCard/Product/SingleCard.
     """
-    if item.scryfall_id or item.scryfall_data:
+    if _has_usable_scryfall_data(item):
         return item
 
-    card_name = (
-        item.normalized_card_name
-        or item.raw_description
-        or ""
-    ).strip()
+    candidate_names = _get_clean_card_name_candidates_from_item(item)
 
-    if not card_name:
+    if not candidate_names:
         raise ValidationError(
-            "El item no tiene nombre de carta para buscar en Scryfall."
+            f"Item #{item.id}: no tiene nombre de carta para buscar en Scryfall."
         )
 
     set_hint = str(getattr(item, "set_name_detected", "") or "").strip()
@@ -98,36 +146,62 @@ def resolve_purchase_order_item_scryfall(item):
     is_foil = bool(
         getattr(item, "is_foil_detected", False)
         or getattr(item, "is_foil", False)
+        or (item.scryfall_data or {}).get("is_foil_detected", False)
     )
 
-    try:
-        _card, card_data, warnings = resolve_scryfall_card(name=card_name)
-    except ValidationError as exc:
+    language = str(
+        getattr(item, "language", "")
+        or (item.scryfall_data or {}).get("language")
+        or "EN"
+    ).upper()
+
+    last_error = None
+    resolved_name = None
+    card_data = None
+    warnings = []
+
+    for candidate_name in candidate_names:
+        try:
+            _card, card_data, warnings = resolve_scryfall_card(
+                name=candidate_name)
+            resolved_name = candidate_name
+            break
+        except ValidationError as exc:
+            last_error = exc
+
+    if not isinstance(card_data, dict):
         raise ValidationError(
             f"No se pudo resolver Scryfall para item #{item.id}: "
-            f"{card_name} / set_hint={set_hint or '-'} ({exc})"
-        ) from exc
+            f"candidatos={candidate_names} / set_hint={set_hint or '-'} "
+            f"({last_error})"
+        )
 
-    scryfall_id = card_data.get("id")
+    scryfall_id = card_data.get("id") or card_data.get("scryfall_id")
+
     if not scryfall_id:
         raise ValidationError(
             f"No se pudo resolver Scryfall para item #{item.id}: "
-            f"{card_name} / set_hint={set_hint or '-'} (sin scryfall_id)"
+            f"{resolved_name or candidate_names[0]} / set_hint={set_hint or '-'} "
+            f"(sin scryfall_id)"
         )
 
+    item.normalized_card_name = resolved_name or item.normalized_card_name
     item.scryfall_id = scryfall_id
     item.scryfall_data = {
         "raw_data": card_data,
         "warnings": warnings or [],
         "set_hint": set_hint,
+        "is_foil_detected": is_foil,
         "is_foil_requested": is_foil,
-        "language": str(getattr(item, "language", "") or "EN").upper(),
+        "language": language,
     }
 
-    update_fields = ["scryfall_id", "scryfall_data"]
+    update_fields = ["normalized_card_name", "scryfall_id", "scryfall_data"]
+
     if hasattr(item, "scryfall_status"):
         item.scryfall_status = "matched"
         update_fields.append("scryfall_status")
+
     item.save(update_fields=update_fields)
     return item
 
@@ -142,20 +216,34 @@ def _build_card_payload(item):
     if not isinstance(scryfall_data, dict):
         scryfall_data = {}
 
-    raw_data = scryfall_data.get("raw_data") or scryfall_data.get("card")
+    raw_data = scryfall_data.get("raw_data")
 
     if raw_data and isinstance(raw_data, dict):
         return raw_data
 
-    if isinstance(scryfall_data, dict) and scryfall_data.get("id"):
+    card_data = scryfall_data.get("card")
+
+    if card_data and isinstance(card_data, dict):
+        return card_data
+
+    if scryfall_data.get("id"):
         return scryfall_data
 
-    scryfall_id = item.scryfall_id or scryfall_data.get("id")
+    scryfall_id = (
+        item.scryfall_id
+        or scryfall_data.get("scryfall_id")
+        or scryfall_data.get("id")
+    )
 
     if scryfall_id:
         return get_scryfall_card_by_id(scryfall_id)
 
-    raise ValidationError("El item no tiene datos suficientes de Scryfall.")
+    raise ValidationError(
+        f"El item #{item.id} no tiene datos suficientes de Scryfall. "
+        f"raw_description={item.raw_description or '-'}; "
+        f"normalized_card_name={item.normalized_card_name or '-'}; "
+        f"scryfall_data={scryfall_data or '-'}"
+    )
 
 
 def _get_card_images(card_data):

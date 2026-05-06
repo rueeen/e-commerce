@@ -767,6 +767,38 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
 
         return f"{base}{sequence:04d}"
 
+    def _get_exchange_rate_for_currency(self, currency):
+        currency = str(currency or "CLP").upper()
+
+        if currency == "CLP":
+            return Decimal("1")
+
+        if currency == "USD":
+            pricing_settings = (
+                PricingSettings.objects
+                .filter(is_active=True)
+                .order_by("-updated_at", "-id")
+                .first()
+            )
+
+            if not pricing_settings:
+                raise ValidationError(
+                    "No existe una configuración de precios activa para obtener el valor USD → CLP."
+                )
+
+            usd_to_clp = Decimal(str(pricing_settings.usd_to_clp or 0))
+
+            if usd_to_clp <= 0:
+                raise ValidationError(
+                    "El valor USD → CLP configurado debe ser mayor a 0."
+                )
+
+            return usd_to_clp
+
+        raise ValidationError(
+            f"Moneda no soportada para orden de compra: {currency}"
+        )
+
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
@@ -879,7 +911,7 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
 
         parsed = parse_purchase_order_excel(
             excel_file,
-            fallback_currency=request.data.get("original_currency", "CLP"),
+            fallback_currency=request.data.get("original_currency", "USD"),
         )
 
         items = parsed.get("items", [])
@@ -1017,7 +1049,7 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
         try:
             parsed = parse_purchase_order_excel(
                 excel_file,
-                fallback_currency=request.data.get("original_currency", "CLP"),
+                fallback_currency=request.data.get("original_currency", "USD"),
             )
         except ValidationError as exc:
             return Response(

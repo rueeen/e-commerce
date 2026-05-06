@@ -8,7 +8,9 @@ REMOVE_TOKENS = [
     "Commander Deck",
     "Eternal-Legal",
     "Showcase",
+    "Showcas",
     "Extended Art",
+    "Extend",
     "Borderless",
     "Retro Frame",
     "Alternate Art",
@@ -29,7 +31,9 @@ FOIL_TOKENS = [
 
 TREATMENT_TOKENS = [
     "Showcase",
+    "Showcas",
     "Extended Art",
+    "Extend",
     "Borderless",
     "Retro Frame",
     "Alternate Art",
@@ -86,6 +90,19 @@ def _remove_tokens(text: str) -> str:
     return _clean_spaces(cleaned)
 
 
+def _remove_parenthetical_noise(text: str) -> str:
+    cleaned = text or ""
+
+    # Elimina paréntesis completos: "(Extended Art)", "(Foil)", "(0329 - Showcase)"
+    cleaned = re.sub(r"\([^)]*\)", "", cleaned)
+
+    # Elimina paréntesis incompletos/truncados al final:
+    # "(Extend", "(0329 - Showcas", "(Borderless"
+    cleaned = re.sub(r"\([^)]*$", "", cleaned)
+
+    return _clean_spaces(cleaned)
+
+
 def normalize_card_description(raw_description: str) -> dict:
     raw = (raw_description or "").strip()
     warnings = []
@@ -101,13 +118,13 @@ def normalize_card_description(raw_description: str) -> dict:
         set_name = _clean_spaces(_remove_tokens(left))
         card_name = right
 
-    # Elimina textos entre paréntesis como "(Extended Art)" o "(Foil)".
-    card_name = re.sub(r"\([^)]*\)", "", card_name)
-
-    # Algunos listados traen puntos suspensivos o separadores raros.
+    # Algunos listados traen puntos suspensivos o unicode ellipsis.
     card_name = card_name.replace("...", " ")
+    card_name = card_name.replace("…", " ")
 
+    card_name = _remove_parenthetical_noise(card_name)
     card_name = _remove_tokens(card_name)
+    card_name = _clean_spaces(card_name)
 
     if not card_name:
         warnings.append("No se pudo normalizar el nombre de carta.")

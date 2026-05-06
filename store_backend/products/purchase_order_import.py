@@ -243,7 +243,7 @@ def _parse_normalized_workbook(wb):
         "total_original": _to_decimal(fields.get("total_original")),
     }
 
-    currency = str(fields.get("currency") or "").strip().upper() or "CLP"
+    currency = str(fields.get("currency") or "").strip().upper() or "USD"
 
     sheet = wb["purchase_order_items"]
 
@@ -483,7 +483,7 @@ def _parse_normalized_workbook(wb):
     }
 
 
-def parse_purchase_order_excel(file, fallback_currency="CLP"):
+def parse_purchase_order_excel(file, fallback_currency="USD"):
     wb = load_workbook(file, data_only=True)
 
     normalized = _parse_normalized_workbook(wb)
@@ -494,7 +494,7 @@ def parse_purchase_order_excel(file, fallback_currency="CLP"):
     sheet = wb.active
 
     condition = "NM"
-    currency = str(fallback_currency or "CLP").strip().upper() or "CLP"
+    currency = str(fallback_currency or "USD").strip().upper() or "USD"
 
     items = []
     warnings = []
