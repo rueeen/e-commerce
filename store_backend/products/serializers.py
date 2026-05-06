@@ -113,6 +113,9 @@ class ProductSerializer(serializers.ModelSerializer):
     margin_clp = serializers.IntegerField(read_only=True)
     margin_percentage = serializers.FloatField(read_only=True)
     suggested_price_clp = serializers.IntegerField(read_only=True)
+    precio_sugerido_clp = serializers.SerializerMethodField()
+    margen_clp = serializers.SerializerMethodField()
+    margen_pct = serializers.SerializerMethodField()
     is_profitable = serializers.SerializerMethodField()
 
     class Meta:
@@ -134,11 +137,16 @@ class ProductSerializer(serializers.ModelSerializer):
             "margin_clp",
             "margin_percentage",
             "suggested_price_clp",
+            "margen_clp",
+            "margen_pct",
+            "precio_sugerido_clp",
             "is_profitable",
             "image",
             "is_active",
             "notes",
             "price_clp_suggested",
+            "price_external_usd",
+            "exchange_rate_usd_clp",
             "pricing_source",
             "pricing_last_update",
             "created_at",
@@ -170,6 +178,18 @@ class ProductSerializer(serializers.ModelSerializer):
             return True
 
         return price >= cost
+
+    def get_margen_clp(self, obj):
+        return int(obj.computed_price_clp or 0) - int(obj.cost_real_clp or 0)
+
+    def get_margen_pct(self, obj):
+        cost = int(obj.cost_real_clp or 0)
+        if cost <= 0:
+            return 0.0
+        return round((self.get_margen_clp(obj) / cost) * 100, 2)
+
+    def get_precio_sugerido_clp(self, obj):
+        return int(obj.get_precio_sugerido_clp() or 0)
 
 
 

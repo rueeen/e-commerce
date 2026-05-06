@@ -60,6 +60,7 @@ from .services import (
     import_purchase_order_from_xlsx,
     search_cards,
 )
+from .tasks import sync_product_external_price
 
 
 logger = logging.getLogger(__name__)
@@ -534,6 +535,34 @@ class ProductViewSet(viewsets.ModelViewSet):
         product.save(update_fields=["price_clp", "is_active", "updated_at"])
 
         return Response(self.get_serializer(product).data)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="sync-external-price",
+        permission_classes=[IsAdminOrWorkerUser],
+    )
+    def sync_external_price(self, request, pk=None):
+        product = self.get_object()
+        exchange_rate = request.data.get("exchange_rate_usd_clp")
+
+        try:
+            exchange_rate = Decimal(str(exchange_rate))
+        except Exception:
+            return Response(
+                {"detail": "exchange_rate_usd_clp inválido."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        task = sync_product_external_price.delay(product.id, str(exchange_rate))
+        return Response(
+            {
+                "detail": "Sincronización encolada.",
+                "task_id": task.id,
+                "product_id": product.id,
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
 
     @action(
         detail=True,
