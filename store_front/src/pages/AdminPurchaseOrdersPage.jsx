@@ -10,7 +10,7 @@ const emptyForm = {
   order_number: '',
   external_reference: '',
   source_store: '',
-  original_currency: 'CLP',
+  original_currency: 'USD',
   notes: '',
   status: 'DRAFT',
 
@@ -427,7 +427,7 @@ export default function AdminPurchaseOrdersPage() {
         external_reference: form.external_reference || '',
         status,
         source_store: form.source_store || '',
-        original_currency: form.original_currency || 'CLP',
+        original_currency: form.original_currency || 'USD',
 
         subtotal_original: subtotalOriginal,
         shipping_original: shippingOriginal,
@@ -1021,6 +1021,11 @@ export default function AdminPurchaseOrdersPage() {
 
                   <div className="col-md-6">
                     <strong>Moneda:</strong> {selectedOrder.original_currency}
+                  </div>
+
+                  <div className="col-md-6">
+                    <strong>TC snapshot (CLP):</strong>{' '}
+                    {selectedOrder.exchange_rate_snapshot_clp ?? '—'}
                   </div>
 
                   <div className="col-md-12">
