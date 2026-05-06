@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
-from django.db.models import Count
+from django.db.models import Count, F, Q
 from django.utils import timezone
 
 from rest_framework import filters, status, viewsets
@@ -34,6 +34,7 @@ from .purchase_order_product_services import (
     resolve_purchase_order_product_category,
 )
 from .purchase_order_services import (
+    calculate_suggested_price_from_real_cost,
     receive_purchase_order,
     recalculate_purchase_order,
 )
@@ -487,6 +488,112 @@ class ProductViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="recalculate-prices",
+        permission_classes=[IsAdminUser],
+    )
+    def recalculate_prices(self, request):
+        payload = request.data or {}
+        apply_to_sale_price = _to_bool(payload.get("apply_to_sale_price"), False)
+        only_active = _to_bool(payload.get("only_active"), False)
+        only_with_stock = _to_bool(payload.get("only_with_stock"), False)
+        only_negative_margin = _to_bool(payload.get("only_negative_margin"), False)
+        category_id = payload.get("category_id")
+        product_type = (payload.get("product_type") or "").strip()
+
+        pricing_settings = PricingSettings.objects.filter(is_active=True).order_by("-updated_at", "-id").first()
+        if not pricing_settings:
+            return Response({"detail": "No hay una configuración de precios activa."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if Decimal(str(pricing_settings.margin_factor or 0)) <= Decimal("1"):
+            return Response({"detail": "margin_factor debe ser mayor a 1 para recalcular precios."}, status=status.HTTP_400_BAD_REQUEST)
+
+        queryset = Product.objects.all().order_by("id")
+        if only_active:
+            queryset = queryset.filter(is_active=True)
+        if only_with_stock:
+            queryset = queryset.filter(stock__gt=0)
+        if category_id not in (None, ""):
+            queryset = queryset.filter(category_id=category_id)
+        if product_type:
+            queryset = queryset.filter(product_type=product_type)
+        if only_negative_margin:
+            queryset = queryset.filter(
+                Q(price_clp__lt=F("last_purchase_cost_clp"))
+                | Q(last_purchase_cost_clp__gt=0, price_clp__lt=F("average_cost_clp"))
+            )
+
+        processed_count = queryset.count()
+        updated_count = 0
+        skipped_count = 0
+        negative_before = 0
+        negative_after = 0
+        warnings = []
+        results = []
+
+        rounding_to = int(pricing_settings.rounding_to or 100)
+        if rounding_to <= 0:
+            rounding_to = 100
+            warnings.append("rounding_to inválido en configuración activa. Se usó 100 por defecto.")
+
+        for product in queryset:
+            cost_real = int(product.cost_real_clp or 0)
+            fallback_cost = int(product.last_purchase_cost_clp or product.average_cost_clp or 0)
+            base_cost = cost_real if cost_real > 0 else fallback_cost
+
+            if base_cost <= 0:
+                skipped_count += 1
+                warnings.append(f"Producto {product.id} sin costo real, no se puede calcular precio sugerido.")
+                results.append({"product_id": product.id, "name": product.name, "status": "skipped"})
+                continue
+
+            old_price = int(product.price_clp or 0)
+            old_suggested = int(product.suggested_price_clp or 0)
+            if old_price < base_cost:
+                negative_before += 1
+
+            new_suggested = int(calculate_suggested_price_from_real_cost(base_cost) or 0)
+            if new_suggested < base_cost:
+                new_suggested = base_cost
+
+            if apply_to_sale_price:
+                product.price_clp = max(new_suggested, base_cost)
+
+            update_fields = ["price_clp", "updated_at"] if apply_to_sale_price else ["updated_at"]
+            product.save(update_fields=update_fields)
+            updated_count += 1
+
+            new_margin = int(product.price_clp or 0) - base_cost
+            if int(product.price_clp or 0) < base_cost:
+                negative_after += 1
+
+            results.append({
+                "product_id": product.id,
+                "name": product.name,
+                "cost_real_clp": cost_real,
+                "base_cost_clp": base_cost,
+                "old_price_clp": old_price,
+                "old_suggested_price_clp": old_suggested,
+                "new_suggested_price_clp": new_suggested,
+                "new_margin_clp": new_margin,
+                "status": "updated",
+            })
+
+        return Response({
+            "processed_count": processed_count,
+            "updated_count": updated_count,
+            "skipped_count": skipped_count,
+            "applied_to_sale_price": apply_to_sale_price,
+            "settings_id": pricing_settings.id,
+            "negative_margin_before": negative_before,
+            "negative_margin_after": negative_after,
+            "results": results[:200],
+            "warnings": warnings,
+        })
 
     @action(
         detail=True,

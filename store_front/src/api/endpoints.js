@@ -50,6 +50,8 @@ export const api = {
   productKardex: (id) => apiClient.get(`/api/products/products/${id}/kardex/`),
   applySuggestedPrice: (id) =>
     apiClient.post(`/api/products/products/${id}/apply-suggested-price/`),
+  recalculateProductPrices: (payload) =>
+    apiClient.post('/api/products/products/recalculate-prices/', payload),
   productSuggestedPrice: (id, unit_cost_clp = 0) =>
     apiClient.get(`/api/products/products/${id}/suggested-price/`, {
       params: { unit_cost_clp },

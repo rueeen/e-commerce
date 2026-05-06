@@ -265,15 +265,13 @@ export default function ProductTable({
                       Editar
                     </button>
 
-                    {Number(product.margin_clp || 0) < 0 && (
-                      <button
-                        type="button"
-                        className="btn btn-outline-danger btn-sm"
-                        onClick={() => onApplySuggestedPrice?.(product)}
-                      >
-                        Aplicar sugerido
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className="btn btn-outline-danger btn-sm"
+                      onClick={() => onApplySuggestedPrice?.(product)}
+                    >
+                      Aplicar sugerido
+                    </button>
 
                     <button
                       type="button"

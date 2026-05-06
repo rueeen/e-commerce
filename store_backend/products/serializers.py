@@ -113,6 +113,7 @@ class ProductSerializer(serializers.ModelSerializer):
     margin_clp = serializers.IntegerField(read_only=True)
     margin_percentage = serializers.FloatField(read_only=True)
     suggested_price_clp = serializers.IntegerField(read_only=True)
+    price_clp_suggested = serializers.IntegerField(source="suggested_price_clp", read_only=True)
     precio_sugerido_clp = serializers.SerializerMethodField()
     margen_clp = serializers.SerializerMethodField()
     margen_pct = serializers.SerializerMethodField()
@@ -137,6 +138,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "margin_clp",
             "margin_percentage",
             "suggested_price_clp",
+            "price_clp_suggested",
             "margen_clp",
             "margen_pct",
             "precio_sugerido_clp",
@@ -161,6 +163,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "margin_clp",
             "margin_percentage",
             "suggested_price_clp",
+            "price_clp_suggested",
             "is_profitable",
             "created_at",
             "updated_at",
