@@ -306,8 +306,25 @@ def receive_purchase_order(order, user):
         if qty <= 0:
             continue
 
+        # Blindaje: derivar siempre el costo unitario desde los montos unitarios
+        # de la línea para no arrastrar un total de línea como costo unitario.
+        ordered_qty = int(item.quantity_ordered or 0)
+        line_total_clp = int(item.line_total_clp or 0)
+        allocated_extra_cost_clp = int(item.allocated_extra_cost_clp or 0)
+
+        recalculated_unit_cost = 0
+        if ordered_qty > 0:
+            recalculated_unit_cost = _clp(
+                (
+                    _d(line_total_clp)
+                    + _d(allocated_extra_cost_clp)
+                )
+                / _d(ordered_qty)
+            )
+
         unit_cost = int(
-            item.real_unit_cost_clp
+            recalculated_unit_cost
+            or item.real_unit_cost_clp
             or item.unit_price_clp
             or 0
         )
@@ -355,9 +372,23 @@ def receive_purchase_order(order, user):
             item.suggested_sale_price_clp = suggested_price
             item.save(update_fields=["suggested_sale_price_clp"])
 
+        product = item.product
+        previous_stock = int(product.stock or 0)
+        previous_average_cost = int(product.average_cost_clp or 0)
+
+        weighted_average_cost = max(real_cost, 0)
+        if previous_stock > 0:
+            weighted_average_cost = _clp(
+                (
+                    _d(previous_stock) * _d(previous_average_cost)
+                    + _d(qty) * _d(real_cost)
+                )
+                / _d(previous_stock + qty)
+            )
+
         update_payload = {
-            # Ya no persistimos un sugerido CLP en Product; se calcula dinámicamente.
             "last_purchase_cost_clp": max(real_cost, 0),
+            "average_cost_clp": max(weighted_average_cost, 0),
         }
 
         if purchase_order.update_prices_on_receive:
