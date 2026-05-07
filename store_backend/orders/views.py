@@ -5,7 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from accounts.permissions import is_admin_user, is_worker_user
-from accounts.models import User
+from django.contrib.auth import get_user_model
 from products.models import Product
 
 from .models import AssistedPurchaseOrder, Order
@@ -16,6 +16,7 @@ from .serializers import (
 )
 from .services import cancel_order, confirm_order_payment, create_order_from_cart
 
+User = get_user_model()
 
 def validation_error_response(exc):
     if hasattr(exc, "message"):
