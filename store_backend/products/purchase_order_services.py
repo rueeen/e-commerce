@@ -12,6 +12,7 @@ from .models import (
     PricingSettings,
     Product,
     PurchaseOrder,
+    PurchaseOrderItem,
 )
 
 
@@ -181,6 +182,8 @@ def allocate_extra_costs(order):
     if subtotal <= 0 or not items:
         return
 
+    # Se obtiene una sola vez para evitar N+1 queries de PricingSettings.
+    pricing_settings = get_active_pricing_settings()
     allocated = 0
 
     for index, item in enumerate(items):
@@ -214,16 +217,19 @@ def allocate_extra_costs(order):
             )
             item.suggested_sale_price_clp = calculate_suggested_price_from_real_cost(
                 item.real_unit_cost_clp,
+                pricing_settings=pricing_settings,
             )
 
-        item.save(
-            update_fields=[
-                "allocated_extra_cost_clp",
-                "allocated_tax_clp",
-                "real_unit_cost_clp",
-                "suggested_sale_price_clp",
-            ]
-        )
+    # Persistencia en lote para evitar N saves individuales.
+    PurchaseOrderItem.objects.bulk_update(
+        items,
+        [
+            "allocated_extra_cost_clp",
+            "allocated_tax_clp",
+            "real_unit_cost_clp",
+            "suggested_sale_price_clp",
+        ],
+    )
 
 
 def recalculate_purchase_order(order):
