@@ -17,11 +17,13 @@ class Category(models.Model):
     slug = models.SlugField(unique=True)
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="children")
     created_at = models.DateTimeField(default=timezone.now, editable=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["name"]
+        ordering = ["sort_order", "name"]
         verbose_name = "Categoría"
         verbose_name_plural = "Categorías"
 
@@ -73,8 +75,11 @@ class MTGCard(models.Model):
 class Product(models.Model):
     class ProductType(models.TextChoices):
         SINGLE = "single", "Carta individual"
-        SEALED = "sealed", "Sellado"
+        SEALED = "sealed", "Producto sellado"
         BUNDLE = "bundle", "Bundle"
+        ACCESSORY = "accessory", "Accesorio"
+        SERVICE = "service", "Servicio / encargo"
+        OTHER = "other", "Otro"
 
     class CardCondition(models.TextChoices):
         NM = "NM", "Near Mint"

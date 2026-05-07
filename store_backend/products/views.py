@@ -911,12 +911,16 @@ class CategoryViewSet(viewsets.ModelViewSet):
     ]
 
     def get_queryset(self):
-        return (
+        queryset = (
             Category.objects.annotate(
                 products_count=Count("products"),
             )
-            .order_by("name")
+            .order_by("sort_order", "name")
         )
+        is_active = self.request.query_params.get("is_active")
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active.lower() in {"1", "true", "yes"})
+        return queryset
 
 
 class PricingSettingsViewSet(viewsets.ModelViewSet):
@@ -978,7 +982,7 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
     ]
 
     def get_queryset(self):
-        return (
+        queryset = (
             PurchaseOrder.objects.select_related(
                 "supplier",
                 "created_by",

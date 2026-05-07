@@ -21,12 +21,7 @@ PREFERRED_SINGLE_CATEGORY_NAMES = {
     "carta individual",
 }
 
-PREFERRED_SINGLE_CATEGORY_SLUGS = {
-    "singles",
-    "single",
-    "cartas-individuales",
-    "carta-individual",
-}
+PREFERRED_SINGLE_CATEGORY_SLUGS = {"cartas-individuales", "single", "singles", "carta-individual"}
 
 
 CONDITION_MAP = {

@@ -1,7 +1,10 @@
 export const PRODUCT_TYPE_OPTIONS = [
   { value: 'single', label: 'Carta individual' },
-  { value: 'sealed', label: 'Sellado' },
+  { value: 'sealed', label: 'Producto sellado' },
   { value: 'bundle', label: 'Bundle' },
+  { value: 'accessory', label: 'Accesorio' },
+  { value: 'service', label: 'Servicio / encargo' },
+  { value: 'other', label: 'Otro' },
 ];
 
 export const CONDITION_OPTIONS = [

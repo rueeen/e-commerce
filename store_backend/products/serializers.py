@@ -95,7 +95,10 @@ class BundleItemSerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
-    category = serializers.StringRelatedField(read_only=True)
+    category = serializers.PrimaryKeyRelatedField(read_only=True)
+    category_name = serializers.CharField(source="category.name", read_only=True)
+    category_slug = serializers.CharField(source="category.slug", read_only=True)
+    product_type_display = serializers.CharField(source="get_product_type_display", read_only=True)
     category_id = serializers.PrimaryKeyRelatedField(
         source="category",
         queryset=Category.objects.all(),
@@ -125,9 +128,12 @@ class ProductSerializer(serializers.ModelSerializer):
             "id",
             "category",
             "category_id",
+            "category_name",
+            "category_slug",
             "name",
             "description",
             "product_type",
+            "product_type_display",
             "price_clp",
             "computed_price_clp",
             "stock",
@@ -224,6 +230,8 @@ class CategorySerializer(serializers.ModelSerializer):
             "slug",
             "description",
             "is_active",
+            "sort_order",
+            "parent",
             "products_count",
             "created_at",
             "updated_at",
