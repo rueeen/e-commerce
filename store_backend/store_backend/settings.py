@@ -4,8 +4,12 @@ Django settings for store_backend project.
 
 from datetime import timedelta
 from pathlib import Path
+import os
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+load_dotenv(BASE_DIR / ".env")
 
 SECRET_KEY = 'django-insecure-e8nj9yo)(dp=m_-xhl-+3s37=qv=_dhha0xur0dv-5pim#b#zw'
 DEBUG = True
@@ -121,9 +125,10 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
 ]
 
-import os
 WEBPAY_ENVIRONMENT = os.getenv('WEBPAY_ENVIRONMENT', 'integration')
 WEBPAY_COMMERCE_CODE = os.getenv('WEBPAY_COMMERCE_CODE', '')
 WEBPAY_API_KEY_SECRET = os.getenv('WEBPAY_API_KEY_SECRET', '')
-WEBPAY_RETURN_URL = os.getenv('WEBPAY_RETURN_URL', 'http://localhost:3000/pago/retorno')
-WEBPAY_FINAL_URL = os.getenv('WEBPAY_FINAL_URL', 'http://localhost:3000/pago/final')
+WEBPAY_RETURN_URL = os.getenv(
+    'WEBPAY_RETURN_URL', 'http://localhost:5173/pago/retorno')
+WEBPAY_FINAL_URL = os.getenv(
+    'WEBPAY_FINAL_URL', 'http://localhost:35173000/pago/final')
