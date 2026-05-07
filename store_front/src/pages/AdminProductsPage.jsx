@@ -76,6 +76,7 @@ export default function AdminProductsPage() {
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [form, setForm] = useState(initialFormState);
+  const [bundleItems, setBundleItems] = useState([]);
 
   const [cards, setCards] = useState([]);
   const [cardQuery, setCardQuery] = useState('');
@@ -113,6 +114,7 @@ export default function AdminProductsPage() {
   const resetForm = () => {
     setEditingProduct(null);
     setForm(initialFormState);
+    setBundleItems([]);
     setCards([]);
     setCardQuery('');
   };
@@ -175,7 +177,42 @@ export default function AdminProductsPage() {
   const onEdit = (product) => {
     setEditingProduct(product);
     setForm(normalizeProductForForm(product));
+    setBundleItems(product.bundle_items || []);
     setShowProductModal(true);
+  };
+
+  const handleAddBundleItem = async (product, quantity) => {
+    if (!editingProduct) {
+      notyf.error('Guarda el bundle primero antes de agregar componentes.');
+      return;
+    }
+    try {
+      const { data } = await api.addBundleItem(editingProduct.id, {
+        item_id: product.id,
+        quantity,
+      });
+      setBundleItems((previous) => {
+        const existing = previous.find((bi) => bi.item === data.item);
+        if (existing) {
+          return previous.map((bi) => (bi.item === data.item ? data : bi));
+        }
+        return [...previous, data];
+      });
+      notyf.success('Componente agregado.');
+    } catch {
+      // El apiClient ya muestra el error.
+    }
+  };
+
+  const handleRemoveBundleItem = async (itemId) => {
+    if (!editingProduct) return;
+    try {
+      await api.removeBundleItem(editingProduct.id, itemId);
+      setBundleItems((previous) => previous.filter((bi) => bi.item !== itemId));
+      notyf.success('Componente eliminado.');
+    } catch {
+      // El apiClient ya muestra el error.
+    }
   };
 
   const searchCards = async () => {
@@ -348,11 +385,16 @@ export default function AdminProductsPage() {
                 <div className="modal-body">
                   <ProductForm
                     form={form}
-                          cards={cards}
+                    cards={cards}
                     cardQuery={cardQuery}
                     setCardQuery={setCardQuery}
                     onCardSearch={searchCards}
                     onCardSelect={selectCard}
+                    productOptions={products}
+                    bundleItems={bundleItems}
+                    onAddBundleItem={handleAddBundleItem}
+                    onRemoveBundleItem={handleRemoveBundleItem}
+                    canEditBundleItems={Boolean(editingProduct)}
                     onChange={onChange}
                     onSubmit={submit}
                     submitLabel={editingProduct ? 'Actualizar producto' : 'Guardar'}

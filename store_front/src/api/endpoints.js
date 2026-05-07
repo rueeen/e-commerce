@@ -63,6 +63,10 @@ export const api = {
   updateProduct: (id, payload) => apiClient.put(`/api/products/products/${id}/`, payload),
   patchProduct: (id, payload) => apiClient.patch(`/api/products/products/${id}/`, payload),
   deleteProduct: (id) => apiClient.delete(`/api/products/products/${id}/`),
+  addBundleItem: (bundleId, payload) =>
+    apiClient.post(`/api/products/products/${bundleId}/bundle-items/`, payload),
+  removeBundleItem: (bundleId, itemId) =>
+    apiClient.delete(`/api/products/products/${bundleId}/bundle-items/${itemId}/`),
 
   createSingleFromScryfall: (payload) =>
     apiClient.post('/api/products/products/create-single-from-scryfall/', payload),
