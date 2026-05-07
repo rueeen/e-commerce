@@ -103,8 +103,6 @@ export default function ProductForm({
           </select>
         </div>
 
-        
-        </div>
 
         {isSingle && (
           <>
