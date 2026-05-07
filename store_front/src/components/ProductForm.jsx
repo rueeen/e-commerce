@@ -1,3 +1,5 @@
+import ProductAutocomplete from './ProductAutocomplete';
+
 export const PRODUCT_TYPE_OPTIONS = [
   { value: 'single', label: 'Carta individual' },
   { value: 'sealed', label: 'Producto sellado' },
@@ -50,6 +52,13 @@ export const initialFormState = {
   is_active: true,
 };
 
+const formatMoney = (value) =>
+  new Intl.NumberFormat('es-CL', {
+    style: 'currency',
+    currency: 'CLP',
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+
 const getCardImage = (card) => {
   return (
     card?.image_small ||
@@ -78,11 +87,17 @@ export default function ProductForm({
   onChange,
   onSubmit,
   onCancel,
+  productOptions = [],
+  bundleItems = [],
+  onAddBundleItem,
+  onRemoveBundleItem,
+  canEditBundleItems = false,
   submitLabel = 'Guardar producto',
   saving = false,
 }) {
   const isSingle = form.product_type === 'single';
   const isSealed = form.product_type === 'sealed';
+  const isBundle = form.product_type === 'bundle';
 
   return (
     <form className="panel-card p-3 admin-product-form" onSubmit={onSubmit}>
@@ -264,6 +279,67 @@ export default function ProductForm({
               />
             </div>
           </>
+        )}
+
+        {isBundle && (
+          <div className="col-12 mt-3">
+            <h6 className="text-uppercase text-secondary mb-2">Componentes del bundle</h6>
+
+            {!canEditBundleItems ? (
+              <p className="text-secondary small mb-0">
+                Guarda el bundle primero para agregar componentes.
+              </p>
+            ) : (
+              <>
+                {bundleItems.length === 0 && (
+                  <p className="text-secondary small">
+                    Sin componentes. Agrega productos al bundle.
+                  </p>
+                )}
+
+                {bundleItems.map((bi) => (
+                  <div key={bi.id} className="d-flex align-items-center gap-2 mb-2">
+                    <span className="flex-grow-1">{bi.item_name}</span>
+                    <span className="badge badge-soft">x{bi.quantity}</span>
+                    <span className="text-secondary small">{formatMoney(bi.item_price_clp)}</span>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-danger"
+                      onClick={() => onRemoveBundleItem?.(bi.item)}
+                      disabled={saving}
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                ))}
+
+                <div className="d-flex gap-2 mt-2">
+                  <div className="flex-grow-1">
+                    <ProductAutocomplete
+                      products={productOptions}
+                      placeholder="Buscar producto componente..."
+                      onSelect={(product) => {
+                        if (product?.product_type === 'bundle') return;
+                        onAddBundleItem?.(product, 1);
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {bundleItems.length > 0 && (
+                  <div className="mt-2 text-end text-secondary small">
+                    Precio total bundle:{' '}
+                    {formatMoney(
+                      bundleItems.reduce(
+                        (sum, bi) => sum + Number(bi.item_price_clp || 0) * Number(bi.quantity || 0),
+                        0
+                      )
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         )}
 
         <div className="col-12">

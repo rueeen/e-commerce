@@ -17,6 +17,7 @@ from accounts.permissions import IsAdminUser, IsAdminOrWorkerUser
 
 from .inventory_services import create_stock_movement
 from .models import (
+    BundleItem,
     Category,
     KardexMovement,
     MTGCard,
@@ -44,6 +45,7 @@ from .purchase_order_services import (
 from .scryfall_normalizer import normalize_card_description
 from .scryfall_service import search_scryfall_card
 from .serializers import (
+    BundleItemSerializer,
     CategorySerializer,
     KardexMovementSerializer,
     MTGCardSerializer,
@@ -302,6 +304,83 @@ class ProductViewSet(viewsets.ModelViewSet):
         FormParser,
         MultiPartParser,
     ]
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="bundle-items",
+        permission_classes=[IsAdminOrWorkerUser],
+    )
+    def add_bundle_item(self, request, pk=None):
+        """Agrega un componente al bundle."""
+        bundle = self.get_object()
+
+        if bundle.product_type != Product.ProductType.BUNDLE:
+            return Response(
+                {"detail": "Solo se pueden agregar items a productos de tipo bundle."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        item_id = request.data.get("item_id")
+
+        if not item_id:
+            return Response({"detail": "item_id es obligatorio."}, status=400)
+
+        try:
+            quantity = int(request.data.get("quantity", 1) or 1)
+        except (TypeError, ValueError):
+            return Response({"detail": "quantity debe ser un entero."}, status=400)
+
+        if quantity < 1:
+            return Response({"detail": "quantity debe ser mayor o igual a 1."}, status=400)
+
+        try:
+            item_product = Product.objects.get(pk=item_id)
+        except Product.DoesNotExist:
+            return Response({"detail": "Producto componente no encontrado."}, status=404)
+
+        if item_product.product_type == Product.ProductType.BUNDLE:
+            return Response(
+                {"detail": "Un bundle no puede contener otro bundle."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if item_product.pk == bundle.pk:
+            return Response(
+                {"detail": "Un bundle no puede contenerse a sí mismo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        bundle_item, created = BundleItem.objects.get_or_create(
+            bundle=bundle,
+            item=item_product,
+            defaults={"quantity": quantity},
+        )
+
+        if not created:
+            bundle_item.quantity = quantity
+            bundle_item.save(update_fields=["quantity"])
+
+        return Response(
+            BundleItemSerializer(bundle_item).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    @action(
+        detail=True,
+        methods=["delete"],
+        url_path=r"bundle-items/(?P<item_id>[^/.]+)",
+        permission_classes=[IsAdminOrWorkerUser],
+    )
+    def remove_bundle_item(self, request, pk=None, item_id=None):
+        """Elimina un componente del bundle."""
+        bundle = self.get_object()
+        deleted, _ = BundleItem.objects.filter(bundle=bundle, item_id=item_id).delete()
+
+        if not deleted:
+            return Response({"detail": "Componente no encontrado."}, status=404)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     def get_queryset(self):
         queryset = (
