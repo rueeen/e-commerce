@@ -95,6 +95,14 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    if (status === 429) {
+      if (!silent) {
+        notyf.error('Demasiadas solicitudes. Espera un momento antes de intentar de nuevo.');
+      }
+
+      return Promise.reject(error);
+    }
+
     if (!silent) {
       notyf.error(extractErrorMessage(error));
     }
