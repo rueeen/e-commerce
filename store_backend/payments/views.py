@@ -37,7 +37,7 @@ class WebpayCreateView(APIView):
 
 
 class WebpayCommitView(APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated]
     FINAL_STATUSES = {
         PaymentTransaction.Status.AUTHORIZED,
         PaymentTransaction.Status.FAILED,
@@ -71,6 +71,9 @@ class WebpayCommitView(APIView):
         try:
             with transaction.atomic():
                 payment = PaymentTransaction.objects.select_for_update().get(token=token)
+
+                if payment.user_id != request.user.id:
+                    return Response({'detail': 'No tienes permisos para confirmar esta transacción.'}, status=status.HTTP_403_FORBIDDEN)
 
                 if payment.status in self.FINAL_STATUSES:
                     return Response(self._serialize_payment(payment, already_committed=True))
