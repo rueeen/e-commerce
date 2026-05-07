@@ -2,6 +2,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
+from accounts.permissions import is_admin_user, is_worker_user
 from cart.models import Cart
 from products.inventory_services import consume_fifo_stock, create_stock_movement
 from products.models import KardexMovement, Product
@@ -163,7 +164,7 @@ def confirm_order_payment(order: Order, user=None):
 
 
 @transaction.atomic
-def cancel_order(order: Order, user=None):
+def cancel_order(order: Order, user=None, requesting_user=None):
     """
     Cancela una orden.
 
@@ -171,6 +172,13 @@ def cancel_order(order: Order, user=None):
     Si estaba pendiente y nunca consumió stock, solo cambia estado.
     """
     order = Order.objects.select_for_update().get(pk=order.pk)
+
+    if requesting_user is not None:
+        is_owner = order.user_id == requesting_user.id
+        is_staff_role = is_admin_user(requesting_user) or is_worker_user(requesting_user)
+
+        if not is_owner and not is_staff_role:
+            raise ValidationError("No autorizado para cancelar esta orden.")
 
     if order.status == Order.Status.CANCELED:
         return order
