@@ -66,6 +66,7 @@ from .services import (
     search_cards,
 )
 from .tasks import sync_product_external_price
+from .throttles import ScryfallThrottle
 
 
 logger = logging.getLogger(__name__)
@@ -223,6 +224,12 @@ class CardViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class MTGScryfallViewSet(viewsets.ViewSet):
+    def get_throttles(self):
+        if self.action in ("search", "import_card_action"):
+            return [ScryfallThrottle()]
+
+        return super().get_throttles()
+
     def get_permissions(self):
         if self.action == "search":
             return [AllowAny()]

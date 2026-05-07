@@ -1,8 +1,10 @@
 from django.contrib.auth import get_user_model
 from rest_framework import filters, generics, permissions
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import Profile
 from .permissions import IsAdminUser
+from .throttles import LoginThrottle, RegisterThrottle
 from .serializers import (
     AdminUserDetailSerializer,
     AdminUserListSerializer,
@@ -18,6 +20,11 @@ User = get_user_model()
 class RegisterView(generics.CreateAPIView):
     serializer_class = UserRegistrationSerializer
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [RegisterThrottle]
+
+
+class LoginView(TokenObtainPairView):
+    throttle_classes = [LoginThrottle]
 
 
 class MeView(generics.RetrieveAPIView):
