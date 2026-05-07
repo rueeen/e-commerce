@@ -149,18 +149,20 @@ export default function ProductTable({
             const image = getCardImage(product);
             const isSingle = product.product_type === 'single';
             const isFoil = getIsFoil(product);
-            const price = Number(product.computed_price_clp ?? product.price_clp ?? 0);
-            const cost = Number(
+            const rawPriceClp = Number(product.price_clp ?? 0);
+            const computedPriceClp = Number(product.computed_price_clp ?? 0);
+            const precioVenta = rawPriceClp > 0
+              ? rawPriceClp
+              : computedPriceClp;
+            const costoReal = Number(
               product.cost_real_clp ??
               product.average_cost_clp ??
               product.last_purchase_cost_clp ??
               0
             );
-            const precioVenta = price;
-            const costoReal = cost;
             const sugeridoClp = Number(product.suggested_price_clp ?? 0);
-            const marginClp = cost > 0 ? price - cost : 0;
-            const marginPercentage = cost > 0 ? (marginClp / cost) * 100 : 0;
+            const marginClp = costoReal > 0 ? precioVenta - costoReal : 0;
+            const marginPercentage = costoReal > 0 ? (marginClp / costoReal) * 100 : 0;
             const alertClass = getPriceAlertClass(precioVenta, sugeridoClp, costoReal);
             const isApplyingSuggested = actionLoading.applySuggestedId === product.id;
             const isToggling = actionLoading.togglingId === product.id;
