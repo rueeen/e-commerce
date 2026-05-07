@@ -9,7 +9,12 @@ from orders.models import Order
 
 from .models import PaymentTransaction
 from .serializers import WebpayCommitSerializer, WebpayCreateSerializer
-from .services import commit_webpay_transaction, create_webpay_transaction, finalize_paid_order
+from .services import (
+    commit_webpay_transaction,
+    create_webpay_transaction,
+    finalize_paid_order,
+    validate_order_for_webpay_commit,
+)
 
 
 class WebpayCreateView(APIView):
@@ -66,6 +71,8 @@ class WebpayCommitView(APIView):
 
                 if payment.status in self.FINAL_STATUSES:
                     return Response(self._serialize_payment(payment, already_committed=True))
+
+                validate_order_for_webpay_commit(payment.order)
 
                 try:
                     response = commit_webpay_transaction(token)

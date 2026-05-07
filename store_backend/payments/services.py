@@ -58,12 +58,22 @@ def _request(path, payload=None, method='POST'):
         raise ValidationError(f'No fue posible conectar con Webpay: {exc.reason}') from exc
 
 
-def create_webpay_transaction(order, user):
-    if order.user_id != user.id:
-        raise ValidationError('No autorizado para pagar esta orden.')
+def validate_order_for_webpay_start(order):
     payable_statuses = {Order.Status.PENDING_PAYMENT, Order.Status.PAYMENT_FAILED}
     if order.status not in payable_statuses:
         raise ValidationError('Solo se pueden pagar órdenes pendientes o con pago fallido.')
+
+
+def validate_order_for_webpay_commit(order):
+    confirmable_statuses = {Order.Status.PAYMENT_STARTED, Order.Status.PENDING_PAYMENT, Order.Status.PAYMENT_FAILED}
+    if order.status not in confirmable_statuses:
+        raise ValidationError('La orden no está en un estado válido para confirmar este pago.')
+
+
+def create_webpay_transaction(order, user):
+    if order.user_id != user.id:
+        raise ValidationError('No autorizado para pagar esta orden.')
+    validate_order_for_webpay_start(order)
     if order.total_clp <= 0:
         raise ValidationError('La orden no tiene monto válido.')
 
@@ -110,7 +120,7 @@ def finalize_paid_order(order, payment):
         locked.save(update_fields=['status', 'stock_consumed', 'updated_at'])
         return locked
 
-    confirm_order_payment(locked, user=payment.user)
+    confirm_order_payment(locked, user=payment.user, allow_awaiting_payment=True)
 
     total = locked.total_clp
     net = int((Decimal(total) / Decimal('1.19')).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
