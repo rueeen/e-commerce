@@ -3,7 +3,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from accounts.permissions import is_admin_user, is_worker_user
-from cart.models import Cart
+from cart.models import Cart, get_product_sale_price_clp
 from products.inventory_services import consume_fifo_stock, create_stock_movement
 from products.models import KardexMovement, Product
 
@@ -70,7 +70,7 @@ def create_order_from_cart(user):
             if product.stock < item.quantity:
                 raise ValidationError(f"Stock insuficiente para {product.name}.")
 
-        unit_price = int(product.computed_price_clp or product.price_clp or 0)
+        unit_price = int(get_product_sale_price_clp(product))
 
         if unit_price <= 0:
             raise ValidationError(

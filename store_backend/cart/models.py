@@ -9,8 +9,8 @@ from products.models import Product
 
 def get_product_sale_price_clp(product: Product) -> Decimal:
     for value in (
-        product.price_clp,
         product.computed_price_clp,
+        product.price_clp,
         product.suggested_price_clp,
     ):
         if value and value > 0:
