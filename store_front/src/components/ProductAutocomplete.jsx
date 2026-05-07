@@ -30,22 +30,47 @@ const normalizeText = (value) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-const getProductSearchText = (product) =>
-  normalizeText(
-    [
-      product?.id,
-      product?.name,
-      product?.product_type,
-      product?.single_card?.mtg_card?.name,
-      product?.single_card?.mtg_card?.set_code,
+const getProductType = (product) =>
+  product?.product_type_slug ||
+  product?.product_type?.slug ||
+  product?.product_type_data?.slug ||
+  product?.product_type ||
+  '';
+
+const getProductTypeLabel = (product) =>
+  product?.product_type_name ||
+  product?.product_type?.name ||
+  product?.product_type_display ||
+  product?.product_type ||
+  'Producto';
+
+const getProductTitle = (product) =>
+  product?.name || product?.single_card?.mtg_card?.name || `Producto #${product?.id}`;
+
+const getProductMeta = (product) => {
+  const type = getProductType(product);
+
+  if (type === 'single') {
+    return [
+      product?.single_card?.mtg_card?.set_code?.toUpperCase(),
       product?.single_card?.mtg_card?.collector_number,
       product?.single_card?.condition,
       product?.single_card?.language,
-      product?.single_card?.is_foil ? 'foil' : 'non foil',
+      product?.single_card?.is_foil ? 'Foil' : 'Non-foil',
     ]
       .filter(Boolean)
-      .join(' ')
-  );
+      .join(' · ');
+  }
+
+  return [
+    getProductTypeLabel(product),
+    product?.sealed_product?.sealed_kind,
+    product?.sealed_product?.set_name,
+    product?.sealed_product?.set_code?.toUpperCase(),
+  ]
+    .filter(Boolean)
+    .join(' · ');
+};
 
 const buildProductMeta = (product) => {
   const setCode =
@@ -71,26 +96,30 @@ const buildProductMeta = (product) => {
   };
 };
 
-const buildSearchText = (product) => {
-  return normalizeText([
-    product?.id,
-    product?.name,
-    product?.description,
-    product?.product_type,
-    product?.category?.name,
-    product?.category_name,
-    product?.single_card?.condition,
-    product?.single_card?.language,
-    product?.single_card?.mtg_card?.name,
-    product?.single_card?.mtg_card?.set_name,
-    product?.single_card?.mtg_card?.set_code,
-    product?.single_card?.mtg_card?.collector_number,
-    product?.sealed_product?.set_code,
-    product?.edition,
-  ]
-    .filter(Boolean)
-    .join(' '));
-};
+const buildSearchText = (product) =>
+  normalizeText(
+    [
+      product?.id,
+      product?.name,
+      getProductType(product),
+      getProductTypeLabel(product),
+      product?.description,
+      product?.single_card?.mtg_card?.name,
+      product?.single_card?.mtg_card?.set_code,
+      product?.single_card?.mtg_card?.collector_number,
+      product?.single_card?.condition,
+      product?.single_card?.language,
+      product?.single_card?.is_foil ? 'foil' : 'non foil',
+      product?.sealed_product?.set_name,
+      product?.sealed_product?.set_code,
+      product?.sealed_product?.sealed_kind,
+      product?.category?.name,
+      product?.category_name,
+      product?.edition,
+    ]
+      .filter(Boolean)
+      .join(' ')
+  );
 
 export default function ProductAutocomplete({
   products = [],
@@ -111,9 +140,7 @@ export default function ProductAutocomplete({
 
     return products
       .filter((product) => {
-        const searchableText = `${getProductSearchText(product)} ${buildSearchText(
-          product
-        )}`.trim();
+        const searchableText = buildSearchText(product);
         if (searchableText.includes(normalizedQuery)) return true;
         return words.every((word) => searchableText.includes(word));
       })
@@ -137,7 +164,7 @@ export default function ProductAutocomplete({
   }, []);
 
   const selectProduct = (product) => {
-    onSelect?.(product);
+    onSelect(product);
     setQuery('');
     setOpen(false);
   };
@@ -206,23 +233,33 @@ export default function ProductAutocomplete({
           {filtered.map((product) => {
             const image = getProductImage(product);
             const edition = getProductEdition(product);
-            const { setCode, collectorNumber, condition, foilText, stock } =
-              buildProductMeta(product);
+            const { stock } = buildProductMeta(product);
             const price = Number(product?.price_clp || 0);
             const cost = Number(product?.last_purchase_cost_clp || 0);
+            const title = getProductTitle(product);
+            const meta = getProductMeta(product);
 
             return (
               <button
                 type="button"
                 key={product.id}
                 className="list-group-item list-group-item-action bg-dark text-light border-secondary"
-                onClick={() => selectProduct(product)}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                }}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onSelect(product);
+                  setQuery('');
+                  setOpen(false);
+                }}
               >
                 <div className="d-flex align-items-center gap-2">
                   {image ? (
                     <img
                       src={image}
-                      alt={product.name}
+                      alt={title}
                       style={{
                         width: 36,
                         height: 50,
@@ -243,12 +280,11 @@ export default function ProductAutocomplete({
 
                   <div>
                     <div className="fw-semibold">
-                      {product.name} - {setCode} #{collectorNumber} ({condition}{' '}
-                      {foilText})
+                      {title}
                     </div>
                     <small className="text-muted">
-                      {product.product_type || 'producto'} · Set: {edition || '-'} ·
-                      ID: {product.id}
+                      {meta || getProductTypeLabel(product)} · Set: {edition || '-'} · ID:{' '}
+                      {product.id}
                     </small>
                     <small className="text-muted d-block">
                       Stock: {stock} · Precio: $
