@@ -1,4 +1,7 @@
 from rest_framework import serializers
+from django.contrib.auth import get_user_model
+
+from products.models import Product
 
 from .models import (
     AssistedPurchaseItem,
@@ -188,3 +191,32 @@ class AssistedPurchaseOrderSerializer(serializers.ModelSerializer):
         order.save()
 
         return order
+
+
+class ManualOrderItemSerializer(serializers.Serializer):
+    product_id = serializers.IntegerField(min_value=1)
+    quantity = serializers.IntegerField(min_value=1)
+    unit_price_clp = serializers.IntegerField(min_value=1, required=False)
+
+    def validate_product_id(self, value):
+        if not Product.objects.filter(id=value).exists():
+            raise serializers.ValidationError("El producto indicado no existe.")
+        return value
+
+
+class ManualOrderCreateSerializer(serializers.Serializer):
+    user_id = serializers.IntegerField(min_value=1)
+    shipping_clp = serializers.IntegerField(min_value=0, required=False, default=0)
+    discount_clp = serializers.IntegerField(min_value=0, required=False, default=0)
+    items = ManualOrderItemSerializer(many=True)
+
+    def validate_user_id(self, value):
+        user_model = get_user_model()
+        if not user_model.objects.filter(id=value).exists():
+            raise serializers.ValidationError("El usuario indicado no existe.")
+        return value
+
+    def validate_items(self, value):
+        if not value:
+            raise serializers.ValidationError("Debe agregar al menos un ítem.")
+        return value
