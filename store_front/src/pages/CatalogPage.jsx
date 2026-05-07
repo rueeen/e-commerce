@@ -36,6 +36,8 @@ export default function CatalogPage() {
   const [rarity, setRarity] = useState('');
   const [foil, setFoil] = useState('');
   const [loading, setLoading] = useState(false);
+  const [categories, setCategories] = useState([]);
+  const [category, setCategory] = useState('');
 
   const { addItem } = useCart();
 
@@ -43,12 +45,13 @@ export default function CatalogPage() {
     setLoading(true);
 
     try {
-      const data = await fetchAllPaginated(api.getProducts, {
-        active: 'true',
-        available: 'true',
-      });
+      const [data, categoryData] = await Promise.all([
+        fetchAllPaginated(api.getProducts, { active: 'true', available: 'true' }),
+        fetchAllPaginated(api.getCategories, { is_active: 'true' }),
+      ]);
 
       setProducts(data);
+      setCategories(categoryData);
     } catch {
       // El apiClient ya muestra el error.
     } finally {
@@ -78,17 +81,19 @@ export default function CatalogPage() {
       const matchesFoil =
         !foil || String(getProductIsFoil(product)) === foil;
 
+      const matchesCategory = !category || String(product.category) === String(category);
       const hasStock = Number(product.stock || 0) > 0;
 
-      return matchesSearch && matchesType && matchesRarity && matchesFoil && hasStock;
+      return matchesSearch && matchesType && matchesRarity && matchesFoil && matchesCategory && hasStock;
     });
-  }, [products, query, type, rarity, foil]);
+  }, [products, query, type, rarity, foil, category]);
 
   const clearFilters = () => {
     setQuery('');
     setType('');
     setRarity('');
     setFoil('');
+    setCategory('');
   };
 
   return (
@@ -142,6 +147,14 @@ export default function CatalogPage() {
                   {option.label}
                 </option>
               ))}
+            </select>
+          </div>
+
+          <div className="col-md-2">
+            <label className="form-label">Categoría</label>
+            <select className="form-select" value={category} onChange={(event) => setCategory(event.target.value)}>
+              <option value="">Todas</option>
+              {categories.map((cat) => (<option key={cat.id} value={cat.id}>{cat.name}</option>))}
             </select>
           </div>
 
