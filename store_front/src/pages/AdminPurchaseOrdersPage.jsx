@@ -316,6 +316,8 @@ export default function AdminPurchaseOrdersPage() {
   };
 
   const addItem = (product) => {
+    if (!product?.id) return;
+
     if (form.items.some((item) => item.product_id === product.id)) {
       notyf.error('El producto ya está agregado a la orden.');
       return;
@@ -445,7 +447,7 @@ export default function AdminPurchaseOrdersPage() {
     );
 
     if (invalidCost) {
-      notyf.error('Ingresa costo unitario de compra.');
+      notyf.error('Ingrese costo unitario de compra.');
       return false;
     }
 
@@ -778,13 +780,13 @@ export default function AdminPurchaseOrdersPage() {
                             )}
 
                           {!toNumber(item.unit_price_original) && (
-                            <div className="small text-warning">Ingresa costo unitario de compra.</div>
+                            <div className="small text-warning">Ingrese costo unitario de compra.</div>
                           )}
                         </div>
                       ) : (
                         <div>
                           {!toNumber(item.unit_price_original) && (
-                            <div className="small text-warning">Ingresa costo unitario de compra.</div>
+                            <div className="small text-warning">Ingrese costo unitario de compra.</div>
                           )}
                           {toNumber(item.suggested_sale_price_clp) > 0 &&
                             toNumber(item.suggested_sale_price_clp) <
