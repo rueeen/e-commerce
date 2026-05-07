@@ -4,10 +4,13 @@ import { fetchAllPaginated } from '../api/pagination';
 import ProductSlider from '../components/ProductSlider';
 import { useCart } from '../hooks/useCart';
 
-const PRODUCT_TYPES = [
+const FALLBACK_PRODUCT_TYPES = [
   { value: 'single', label: 'Carta individual' },
   { value: 'sealed', label: 'Producto sellado' },
   { value: 'bundle', label: 'Bundle' },
+  { value: 'accessory', label: 'Accesorio' },
+  { value: 'service', label: 'Servicio / encargo' },
+  { value: 'other', label: 'Otro' },
 ];
 
 const RARITIES = [
@@ -16,6 +19,14 @@ const RARITIES = [
   { value: 'rare', label: 'Rare' },
   { value: 'mythic', label: 'Mythic' },
 ];
+
+const getProductTypeValue = (product) =>
+  product?.product_type_slug ||
+  product?.product_type?.slug ||
+  product?.product_type_data?.slug ||
+  product?.product_type_detail?.slug ||
+  product?.product_type ||
+  '';
 
 const getProductRarity = (product) => {
   return product.single_card?.mtg_card?.rarity || product.mtg_card?.rarity || '';
@@ -31,6 +42,7 @@ const getProductIsFoil = (product) => {
 
 export default function CatalogPage() {
   const [products, setProducts] = useState([]);
+  const [productTypes, setProductTypes] = useState(FALLBACK_PRODUCT_TYPES);
   const [query, setQuery] = useState('');
   const [type, setType] = useState('');
   const [rarity, setRarity] = useState('');
@@ -39,22 +51,46 @@ export default function CatalogPage() {
 
   const { addItem } = useCart();
 
-  const loadProducts = async () => {
+  const loadCatalogData = async () => {
     setLoading(true);
 
     try {
-      const data = await fetchAllPaginated(api.getProducts, { active: 'true', available: 'true' });
-      setProducts(data);
+      const [productsData, typesResponse] = await Promise.all([
+        fetchAllPaginated(api.getProducts, { active: 'true', available: 'true' }),
+        api.getProductTypes({ is_active: true }),
+      ]);
+
+      setProducts(productsData);
+
+      const typeResults = Array.isArray(typesResponse?.data?.results)
+        ? typesResponse.data.results
+        : Array.isArray(typesResponse?.data)
+          ? typesResponse.data
+          : [];
+
+      if (typeResults.length > 0) {
+        setProductTypes(typeResults);
+      } else {
+        setProductTypes(FALLBACK_PRODUCT_TYPES);
+      }
     } catch {
-      // El apiClient ya muestra el error.
+      setProductTypes(FALLBACK_PRODUCT_TYPES);
+      try {
+        const data = await fetchAllPaginated(api.getProducts, { active: 'true', available: 'true' });
+        setProducts(data);
+      } catch {
+        // El apiClient ya muestra el error.
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadProducts();
+    loadCatalogData();
   }, []);
+
+  const showSingleOnlyFilters = type === '' || type === 'single';
 
   const filtered = useMemo(() => {
     const search = query.trim().toLowerCase();
@@ -62,17 +98,19 @@ export default function CatalogPage() {
     return products.filter((product) => {
       const name = String(product.name || '').toLowerCase();
       const description = String(product.description || '').toLowerCase();
+      const productType = getProductTypeValue(product);
+      const isSingle = productType === 'single';
 
       const matchesSearch =
         !search || name.includes(search) || description.includes(search);
 
-      const matchesType = !type || product.product_type === type;
+      const matchesType = !type || productType === type;
 
       const matchesRarity =
-        !rarity || getProductRarity(product).toLowerCase() === rarity;
+        !rarity || !isSingle || getProductRarity(product).toLowerCase() === rarity;
 
       const matchesFoil =
-        !foil || String(getProductIsFoil(product)) === foil;
+        !foil || !isSingle || String(getProductIsFoil(product)) === foil;
 
       const hasStock = Number(product.stock || 0) > 0;
 
@@ -117,41 +155,48 @@ export default function CatalogPage() {
               onChange={(event) => setType(event.target.value)}
             >
               <option value="">Todos</option>
-              {PRODUCT_TYPES.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
+              {productTypes.map((option) => (
+                <option
+                  key={option.id || option.slug || option.value || option.code}
+                  value={option.slug || option.value || option.code}
+                >
+                  {option.name || option.label}
                 </option>
               ))}
             </select>
           </div>
 
-          <div className="col-md-2">
-            <label className="form-label">Rareza</label>
-            <select
-              className="form-select"
-              value={rarity}
-              onChange={(event) => setRarity(event.target.value)}
-            >
-              <option value="">Todas</option>
-              {RARITIES.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="col-md-2">
-            <label className="form-label">Foil</label>
-            <select
-              className="form-select"
-              value={foil}
-              onChange={(event) => setFoil(event.target.value)}
-            >
-              <option value="">Todos</option>
-              <option value="true">Foil</option>
-              <option value="false">Non-foil</option>
-            </select>
-          </div>
+          {showSingleOnlyFilters && (
+            <>
+              <div className="col-md-2">
+                <label className="form-label">Rareza</label>
+                <select
+                  className="form-select"
+                  value={rarity}
+                  onChange={(event) => setRarity(event.target.value)}
+                >
+                  <option value="">Todas</option>
+                  {RARITIES.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-md-2">
+                <label className="form-label">Foil</label>
+                <select
+                  className="form-select"
+                  value={foil}
+                  onChange={(event) => setFoil(event.target.value)}
+                >
+                  <option value="">Todos</option>
+                  <option value="true">Foil</option>
+                  <option value="false">Non-foil</option>
+                </select>
+              </div>
+            </>
+          )}
 
           <div className="col-md-2">
             <label className="form-label d-none d-md-block">&nbsp;</label>
