@@ -860,7 +860,16 @@ class KardexViewSet(viewsets.GenericViewSet):
         return queryset.order_by("-created_at", "-id")
 
     def list(self, request):
-        queryset = self.get_queryset()[:200]
+        queryset = self.get_queryset()
+        page = self.paginate_queryset(queryset)
+
+        if page is not None:
+            return self.get_paginated_response(
+                self.get_serializer(
+                    page,
+                    many=True,
+                ).data
+            )
 
         return Response(
             self.get_serializer(
@@ -1752,14 +1761,17 @@ class InventoryDashboardView(APIView):
             for product in products
         )
 
+        # Dashboard snapshot: fixed short list is intentional for quick rendering.
         out_of_stock = Product.objects.filter(stock=0)[:50]
 
+        # Dashboard snapshot: fixed short list is intentional for quick rendering.
         low_stock = Product.objects.filter(
             stock__lte=models.F("stock_minimum"),
         ).exclude(
             stock_minimum=0,
         )[:50]
 
+        # Dashboard snapshot: fixed short list is intentional for quick rendering.
         latest_entries = KardexMovement.objects.filter(
             movement_type=KardexMovement.MovementType.PURCHASE_IN,
         )[:10]
