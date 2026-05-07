@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from products.models import Product
 
-from .models import Cart, CartItem
+from .models import Cart, CartItem, get_product_sale_price_clp
 
 
 class CartItemSerializer(serializers.ModelSerializer):
@@ -18,10 +18,8 @@ class CartItemSerializer(serializers.ModelSerializer):
         source="product.is_active",
         read_only=True,
     )
-    unit_price_clp = serializers.IntegerField(
-        source="unit_price",
-        read_only=True,
-    )
+    unit_price_clp = serializers.IntegerField(read_only=True)
+    price_clp = serializers.IntegerField(source="unit_price_clp", read_only=True)
     subtotal_clp = serializers.IntegerField(
         source="subtotal",
         read_only=True,
@@ -37,6 +35,7 @@ class CartItemSerializer(serializers.ModelSerializer):
             "product_is_active",
             "quantity",
             "unit_price_clp",
+            "price_clp",
             "subtotal_clp",
         )
         read_only_fields = (
@@ -45,6 +44,7 @@ class CartItemSerializer(serializers.ModelSerializer):
             "product_stock",
             "product_is_active",
             "unit_price_clp",
+            "price_clp",
             "subtotal_clp",
         )
 
@@ -78,7 +78,7 @@ class AddCartItemSerializer(serializers.Serializer):
                 "No se puede comprar un producto inactivo."
             )
 
-        if product.computed_price_clp is None:
+        if get_product_sale_price_clp(product) <= 0:
             raise serializers.ValidationError(
                 "El producto no tiene precio configurado."
             )

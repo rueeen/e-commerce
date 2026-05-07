@@ -7,6 +7,17 @@ from django.db import models
 from products.models import Product
 
 
+def get_product_sale_price_clp(product: Product) -> Decimal:
+    for value in (
+        product.price_clp,
+        product.computed_price_clp,
+        product.suggested_price_clp,
+    ):
+        if value and value > 0:
+            return Decimal(value)
+    return Decimal("0")
+
+
 class Cart(models.Model):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
@@ -61,5 +72,9 @@ class CartItem(models.Model):
         return f"{self.product.name} x {self.quantity}"
 
     @property
+    def unit_price_clp(self) -> Decimal:
+        return get_product_sale_price_clp(self.product)
+
+    @property
     def subtotal(self) -> Decimal:
-        return Decimal(self.product.computed_price_clp or 0) * self.quantity
+        return self.unit_price_clp * self.quantity
