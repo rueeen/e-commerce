@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     'products',
     'cart',
     'orders',
+    'payments',
 ]
 
 MIDDLEWARE = [
@@ -119,3 +120,10 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
+
+import os
+WEBPAY_ENVIRONMENT = os.getenv('WEBPAY_ENVIRONMENT', 'integration')
+WEBPAY_COMMERCE_CODE = os.getenv('WEBPAY_COMMERCE_CODE', '')
+WEBPAY_API_KEY_SECRET = os.getenv('WEBPAY_API_KEY_SECRET', '')
+WEBPAY_RETURN_URL = os.getenv('WEBPAY_RETURN_URL', 'http://localhost:3000/pago/retorno')
+WEBPAY_FINAL_URL = os.getenv('WEBPAY_FINAL_URL', 'http://localhost:3000/pago/final')

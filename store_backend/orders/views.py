@@ -165,7 +165,7 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
 
         order = Order.objects.create(
             user=user,
-            status=Order.Status.PENDING,
+            status=Order.Status.PENDING_PAYMENT,
             subtotal_clp=subtotal,
             shipping_clp=shipping_clp,
             discount_clp=discount_clp,

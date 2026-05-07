@@ -264,6 +264,9 @@ export const api = {
 
   cancelOrder: (id) => apiClient.post(`/api/orders/${id}/cancel/`),
 
+  createWebpayTransaction: (order_id) => apiClient.post('/api/payments/webpay/create/', { order_id }),
+  commitWebpayTransaction: (token) => apiClient.post('/api/payments/webpay/commit/', { token }),
+
   // =========================
   // Assisted Orders
   // =========================
