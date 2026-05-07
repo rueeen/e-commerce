@@ -98,6 +98,9 @@ export const api = {
   patchCategory: (id, payload) =>
     apiClient.patch(`/api/products/categories/${id}/`, payload),
   deleteCategory: (id) => apiClient.delete(`/api/products/categories/${id}/`),
+  getProductTypes: (params = {}) => apiClient.get('/api/products/product-types/', { params }),
+  createProductType: (payload) => apiClient.post('/api/products/product-types/', payload),
+  patchProductType: (id, payload) => apiClient.patch(`/api/products/product-types/${id}/`, payload),
 
   // =========================
   // MTG Cards local cache

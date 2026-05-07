@@ -32,7 +32,6 @@ export const initialFormState = {
   name: '',
   description: '',
   product_type: 'single',
-  category_id: '',
 
   mtg_card_id: '',
   condition: 'NM',
@@ -71,7 +70,6 @@ const getSetCode = (card) => {
 
 export default function ProductForm({
   form,
-  categories = [],
   cards = [],
   cardQuery = '',
   setCardQuery,
@@ -105,38 +103,7 @@ export default function ProductForm({
           </select>
         </div>
 
-        <div className="col-md-5">
-          <label className="form-label">Categoría</label>
-          <select
-            className="form-select"
-            value={form.category_id}
-            onChange={(event) => onChange('category_id', event.target.value)}
-            required
-            disabled={saving}
-          >
-            <option value="">Seleccionar categoría</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="col-md-4 d-flex align-items-end">
-          <div className="form-check">
-            <input
-              id="active-product"
-              className="form-check-input"
-              type="checkbox"
-              checked={Boolean(form.is_active)}
-              onChange={(event) => onChange('is_active', event.target.checked)}
-              disabled={saving}
-            />
-            <label htmlFor="active-product" className="form-check-label">
-              Activo
-            </label>
-          </div>
+        
         </div>
 
         {isSingle && (

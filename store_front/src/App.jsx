@@ -9,6 +9,7 @@ import AdminLayout from './layouts/AdminLayout';
 import MainLayout from './layouts/MainLayout';
 
 import AdminCategoriesPage from './pages/AdminCategoriesPage';
+import AdminProductTypesPage from './pages/AdminProductTypesPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminKardexPage from './pages/AdminKardexPage';
 import AdminOrdersPage from './pages/AdminOrdersPage';
@@ -84,6 +85,7 @@ export default function App() {
         <Route path="dashboard" element={<AdminDashboardPage />} />
         <Route path="productos" element={<AdminProductsPage />} />
         <Route path="categorias" element={<AdminCategoriesPage />} />
+        <Route path="tipos-producto" element={<AdminProductTypesPage />} />
         <Route path="pedidos" element={<AdminOrdersPage />} />
         <Route path="kardex" element={<AdminKardexPage />} />
         <Route path="proveedores" element={<AdminSuppliersPage />} />

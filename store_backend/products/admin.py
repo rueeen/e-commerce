@@ -9,6 +9,7 @@ from .models import (
     MTGCard,
     PricingSettings,
     Product,
+    ProductTypeConfig,
     PurchaseOrder,
     PurchaseOrderItem,
     SealedProduct,
@@ -120,7 +121,7 @@ class MTGCardAdmin(admin.ModelAdmin):
 class ProductAdmin(admin.ModelAdmin):
     list_display = (
         "name",
-        "category",
+        "product_type_config",
         "product_type",
         "price_clp",
         "computed_price_display",
@@ -134,7 +135,7 @@ class ProductAdmin(admin.ModelAdmin):
     )
     list_filter = (
         "product_type",
-        "category",
+        "product_type_config",
         "is_active",
         "pricing_source",
         "created_at",
@@ -151,6 +152,7 @@ class ProductAdmin(admin.ModelAdmin):
     )
     autocomplete_fields = (
         "category",
+        "product_type_config",
     )
     readonly_fields = (
         "computed_price_display",
@@ -167,6 +169,7 @@ class ProductAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "category",
+                    "product_type_config",
                     "name",
                     "description",
                     "product_type",
@@ -249,6 +252,13 @@ class ProductAdmin(admin.ModelAdmin):
         return obj.suggested_price_clp
 
     suggested_price_display.short_description = "Precio sugerido CLP"
+
+
+@admin.register(ProductTypeConfig)
+class ProductTypeConfigAdmin(admin.ModelAdmin):
+    list_display = ("name", "slug", "is_active", "sort_order", "uses_scryfall", "is_sealed", "is_bundle", "is_service")
+    list_filter = ("is_active", "uses_scryfall", "is_sealed", "is_bundle", "is_service")
+    search_fields = ("name", "slug", "description")
 
 
 @admin.register(SingleCard)

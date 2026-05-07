@@ -31,6 +31,32 @@ class Category(models.Model):
         return self.name
 
 
+class ProductTypeConfig(models.Model):
+    name = models.CharField(max_length=120, unique=True)
+    slug = models.SlugField(unique=True)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    uses_scryfall = models.BooleanField(default=False)
+    requires_condition = models.BooleanField(default=False)
+    requires_language = models.BooleanField(default=False)
+    requires_foil = models.BooleanField(default=False)
+    manages_stock = models.BooleanField(default=True)
+    is_sealed = models.BooleanField(default=False)
+    is_bundle = models.BooleanField(default=False)
+    is_service = models.BooleanField(default=False)
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sort_order", "name"]
+        verbose_name = "Tipo de producto"
+        verbose_name_plural = "Tipos de producto"
+
+    def __str__(self):
+        return self.name
+
+
 class MTGCard(models.Model):
     scryfall_id = models.CharField(max_length=64, unique=True)
     name = models.CharField(max_length=255)
@@ -102,6 +128,13 @@ class Product(models.Model):
         choices=ProductType.choices,
         default=ProductType.SINGLE,
         db_index=True,
+    )
+    product_type_config = models.ForeignKey(
+        ProductTypeConfig,
+        on_delete=models.PROTECT,
+        related_name="products",
+        null=True,
+        blank=True,
     )
     price_clp = models.PositiveIntegerField(default=0)
     stock = models.PositiveIntegerField(default=0)
