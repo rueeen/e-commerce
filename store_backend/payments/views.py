@@ -35,7 +35,10 @@ class WebpayCommitView(APIView):
         s.is_valid(raise_exception=True)
         token = s.validated_data['token']
         payment = PaymentTransaction.objects.get(token=token)
-        response = commit_webpay_transaction(token)
+        try:
+            response = commit_webpay_transaction(token)
+        except ValidationError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         payment.raw_response = response
         payment.authorization_code = response.get('authorization_code', '')

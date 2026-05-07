@@ -1,4 +1,5 @@
 import json
+import urllib.error
 import urllib.request
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -34,8 +35,18 @@ def _post(path, payload):
         headers=_headers(),
         method='POST',
     )
-    with urllib.request.urlopen(req, timeout=20) as response:
-        return json.loads(response.read().decode('utf-8'))
+    try:
+        with urllib.request.urlopen(req, timeout=20) as response:
+            return json.loads(response.read().decode('utf-8'))
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode('utf-8', errors='ignore') if hasattr(exc, 'read') else ''
+        details = body or str(exc)
+        raise ValidationError(
+            f'Webpay rechazó la solicitud ({exc.code}). Revisa WEBPAY_COMMERCE_CODE y '
+            f'WEBPAY_API_KEY_SECRET para el ambiente "{settings.WEBPAY_ENVIRONMENT}". Detalle: {details}'
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise ValidationError(f'No fue posible conectar con Webpay: {exc.reason}') from exc
 
 
 def create_webpay_transaction(order, user):
