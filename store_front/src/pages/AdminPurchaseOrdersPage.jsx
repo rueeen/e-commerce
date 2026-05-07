@@ -326,11 +326,15 @@ export default function AdminPurchaseOrdersPage() {
     const index = form.items.length;
     const newItem = buildManualItemFromProduct(product, form.original_currency);
 
-    if (String(form.original_currency || 'CLP').toUpperCase() === 'USD' && Number(newItem.unit_price_original || 0) <= 0) {
-      notyf.open({
-        type: 'warning',
-        message: 'Producto agregado. Ingresa el costo unitario de compra antes de guardar la orden.',
-      });
+    if (Number(newItem.unit_price_original || 0) <= 0) {
+      if (typeof notyf.open === 'function') {
+        notyf.open({
+          type: 'warning',
+          message: 'Producto agregado. Ingresa el costo unitario de compra antes de guardar la orden.',
+        });
+      } else {
+        notyf.error('Producto agregado. Ingresa el costo unitario de compra antes de guardar la orden.');
+      }
     }
 
     setForm((current) => ({
