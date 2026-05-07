@@ -5,6 +5,7 @@ Django settings for store_backend project.
 from datetime import timedelta
 from pathlib import Path
 import os
+from decimal import Decimal
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -132,3 +133,4 @@ WEBPAY_RETURN_URL = os.getenv(
     'WEBPAY_RETURN_URL', 'http://localhost:5173/pago/retorno')
 WEBPAY_FINAL_URL = os.getenv(
     'WEBPAY_FINAL_URL', 'http://localhost:5173/pago/final')
+TAX_RATE = Decimal(os.getenv('TAX_RATE', '0.19'))
