@@ -1348,6 +1348,7 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
                 created_by=request.user,
                 source_store=request.data.get("source_store", "Card Kingdom"),
                 status=PurchaseOrder.Status.DRAFT,
+                purchase_order_type=PurchaseOrder.PurchaseOrderType.SINGLES,
                 original_currency=currency,
                 exchange_rate_snapshot_clp=exchange_rate,
                 subtotal_original=Decimal(
@@ -1549,6 +1550,24 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="create-missing-products")
     def create_missing_products(self, request, pk=None):
         purchase_order = self.get_object()
+
+        if purchase_order.purchase_order_type == PurchaseOrder.PurchaseOrderType.GENERAL:
+            missing_without_product = purchase_order.items.filter(product__isnull=True).exists()
+            if missing_without_product:
+                return Response(
+                    {"detail": "Las órdenes generales deben seleccionar productos existentes desde el mantenedor."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            return Response(
+                {
+                    "purchase_order_id": purchase_order.id,
+                    "created_count": 0,
+                    "linked_existing_count": 0,
+                    "failed_count": 0,
+                    "results": [],
+                }
+            )
 
         category = None
         category_id = request.data.get("category_id")

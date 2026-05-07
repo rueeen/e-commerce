@@ -15,6 +15,7 @@ const emptyForm = {
   original_currency: 'USD',
   notes: '',
   status: 'DRAFT',
+  purchase_order_type: 'general',
 
   shipping_original: '',
   sales_tax_original: '',
@@ -468,6 +469,7 @@ export default function AdminPurchaseOrdersPage() {
         external_reference: form.external_reference || '',
         status,
         source_store: form.source_store || '',
+        purchase_order_type: form.purchase_order_type || 'general',
         original_currency: form.original_currency || 'USD',
 
         subtotal_original: subtotalOriginal,
@@ -555,10 +557,27 @@ export default function AdminPurchaseOrdersPage() {
 
       {showForm && (
         <div className="card card-body mb-4">
-          <h5>Nueva orden de compra</h5>
+          <h5>Nueva orden de compra general/manual</h5>
+
+          <div className="alert alert-info">
+            <strong>Modo actual:</strong> Productos generales/manual. Para flujo de singles desde Excel usa el botón <em>Importar Excel</em>.
+          </div>
 
           <div className="row g-2 mb-3">
-            <div className="col-md-4">
+            <div className="col-md-3">
+              <label className="form-label">Tipo de orden</label>
+              <select
+                className="form-select"
+                value={form.purchase_order_type}
+                onChange={(event) => updateForm('purchase_order_type', event.target.value)}
+              >
+                <option value="general">Productos generales/manual</option>
+                <option value="singles">Singles desde Excel</option>
+                <option value="mixed">Mixta</option>
+              </select>
+            </div>
+
+            <div className="col-md-3">
               <label className="form-label">Proveedor</label>
               <select
                 className="form-select"
@@ -1126,7 +1145,11 @@ export default function AdminPurchaseOrdersPage() {
                   </div>
                 )}
 
-                <div className="row g-2 mb-3">
+                <div className="alert alert-info">
+            <strong>Modo actual:</strong> Productos generales/manual. Para flujo de singles desde Excel usa el botón <em>Importar Excel</em>.
+          </div>
+
+          <div className="row g-2 mb-3">
                   <div className="col-md-6">
                     <strong>Proveedor:</strong> {selectedOrder.supplier_name}
                   </div>
