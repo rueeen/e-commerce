@@ -142,15 +142,37 @@ export default function ProductAutocomplete({
   const filtered = useMemo(() => {
     const normalizedQuery = normalizeText(query);
     if (!normalizedQuery) return [];
+
     const words = normalizedQuery.split(' ').filter(Boolean);
 
     return products
-      .filter((product) => {
+      .map((product) => {
+        const nameText = normalizeText(product?.name);
+        const titleText = normalizeText(getProductTitle(product));
+        const typeText = normalizeText(getProductTypeLabel(product));
         const searchableText = getProductSearchText(product);
-        if (searchableText.includes(normalizedQuery)) return true;
-        return words.every((word) => searchableText.includes(word));
+
+        let score = 0;
+
+        if (nameText === normalizedQuery) score += 100;
+        if (nameText.startsWith(normalizedQuery)) score += 80;
+        if (nameText.includes(normalizedQuery)) score += 60;
+
+        if (titleText.startsWith(normalizedQuery)) score += 50;
+        if (titleText.includes(normalizedQuery)) score += 40;
+
+        if (typeText.includes(normalizedQuery)) score += 20;
+        if (searchableText.includes(normalizedQuery)) score += 10;
+
+        const matchesWords = words.every((word) => searchableText.includes(word));
+        if (matchesWords) score += 5;
+
+        return { product, score };
       })
-      .slice(0, 10);
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 12)
+      .map((item) => item.product);
   }, [products, query]);
 
   useEffect(() => {
@@ -240,8 +262,18 @@ export default function ProductAutocomplete({
             const image = getProductImage(product);
             const edition = getProductEdition(product);
             const { stock } = buildProductMeta(product);
-            const price = Number(product?.price_clp || 0);
-            const cost = Number(product?.last_purchase_cost_clp || 0);
+            const price = Number(
+              product?.price_clp ??
+              product?.computed_price_clp ??
+              product?.suggested_price_clp ??
+              0
+            );
+            const cost = Number(
+              product?.last_purchase_cost_clp ??
+              product?.cost_real_clp ??
+              product?.average_cost_clp ??
+              0
+            );
             const title = getProductTitle(product);
             const meta = getProductMeta(product);
 
