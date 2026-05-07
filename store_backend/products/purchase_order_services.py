@@ -108,6 +108,12 @@ def calculate_purchase_order_totals(order):
     for item in order.items.all():
         quantity = int(item.quantity_ordered or 1)
 
+        if currency == "USD" and _d(item.unit_price_original or 0) > D("1000"):
+            raise ValidationError(
+                f"El item {item.id} parece tener costo CLP enviado como USD: "
+                f"{item.unit_price_original}. Cambia la moneda a CLP o ingresa costo USD."
+            )
+
         line_clp = convert_money_to_clp(
             item.line_total_original,
             currency,
