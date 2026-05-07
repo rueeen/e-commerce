@@ -123,7 +123,8 @@ def finalize_paid_order(order, payment):
     confirm_order_payment(locked, user=payment.user, allow_awaiting_payment=True)
 
     total = locked.total_clp
-    net = int((Decimal(total) / Decimal('1.19')).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+    tax_rate = Decimal(str(settings.TAX_RATE))
+    net = int((Decimal(total) / (1 + tax_rate)).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
     tax = total - net
     SalesReceipt.objects.get_or_create(
         order=locked,
@@ -133,10 +134,14 @@ def finalize_paid_order(order, payment):
             'net_amount_clp': net,
             'tax_amount_clp': tax,
             'total_amount_clp': total,
-            'raw_data': {'tax_rate': 0.19},
+            'raw_data': {'tax_rate': float(tax_rate)},
         }
     )
     payment.accounting_status = PaymentTransaction.AccountingStatus.REGISTERED
     payment.save(update_fields=['accounting_status', 'updated_at'])
-    Cart.objects.filter(user=locked.user).delete()
+    try:
+        cart = Cart.objects.get(user=locked.user)
+        cart.items.all().delete()
+    except Cart.DoesNotExist:
+        pass
     return locked
