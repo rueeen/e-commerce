@@ -6,6 +6,8 @@ import ProductForm, {
   initialFormState,
 } from '../components/ProductForm';
 import ProductTable from '../components/ProductTable';
+import LoadingSpinner from '../components/LoadingSpinner';
+import LoadingButton from '../components/LoadingButton';
 
 const normalizeList = (data) => data?.results || data || [];
 
@@ -80,6 +82,9 @@ export default function AdminProductsPage() {
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [applySuggestedId, setApplySuggestedId] = useState(null);
+  const [togglingId, setTogglingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -208,6 +213,7 @@ export default function AdminProductsPage() {
     }
 
     try {
+      setTogglingId(product.id);
       await api.patchProduct(product.id, {
         is_active: nextActive,
       });
@@ -223,17 +229,22 @@ export default function AdminProductsPage() {
       await load();
     } catch {
       // El apiClient ya muestra el error.
+    } finally {
+      setTogglingId(null);
     }
   };
 
 
   const applySuggestedPrice = async (product) => {
     try {
+      setApplySuggestedId(product.id);
       await api.applySuggestedPrice(product.id);
       notyf.success('Precio sugerido aplicado correctamente.');
       await load();
     } catch {
       // El apiClient ya muestra el error.
+    } finally {
+      setApplySuggestedId(null);
     }
   };
 
@@ -245,11 +256,14 @@ export default function AdminProductsPage() {
     if (!ok) return;
 
     try {
+      setDeletingId(product.id);
       await api.deleteProduct(product.id);
       notyf.success('Producto eliminado correctamente.');
       await load();
     } catch {
       // El apiClient ya muestra el error.
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -271,14 +285,9 @@ export default function AdminProductsPage() {
           Nuevo producto
         </button>
 
-        <button
-          type="button"
-          className="btn btn-outline-secondary"
-          onClick={load}
-          disabled={loading}
-        >
-          {loading ? 'Actualizando...' : 'Actualizar'}
-        </button>
+        <LoadingButton className="btn btn-outline-secondary" onClick={load} loading={loading} loadingText="Actualizando...">
+          Actualizar
+        </LoadingButton>
       </div>
 
       <div className="panel-card p-3 mt-4">
@@ -295,9 +304,7 @@ export default function AdminProductsPage() {
         </div>
 
         {loading ? (
-          <div className="text-center text-muted py-4">
-            Cargando productos...
-          </div>
+          <LoadingSpinner text="Cargando productos..." />
         ) : (
           <ProductTable
             products={products}
@@ -311,6 +318,7 @@ export default function AdminProductsPage() {
             onCreatePO={(product) =>
               window.location.assign(`/admin/ordenes-compra?product_id=${product.id}`)
             }
+            actionLoading={{ applySuggestedId, togglingId, deletingId }}
           />
         )}
       </div>

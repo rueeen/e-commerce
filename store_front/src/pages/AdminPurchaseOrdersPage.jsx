@@ -4,6 +4,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import { notyf } from '../api/notifier';
 import ProductAutocomplete from '../components/ProductAutocomplete';
+import LoadingOverlay from '../components/LoadingOverlay';
+import LoadingButton from '../components/LoadingButton';
 
 const emptyForm = {
   supplier: '',
@@ -177,9 +179,15 @@ export default function AdminPurchaseOrdersPage() {
 
   const [receivingId, setReceivingId] = useState(null);
   const [creatingMissingId, setCreatingMissingId] = useState(null);
+  const [isImportingPreview] = useState(false);
+  const [isCreatingOrder, setIsCreatingOrder] = useState(false);
+  const [isCreatingMissingProducts, setIsCreatingMissingProducts] = useState(false);
+  const [isReceivingOrder, setIsReceivingOrder] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const load = async () => {
     setLoading(true);
+    setIsRefreshing(true);
 
     try {
       const [{ data: ordersData }, { data: suppliersData }, allProducts] =
@@ -196,6 +204,7 @@ export default function AdminPurchaseOrdersPage() {
       // El apiClient ya muestra el error.
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -353,6 +362,7 @@ export default function AdminPurchaseOrdersPage() {
     if (!ok) return;
 
     setCreatingMissingId(orderId);
+    setIsCreatingMissingProducts(true);
 
     try {
       await api.createMissingProductsFromPurchaseOrder(orderId, {
@@ -370,6 +380,7 @@ export default function AdminPurchaseOrdersPage() {
       // El apiClient ya muestra el error.
     } finally {
       setCreatingMissingId(null);
+      setIsCreatingMissingProducts(false);
     }
   };
 
@@ -391,6 +402,7 @@ export default function AdminPurchaseOrdersPage() {
     if (!ok) return;
 
     setReceivingId(id);
+    setIsReceivingOrder(true);
 
     try {
       await api.receivePurchaseOrder(id);
@@ -400,6 +412,7 @@ export default function AdminPurchaseOrdersPage() {
       // El apiClient ya muestra el error.
     } finally {
       setReceivingId(null);
+      setIsReceivingOrder(false);
     }
   };
 
@@ -442,6 +455,7 @@ export default function AdminPurchaseOrdersPage() {
     if (!validateForm()) return;
 
     setIsSaving(true);
+    setIsCreatingOrder(true);
 
     try {
       const orderNumber = form.order_number?.trim();
@@ -500,6 +514,7 @@ export default function AdminPurchaseOrdersPage() {
       // El apiClient ya muestra el error.
     } finally {
       setIsSaving(false);
+      setIsCreatingOrder(false);
     }
   };
 
@@ -532,14 +547,7 @@ export default function AdminPurchaseOrdersPage() {
             Importar Excel
           </Link>
 
-          <button
-            type="button"
-            className="btn btn-outline-secondary"
-            onClick={load}
-            disabled={loading}
-          >
-            {loading ? 'Actualizando...' : 'Actualizar'}
-          </button>
+          <LoadingButton className="btn btn-outline-secondary" onClick={load} loading={loading} loadingText="Actualizando...">Actualizar</LoadingButton>
         </div>
       </div>
 
@@ -1285,6 +1293,11 @@ export default function AdminPurchaseOrdersPage() {
           </div>
         </div>
       )}
+
+      <LoadingOverlay show={isCreatingOrder} blocking title="Creando orden de compra" message="Guardando encabezado e ítems de la orden." steps={['Validando formulario','Preparando payload','Guardando orden','Actualizando listado']} currentStep={2} />
+      <LoadingOverlay show={isCreatingMissingProducts} blocking title="Creando productos faltantes" message="Estamos creando o vinculando singles desde Scryfall. Este proceso puede tardar." steps={['Revisando ítems sin producto','Consultando Scryfall','Creando productos','Vinculando ítems a la orden','Actualizando resumen']} currentStep={2} />
+      <LoadingOverlay show={isReceivingOrder} blocking title="Recibiendo orden de compra" message="Calculando costos reales, actualizando stock, lotes FIFO y Kardex." steps={['Validando ítems','Calculando costos reales','Creando lotes FIFO','Actualizando stock','Registrando Kardex']} currentStep={2} />
+      <LoadingOverlay show={isRefreshing} blocking title="Cargando órdenes de compra" message="Actualizando listados y datos relacionados." />
     </div>
   );
 }

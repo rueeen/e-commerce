@@ -68,6 +68,7 @@ export default function ProductTable({
   onViewKardex,
   onCreatePO,
   onApplySuggestedPrice,
+  actionLoading = {},
 }) {
   const tableRef = useRef(null);
   const dataTableRef = useRef(null);
@@ -156,6 +157,9 @@ export default function ProductTable({
             const marginClp = product.margin_clp ?? product.margen_clp;
             const marginPercentage = product.margin_percentage ?? product.margen_pct;
             const alertClass = getPriceAlertClass(precioVenta, sugeridoClp, costoReal);
+            const isApplyingSuggested = actionLoading.applySuggestedId === product.id;
+            const isToggling = actionLoading.togglingId === product.id;
+            const isDeleting = actionLoading.deletingId === product.id;
 
             return (
               <tr key={product.id}>
@@ -264,24 +268,27 @@ export default function ProductTable({
                       type="button"
                       className="btn btn-outline-success btn-sm"
                       onClick={() => onApplySuggestedPrice?.(product)}
+                      disabled={isApplyingSuggested || isToggling || isDeleting}
                     >
-                      Aplicar sugerido
+                      {isApplyingSuggested ? 'Aplicando...' : 'Aplicar sugerido'}
                     </button>
 
                     <button
                       type="button"
                       className="btn btn-warning btn-sm"
                       onClick={() => onToggleActive?.(product)}
+                      disabled={isApplyingSuggested || isToggling || isDeleting}
                     >
-                      {product.is_active ? 'Desactivar' : 'Activar'}
+                      {isToggling ? 'Procesando...' : (product.is_active ? 'Desactivar' : 'Activar')}
                     </button>
 
                     <button
                       type="button"
                       className="btn btn-outline-danger btn-sm"
                       onClick={() => onDelete?.(product)}
+                      disabled={isApplyingSuggested || isToggling || isDeleting}
                     >
-                      Eliminar
+                      {isDeleting ? 'Eliminando...' : 'Eliminar'}
                     </button>
                   </div>
                 </td>

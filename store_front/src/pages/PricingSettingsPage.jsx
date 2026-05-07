@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/endpoints';
 import { notyf } from '../api/notifier';
+import LoadingOverlay from '../components/LoadingOverlay';
+import LoadingButton from '../components/LoadingButton';
 
 const initial = {
   name: 'Configuración principal',
@@ -235,14 +237,15 @@ export default function PricingSettingsPage() {
           </p>
         </div>
 
-        <button
-          type="button"
+        <LoadingButton
           className="btn btn-outline-secondary"
           onClick={loadSettings}
-          disabled={loading || saving}
+          loading={loading}
+          disabled={saving || recalcLoading}
+          loadingText="Actualizando..."
         >
           Actualizar
-        </button>
+        </LoadingButton>
       </div>
 
       <div className="panel-card p-3">
@@ -595,6 +598,20 @@ export default function PricingSettingsPage() {
           </div>
         </div>
       </div>
+
+      <LoadingOverlay
+        show={recalcLoading}
+        blocking
+        title="Recalculando precios"
+        message="Actualizando precios sugeridos según la configuración activa."
+        steps={[
+          'Cargando configuración',
+          'Procesando productos',
+          'Calculando precios sugeridos',
+          'Guardando resultados',
+        ]}
+        currentStep={1}
+      />
     </div>
   );
 }
