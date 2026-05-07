@@ -116,7 +116,7 @@ def confirm_order_payment(order: Order, user=None):
     order = Order.objects.select_for_update().get(pk=order.pk)
 
     if not order.can_be_paid:
-        raise ValidationError("Solo se pueden pagar órdenes pendientes.")
+        raise ValidationError("Solo se pueden pagar órdenes pendientes o con pago fallido.")
 
     if order.stock_consumed:
         raise ValidationError("El stock de esta orden ya fue consumido.")

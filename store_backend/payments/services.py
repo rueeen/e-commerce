@@ -61,8 +61,9 @@ def _request(path, payload=None, method='POST'):
 def create_webpay_transaction(order, user):
     if order.user_id != user.id:
         raise ValidationError('No autorizado para pagar esta orden.')
-    if order.status not in [Order.Status.PENDING_PAYMENT, Order.Status.PAYMENT_FAILED]:
-        raise ValidationError('La orden no está disponible para iniciar pago.')
+    payable_statuses = {Order.Status.PENDING_PAYMENT, Order.Status.PAYMENT_FAILED}
+    if order.status not in payable_statuses:
+        raise ValidationError('Solo se pueden pagar órdenes pendientes o con pago fallido.')
     if order.total_clp <= 0:
         raise ValidationError('La orden no tiene monto válido.')
 
@@ -87,7 +88,7 @@ def create_webpay_transaction(order, user):
         raw_request=payload,
         raw_response=response,
     )
-    order.status = Order.Status.PAYMENT_STARTED
+    order.status = getattr(Order.Status, 'AWAITING_PAYMENT', Order.Status.PAYMENT_STARTED)
     order.save(update_fields=['status', 'updated_at'])
     return payment, response
 
