@@ -1002,15 +1002,26 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = (
-            PurchaseOrder.objects.select_related(
-                "supplier",
-                "created_by",
-            )
-            .prefetch_related(
-                "items__product",
-            )
-            .order_by("-created_at")
+            PurchaseOrder.objects
+            .select_related("supplier", "created_by")
+            .prefetch_related("items", "items__product")
+            .order_by("-created_at", "-id")
         )
+
+        supplier_id = self.request.query_params.get("supplier_id")
+        status_param = self.request.query_params.get("status")
+        product_id = self.request.query_params.get("product_id")
+
+        if supplier_id:
+            queryset = queryset.filter(supplier_id=supplier_id)
+
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+
+        if product_id:
+            queryset = queryset.filter(items__product_id=product_id).distinct()
+
+        return queryset
 
     def _generate_order_number(self):
         date_prefix = timezone.localdate().strftime("%Y%m%d")
