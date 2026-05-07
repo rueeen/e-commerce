@@ -12,7 +12,7 @@ const emptyForm = {
   order_number: '',
   external_reference: '',
   source_store: '',
-  original_currency: 'USD',
+  original_currency: 'CLP',
   notes: '',
   status: 'DRAFT',
   purchase_order_type: 'general',
@@ -276,14 +276,15 @@ export default function AdminPurchaseOrdersPage() {
     setShowForm(false);
   };
 
-  const fetchSuggested = async (index, unitCost) => {
+  const fetchSuggested = async (index, unitCost, productId) => {
     const item = form.items[index];
+    const targetProductId = productId || item?.product || item?.product_id;
 
-    if (!item?.product) return;
+    if (!targetProductId) return;
 
     try {
       const { data } = await api.productSuggestedPrice(
-        item.product,
+        targetProductId,
         Number(unitCost || 0)
       );
 
@@ -342,7 +343,7 @@ export default function AdminPurchaseOrdersPage() {
       items: [...current.items, newItem],
     }));
 
-    fetchSuggested(index, newItem.unit_price_original);
+    fetchSuggested(index, newItem.unit_price_original, product.id);
   };
 
   const removeItem = (index) => {
