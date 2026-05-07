@@ -3,7 +3,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
-from django.db.models import Count, F, Q
+from django.db.models import Count, ExpressionWrapper, F, IntegerField, Q, Sum
 from django.utils import timezone
 
 from rest_framework import filters, status, viewsets
@@ -1753,19 +1753,36 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
 class InventoryDashboardView(APIView):
     permission_classes = [IsAdminOrWorkerUser]
 
-    def get(self, request):
-        products = Product.objects.all()
+    @staticmethod
+    def _product_qs_optimized():
+        return Product.objects.select_related(
+            "category",
+            "product_type_config",
+            "single_card__mtg_card",
+            "sealed_product",
+        ).prefetch_related(
+            "bundle_items__item",
+            "lots",
+        )
 
-        inventory_value_avg_cost = sum(
-            int(product.stock or 0) * int(product.average_cost_clp or 0)
-            for product in products
+    def get(self, request):
+        inventory_value_avg_cost = (
+            Product.objects.aggregate(
+                total=Sum(
+                    ExpressionWrapper(
+                        F("stock") * F("average_cost_clp"),
+                        output_field=IntegerField(),
+                    )
+                )
+            )["total"]
+            or 0
         )
 
         # Dashboard snapshot: fixed short list is intentional for quick rendering.
-        out_of_stock = Product.objects.filter(stock=0)[:50]
+        out_of_stock = self._product_qs_optimized().filter(stock=0)[:50]
 
         # Dashboard snapshot: fixed short list is intentional for quick rendering.
-        low_stock = Product.objects.filter(
+        low_stock = self._product_qs_optimized().filter(
             stock__lte=models.F("stock_minimum"),
         ).exclude(
             stock_minimum=0,
