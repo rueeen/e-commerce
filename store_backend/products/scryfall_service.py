@@ -1,4 +1,5 @@
 import difflib
+import time
 from decimal import Decimal, InvalidOperation
 
 import requests
@@ -66,18 +67,34 @@ def _build_card_payload(data):
 
 
 def _get(path, params=None):
-    try:
-        response = SESSION.get(
-            f"{BASE}{path}",
-            params=params or {},
-            timeout=TIMEOUT,
-        )
-    except requests.RequestException as exc:
-        return {
-            "ok": False,
-            "status": None,
-            "error": f"Error de red: {exc}",
-        }
+    max_attempts = 3
+    delay_seconds = 1
+    response = None
+
+    for attempt in range(max_attempts):
+        try:
+            response = SESSION.get(
+                f"{BASE}{path}",
+                params=params or {},
+                timeout=TIMEOUT,
+            )
+        except requests.RequestException as exc:
+            return {
+                "ok": False,
+                "status": None,
+                "error": f"Error de red: {exc}",
+            }
+
+        # Retry con exponential backoff sólo para 429 y 5xx.
+        should_retry = response.status_code == 429 or response.status_code >= 500
+        is_last_attempt = attempt == max_attempts - 1
+
+        if should_retry and not is_last_attempt:
+            time.sleep(delay_seconds)
+            delay_seconds *= 2
+            continue
+
+        break
 
     if response.status_code == 404:
         return {
