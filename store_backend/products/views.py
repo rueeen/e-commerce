@@ -306,6 +306,7 @@ class ProductViewSet(viewsets.ModelViewSet):
             )
             .prefetch_related(
                 "bundle_items__item",
+                "lots",
             )
             .all()
         )

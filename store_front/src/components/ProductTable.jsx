@@ -151,7 +151,7 @@ export default function ProductTable({
             const precioVenta = Number(product.computed_price_clp || product.price_clp || 0);
             const costoReal = Number(product.cost_real_clp || 0);
             const sugeridoClp = Number(
-              product.price_clp_suggested ?? product.suggested_price_clp ?? product.precio_sugerido_clp ?? 0
+              product.suggested_price_clp ?? 0
             );
             const marginClp = product.margin_clp ?? product.margen_clp;
             const marginPercentage = product.margin_percentage ?? product.margen_pct;
@@ -262,7 +262,7 @@ export default function ProductTable({
 
                     <button
                       type="button"
-                      className="btn btn-outline-danger btn-sm"
+                      className="btn btn-outline-success btn-sm"
                       onClick={() => onApplySuggestedPrice?.(product)}
                     >
                       Aplicar sugerido

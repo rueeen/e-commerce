@@ -23,7 +23,9 @@ from .models import (
     ExchangeRateConfig,
 )
 from .purchase_order_services import (
+    calculate_suggested_price_from_real_cost,
     get_active_exchange_rate,
+    get_active_pricing_settings,
     recalculate_purchase_order,
 )
 
@@ -125,9 +127,7 @@ class ProductSerializer(serializers.ModelSerializer):
     cost_real_clp = serializers.IntegerField(read_only=True)
     margin_clp = serializers.IntegerField(read_only=True)
     margin_percentage = serializers.FloatField(read_only=True)
-    suggested_price_clp = serializers.IntegerField(read_only=True)
-    price_clp_suggested = serializers.IntegerField(source="suggested_price_clp", read_only=True)
-    precio_sugerido_clp = serializers.SerializerMethodField()
+    suggested_price_clp = serializers.SerializerMethodField()
     margen_clp = serializers.SerializerMethodField()
     margen_pct = serializers.SerializerMethodField()
     is_profitable = serializers.SerializerMethodField()
@@ -157,10 +157,8 @@ class ProductSerializer(serializers.ModelSerializer):
             "margin_clp",
             "margin_percentage",
             "suggested_price_clp",
-            "price_clp_suggested",
             "margen_clp",
             "margen_pct",
-            "precio_sugerido_clp",
             "is_profitable",
             "image",
             "is_active",
@@ -182,7 +180,6 @@ class ProductSerializer(serializers.ModelSerializer):
             "margin_clp",
             "margin_percentage",
             "suggested_price_clp",
-            "price_clp_suggested",
             "is_profitable",
             "created_at",
             "updated_at",
@@ -209,8 +206,21 @@ class ProductSerializer(serializers.ModelSerializer):
             return 0.0
         return round((self.get_margen_clp(obj) / cost) * 100, 2)
 
-    def get_precio_sugerido_clp(self, obj):
-        return int(obj.suggested_price_clp or 0)
+    def _get_pricing_settings_cached(self):
+        cache_key = "_active_pricing_settings"
+        if cache_key not in self.context:
+            self.context[cache_key] = get_active_pricing_settings()
+        return self.context[cache_key]
+
+    def get_suggested_price_clp(self, obj):
+        pricing_settings = self._get_pricing_settings_cached()
+        return int(
+            calculate_suggested_price_from_real_cost(
+                int(obj.cost_real_clp or 0),
+                pricing_settings=pricing_settings,
+            )
+            or 0
+        )
 
 
 
