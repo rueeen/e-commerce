@@ -149,13 +149,23 @@ export default function ProductTable({
             const image = getCardImage(product);
             const isSingle = product.product_type === 'single';
             const isFoil = getIsFoil(product);
-            const precioVenta = Number(product.computed_price_clp || product.price_clp || 0);
-            const costoReal = Number(product.cost_real_clp || 0);
-            const sugeridoClp = Number(
-              product.suggested_price_clp ?? 0
+            const price = Number(product.computed_price_clp ?? product.price_clp ?? 0);
+            const cost = Number(
+              product.cost_real_clp ??
+              product.average_cost_clp ??
+              product.last_purchase_cost_clp ??
+              0
             );
-            const marginClp = product.margin_clp ?? product.margen_clp;
-            const marginPercentage = product.margin_percentage ?? product.margen_pct;
+            const precioVenta = price;
+            const costoReal = cost;
+            const sugeridoClp = Number(product.suggested_price_clp ?? 0);
+            const apiMarginClp = Number(product.margin_clp ?? product.margen_clp ?? 0);
+            const apiMarginPct = Number(product.margin_percentage ?? product.margen_pct ?? 0);
+            const calculatedMarginClp = cost > 0 ? price - cost : 0;
+            const calculatedMarginPct = cost > 0 ? (calculatedMarginClp / cost) * 100 : 0;
+            const useCalculatedMargin = apiMarginClp < 0 && price > cost;
+            const marginClp = useCalculatedMargin ? calculatedMarginClp : apiMarginClp;
+            const marginPercentage = useCalculatedMargin ? calculatedMarginPct : apiMarginPct;
             const alertClass = getPriceAlertClass(precioVenta, sugeridoClp, costoReal);
             const isApplyingSuggested = actionLoading.applySuggestedId === product.id;
             const isToggling = actionLoading.togglingId === product.id;
