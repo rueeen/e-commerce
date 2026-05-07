@@ -104,7 +104,7 @@ def create_order_from_cart(user):
 
 
 @transaction.atomic
-def confirm_order_payment(order: Order, user=None):
+def confirm_order_payment(order: Order, user=None, allow_awaiting_payment=False):
     """
     Confirma una orden pagada.
 
@@ -115,8 +115,12 @@ def confirm_order_payment(order: Order, user=None):
     """
     order = Order.objects.select_for_update().get(pk=order.pk)
 
-    if not order.can_be_paid:
-        raise ValidationError("Solo se pueden pagar órdenes pendientes o con pago fallido.")
+    valid_statuses = {Order.Status.PENDING_PAYMENT, Order.Status.PAYMENT_FAILED}
+    if allow_awaiting_payment:
+        valid_statuses.add(Order.Status.PAYMENT_STARTED)
+
+    if order.status not in valid_statuses:
+        raise ValidationError("La orden no está en un estado válido para confirmar este pago.")
 
     if order.stock_consumed:
         raise ValidationError("El stock de esta orden ya fue consumido.")
