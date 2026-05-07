@@ -71,7 +71,7 @@ def convert_money_to_clp(amount, currency, exchange_rate):
     return _clp(_d(amount) * _d(exchange_rate))
 
 
-def calculate_suggested_price_from_real_cost(real_unit_cost_clp):
+def calculate_suggested_price_from_real_cost(real_unit_cost_clp, pricing_settings=None):
     """
     Calcula precio sugerido usando PricingSettings activo.
 
@@ -79,7 +79,7 @@ def calculate_suggested_price_from_real_cost(real_unit_cost_clp):
     suggested = real_unit_cost_clp * margin_factor
     redondeado hacia arriba al múltiplo de rounding_to.
     """
-    pricing_settings = get_active_pricing_settings()
+    pricing_settings = pricing_settings or get_active_pricing_settings()
     margin_factor = _d(getattr(pricing_settings, "margin_factor", D("1.25")))
     rounding_to = max(int(getattr(pricing_settings, "rounding_to", 100) or 100), 1)
 
