@@ -1,12 +1,19 @@
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from accounts.permissions import is_admin_user, is_worker_user
+from accounts.models import User
+from products.models import Product
 
 from .models import AssistedPurchaseOrder, Order
-from .serializers import AssistedPurchaseOrderSerializer, OrderSerializer
+from .serializers import (
+    AssistedPurchaseOrderSerializer,
+    ManualOrderCreateSerializer,
+    OrderSerializer,
+)
 from .services import cancel_order, confirm_order_payment, create_order_from_cart
 
 
@@ -87,6 +94,101 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
             return validation_error_response(exc)
 
         return Response(self.get_serializer(order).data)
+
+    @action(detail=False, methods=["post"], url_path="manual")
+    @transaction.atomic
+    def manual(self, request):
+        if not (is_admin_user(request.user) or is_worker_user(request.user)):
+            return Response(
+                {"detail": "No autorizado."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = ManualOrderCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        user = User.objects.get(id=data["user_id"])
+        item_payloads = data["items"]
+        product_ids = [item["product_id"] for item in item_payloads]
+        products = Product.objects.in_bulk(product_ids)
+
+        validated_items = []
+        subtotal = 0
+
+        for item in item_payloads:
+            product = products.get(item["product_id"])
+            quantity = item["quantity"]
+
+            if not product:
+                return Response(
+                    {"detail": "Uno de los productos indicados no existe."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if not product.is_active:
+                return Response(
+                    {"detail": f"El producto '{product.name}' no está activo."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if product.stock < quantity:
+                return Response(
+                    {"detail": f"Stock insuficiente para '{product.name}'."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            unit_price_clp = item.get("unit_price_clp")
+            if unit_price_clp is None:
+                unit_price_clp = int(product.computed_price_clp or product.price_clp or 0)
+
+            if unit_price_clp <= 0:
+                return Response(
+                    {"detail": f"El precio para '{product.name}' debe ser mayor a 0."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            line_subtotal = quantity * unit_price_clp
+            subtotal += line_subtotal
+            validated_items.append({
+                "product": product,
+                "quantity": quantity,
+                "unit_price_clp": unit_price_clp,
+                "subtotal_clp": line_subtotal,
+            })
+
+        shipping_clp = data.get("shipping_clp", 0)
+        discount_clp = data.get("discount_clp", 0)
+        total_clp = max(subtotal + shipping_clp - discount_clp, 0)
+
+        order = Order.objects.create(
+            user=user,
+            status=Order.Status.PENDING,
+            subtotal_clp=subtotal,
+            shipping_clp=shipping_clp,
+            discount_clp=discount_clp,
+            total_clp=total_clp,
+            stock_consumed=False,
+        )
+
+        for item in validated_items:
+            product = item["product"]
+            order.items.create(
+                product=product,
+                product_name_snapshot=product.name,
+                product_type_snapshot=product.product_type,
+                quantity=item["quantity"],
+                unit_price_clp=item["unit_price_clp"],
+                subtotal_clp=item["subtotal_clp"],
+                unit_cost_clp=0,
+                total_cost_clp=0,
+                gross_profit_clp=0,
+            )
+
+        return Response(
+            self.get_serializer(order).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class AssistedPurchaseOrderViewSet(viewsets.ModelViewSet):
