@@ -30,6 +30,9 @@ class Cart(models.Model):
     def __str__(self) -> str:
         return f"Cart({self.user})"
 
+    def touch(self):
+        self.save(update_fields=['updated_at'])
+
     @property
     def total(self) -> Decimal:
         return sum(

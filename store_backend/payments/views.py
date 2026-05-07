@@ -23,7 +23,10 @@ class WebpayCreateView(APIView):
     def post(self, request):
         s = WebpayCreateSerializer(data=request.data)
         s.is_valid(raise_exception=True)
-        order = Order.objects.get(pk=s.validated_data['order_id'])
+        try:
+            order = Order.objects.get(pk=s.validated_data['order_id'])
+        except Order.DoesNotExist:
+            return Response({'detail': 'Orden no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
 
         try:
             payment, response = create_webpay_transaction(order, request.user)

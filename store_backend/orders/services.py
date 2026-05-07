@@ -100,6 +100,8 @@ def create_order_from_cart(user):
     )
     order.save(update_fields=["subtotal_clp", "total_clp", "updated_at"])
 
+    cart.items.all().delete()
+
     return order
 
 
