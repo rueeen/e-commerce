@@ -16,6 +16,8 @@ export default function PaymentReturnPage() {
 
       try {
         const data = await api.commitWebpayTransaction(tokenWs);
+        console.log('Respuesta commit Webpay:', data);
+        sessionStorage.setItem('lastWebpayResult', JSON.stringify(data));
         navigate('/pago/final', {
           replace: true,
           state: {
@@ -24,14 +26,17 @@ export default function PaymentReturnPage() {
         });
       } catch (error) {
         const errorData = error?.response?.data;
+        const paymentError = {
+          status: errorData?.status || 'FAILED',
+          response_code: errorData?.response_code,
+          detail: errorData?.detail || 'Pago rechazado o no autorizado.',
+        };
+        console.log('Respuesta commit Webpay (error):', paymentError);
+        sessionStorage.setItem('lastWebpayResult', JSON.stringify(paymentError));
         navigate('/pago/final', {
           replace: true,
           state: {
-            payment: {
-              status: errorData?.status || 'FAILED',
-              response_code: errorData?.response_code,
-              detail: errorData?.detail || 'Pago rechazado o no autorizado.',
-            },
+            payment: paymentError,
           },
         });
       }
