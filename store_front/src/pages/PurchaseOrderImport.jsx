@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 
 import { api } from '../api/endpoints';
 import { notyf } from '../api/notifier';
+import LoadingOverlay from '../components/LoadingOverlay';
 
 const extraCostFields = [
   { key: 'import_duties_clp', label: 'Derechos de importación (CLP)' },
@@ -200,6 +201,7 @@ export default function PurchaseOrderImport() {
               accept=".xlsx"
               className="form-control"
               onChange={handleFileChange}
+              disabled={creating}
             />
 
             {file && (
@@ -215,7 +217,7 @@ export default function PurchaseOrderImport() {
               className="form-select"
               value={supplierId}
               onChange={(event) => handleSupplierChange(event.target.value)}
-              disabled={loadingSuppliers}
+              disabled={loadingSuppliers || creating}
             >
               <option value="">
                 {loadingSuppliers
@@ -238,6 +240,7 @@ export default function PurchaseOrderImport() {
               value={supplierName}
               onChange={(event) => handleSupplierNameChange(event.target.value)}
               placeholder="Se usa si no eliges proveedor"
+              disabled={creating}
             />
           </div>
 
@@ -247,6 +250,7 @@ export default function PurchaseOrderImport() {
               className="form-control"
               value={sourceStore}
               onChange={(event) => setSourceStore(event.target.value)}
+              disabled={creating}
             />
           </div>
         </div>
@@ -255,7 +259,7 @@ export default function PurchaseOrderImport() {
           <button
             type="button"
             className="btn btn-primary"
-            disabled={loadingPreview}
+            disabled={loadingPreview || creating}
             onClick={handlePreview}
           >
             {loadingPreview ? 'Previsualizando...' : 'Previsualizar'}
@@ -377,6 +381,7 @@ export default function PurchaseOrderImport() {
                       [field.key]: event.target.value,
                     }))
                   }
+                  disabled={creating}
                 />
               </div>
             ))}
@@ -391,6 +396,7 @@ export default function PurchaseOrderImport() {
               onChange={(event) =>
                 setUpdatePricesOnReceive(event.target.checked)
               }
+              disabled={creating}
             />
 
             <label className="form-check-label" htmlFor="update-prices-import">
@@ -405,6 +411,7 @@ export default function PurchaseOrderImport() {
               className="form-check-input"
               checked={autoMatchScryfall}
               onChange={(event) => setAutoMatchScryfall(event.target.checked)}
+              disabled={creating}
             />
 
             <label className="form-check-label" htmlFor="auto-match-scryfall">
@@ -419,6 +426,7 @@ export default function PurchaseOrderImport() {
               className="form-check-input"
               checked={createMissingProducts}
               onChange={(event) => setCreateMissingProducts(event.target.checked)}
+              disabled={creating}
             />
 
             <label className="form-check-label" htmlFor="create-missing-products">
@@ -434,6 +442,7 @@ export default function PurchaseOrderImport() {
                 className="form-check-input"
                 checked={activateCreatedProducts}
                 onChange={(event) => setActivateCreatedProducts(event.target.checked)}
+                disabled={creating}
               />
 
               <label className="form-check-label" htmlFor="activate-created-products">
@@ -452,6 +461,23 @@ export default function PurchaseOrderImport() {
           </button>
         </div>
       )}
+
+      <LoadingOverlay
+        show={creating}
+        blocking
+        title="Creando orden de compra"
+        message="Estamos creando la orden, vinculando productos, consultando Scryfall y preparando costos iniciales. Este proceso puede tardar unos segundos."
+        steps={[
+          'Validando datos de confirmación',
+          'Creando orden de compra',
+          'Creando ítems de la orden',
+          'Buscando coincidencias en Scryfall',
+          'Creando o vinculando productos faltantes',
+          'Calculando costos y precios sugeridos',
+          'Actualizando listado de órdenes',
+        ]}
+        currentStep={2}
+      />
     </div>
   );
 }
