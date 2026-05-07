@@ -93,8 +93,9 @@ const getProductUnitCostForOrder = (product, currency) => {
   if (normalizedCurrency === 'USD') {
     return Number(
       product.single_card?.price_usd_reference ??
-        product.price_external_usd ??
-        0
+      product.price_external_usd ??
+      product.sealed_product?.price_usd_reference ??
+      0
     );
   }
 
@@ -102,7 +103,6 @@ const getProductUnitCostForOrder = (product, currency) => {
     product.last_purchase_cost_clp ??
       product.average_cost_clp ??
       product.cost_real_clp ??
-      product.price_clp ??
       0
   );
 };
@@ -122,10 +122,12 @@ const buildManualItemFromProduct = (product, currency) => {
 
   return {
     product: product.id,
-    name: product.name,
+    product_id: product.id,
+    name: product.name || product.single_card?.mtg_card?.name || `Producto #${product.id}`,
     source_product: product,
     quantity_ordered: String(quantity),
     unit_price_original: String(costUnit || 0),
+    line_total_original: costUnit * quantity,
     subtotal_clp: costUnit * quantity,
     current_price: product.price_clp || 0,
     suggested_sale_price_clp: suggestedPrice || 0,
@@ -224,7 +226,7 @@ export default function AdminPurchaseOrdersPage() {
     setShowForm(true);
 
     setForm((current) => {
-      const alreadyAdded = current.items.some((item) => item.product === product.id);
+      const alreadyAdded = current.items.some((item) => item.product_id === product.id);
 
       if (alreadyAdded) return current;
 
@@ -313,7 +315,7 @@ export default function AdminPurchaseOrdersPage() {
   };
 
   const addItem = (product) => {
-    if (form.items.some((item) => item.product === product.id)) {
+    if (form.items.some((item) => item.product_id === product.id)) {
       notyf.error('El producto ya está agregado a la orden.');
       return;
     }
@@ -600,7 +602,7 @@ export default function AdminPurchaseOrdersPage() {
                     if (!shouldRecalculate) return current;
 
                     const updatedItems = current.items.map((item) => {
-                      const sourceProduct = products.find((product) => product.id === item.product) || item.source_product || {};
+                      const sourceProduct = products.find((product) => product.id === item.product_id) || item.source_product || {};
                       const nextUnitCost = getProductUnitCostForOrder(sourceProduct, nextCurrency);
 
                       return {
@@ -686,7 +688,7 @@ export default function AdminPurchaseOrdersPage() {
                 )}
 
                 {form.items.map((item, index) => (
-                  <tr key={item.product}>
+                  <tr key={item.product_id}>
                     <td>{item.name}</td>
 
                     <td>
