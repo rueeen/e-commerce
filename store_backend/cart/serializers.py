@@ -14,6 +14,8 @@ class CartItemSerializer(serializers.ModelSerializer):
         source="product.stock",
         read_only=True,
     )
+    product_stock_reserved = serializers.IntegerField(source="product.stock_reserved", read_only=True)
+    product_available_stock = serializers.IntegerField(source="product.available_stock", read_only=True)
     product_is_active = serializers.BooleanField(
         source="product.is_active",
         read_only=True,
@@ -32,6 +34,8 @@ class CartItemSerializer(serializers.ModelSerializer):
             "product",
             "product_name",
             "product_stock",
+            "product_stock_reserved",
+            "product_available_stock",
             "product_is_active",
             "quantity",
             "unit_price_clp",
@@ -89,9 +93,9 @@ class AddCartItemSerializer(serializers.Serializer):
         product = attrs["product"]
         quantity = attrs["quantity"]
 
-        if product.stock < quantity:
+        if product.available_stock < quantity:
             raise serializers.ValidationError({
-                "quantity": "Stock insuficiente para el producto."
+                "quantity": f"Stock insuficiente. Disponible actualmente: {product.available_stock}."
             })
 
         return attrs
@@ -103,9 +107,9 @@ class UpdateCartItemSerializer(serializers.Serializer):
     def validate_quantity(self, quantity):
         item = self.context.get("cart_item")
 
-        if item and item.product.stock < quantity:
+        if item and item.product.available_stock < quantity:
             raise serializers.ValidationError(
-                "Stock insuficiente para el producto."
+                f"Stock insuficiente. Disponible actualmente: {item.product.available_stock}."
             )
 
         return quantity

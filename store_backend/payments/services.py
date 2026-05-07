@@ -1,11 +1,13 @@
 import json
 import urllib.error
 import urllib.request
+from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import F
 from django.utils import timezone
 
 from cart.models import Cart
@@ -14,6 +16,29 @@ from orders.services import confirm_order_payment
 from products.models import KardexMovement
 
 from .models import PaymentTransaction, SalesReceipt
+
+
+def _reservation_minutes():
+    return int(getattr(settings, "STOCK_RESERVATION_MINUTES", 15))
+
+
+def release_order_stock_reservation(order, payment=None):
+    if order.stock_reservation_status != Order.StockReservationStatus.RESERVED:
+        return order
+    for item in order.items.select_related("product"):
+        product = item.product
+        product.stock_reserved = max((product.stock_reserved or 0) - item.quantity, 0)
+        product.save(update_fields=["stock_reserved", "updated_at"])
+    now = timezone.now()
+    order.stock_reservation_status = Order.StockReservationStatus.RELEASED
+    order.stock_released_at = now
+    order.stock_reservation_expires_at = None
+    order.save(update_fields=["stock_reservation_status", "stock_released_at", "stock_reservation_expires_at", "updated_at"])
+    if payment:
+        payment.stock_reservation_status = PaymentTransaction.StockReservationStatus.RELEASED
+        payment.stock_released_at = now
+        payment.save(update_fields=["stock_reservation_status", "stock_released_at", "updated_at"])
+    return order
 
 
 def _webpay_base_url():
@@ -85,9 +110,26 @@ def create_webpay_transaction(order, user):
         'amount': int(order.total_clp),
         'return_url': settings.WEBPAY_RETURN_URL,
     }
-    response = _request('/rswebpaytransaction/api/webpay/v1.2/transactions', payload, method='POST')
+    with transaction.atomic():
+        order = Order.objects.select_for_update().get(pk=order.pk)
+        expires_at = timezone.now() + timedelta(minutes=_reservation_minutes())
+        if not order.stock_reservation_is_active:
+            for item in order.items.select_related("product"):
+                product = item.product
+                locked_product = type(product).objects.select_for_update().get(pk=product.pk)
+                if locked_product.available_stock < item.quantity:
+                    raise ValidationError(f"Stock insuficiente. Disponible actualmente: {locked_product.available_stock}.")
+                locked_product.stock_reserved = F("stock_reserved") + item.quantity
+                locked_product.save(update_fields=["stock_reserved", "updated_at"])
+            order.stock_reserved_at = timezone.now()
+            order.stock_reservation_expires_at = expires_at
+            order.stock_reservation_status = Order.StockReservationStatus.RESERVED
+            order.status = Order.Status.PAYMENT_STARTED
+            order.save(update_fields=['status', 'stock_reserved_at', 'stock_reservation_expires_at', 'stock_reservation_status', 'updated_at'])
 
-    payment = PaymentTransaction.objects.create(
+        response = _request('/rswebpaytransaction/api/webpay/v1.2/transactions', payload, method='POST')
+
+        payment = PaymentTransaction.objects.create(
         order=order,
         user=user,
         status=PaymentTransaction.Status.PENDING,
@@ -97,9 +139,10 @@ def create_webpay_transaction(order, user):
         token=response['token'],
         raw_request=payload,
         raw_response=response,
+        stock_reserved_at=order.stock_reserved_at,
+        stock_reservation_expires_at=order.stock_reservation_expires_at,
+        stock_reservation_status=PaymentTransaction.StockReservationStatus.RESERVED,
     )
-    order.status = Order.Status.PAYMENT_STARTED
-    order.save(update_fields=['status', 'updated_at'])
     return payment, response
 
 
@@ -117,10 +160,23 @@ def finalize_paid_order(order, payment):
     if KardexMovement.objects.filter(reference_type='ORDER', reference_id=locked.id, movement_type=KardexMovement.MovementType.SALE_OUT).exists():
         locked.status = Order.Status.PAID
         locked.stock_consumed = True
+        locked.stock_reservation_status = Order.StockReservationStatus.CONSUMED
         locked.save(update_fields=['status', 'stock_consumed', 'updated_at'])
         return locked
 
+    for item in locked.items.select_related("product"):
+        product = item.product
+        product.stock_reserved = max((product.stock_reserved or 0) - item.quantity, 0)
+        product.save(update_fields=["stock_reserved", "updated_at"])
+
     confirm_order_payment(locked, user=payment.user, allow_awaiting_payment=True)
+    locked.stock_reservation_status = Order.StockReservationStatus.CONSUMED
+    locked.stock_released_at = timezone.now()
+    locked.stock_reservation_expires_at = None
+    locked.save(update_fields=["stock_reservation_status", "stock_released_at", "stock_reservation_expires_at", "updated_at"])
+    payment.stock_reservation_status = PaymentTransaction.StockReservationStatus.CONSUMED
+    payment.stock_released_at = timezone.now()
+    payment.save(update_fields=["stock_reservation_status", "stock_released_at", "updated_at"])
 
     total = locked.total_clp
     tax_rate = Decimal(str(settings.TAX_RATE))

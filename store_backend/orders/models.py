@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 from products.models import PricingSettings, Product, Supplier
 
@@ -188,6 +189,14 @@ class Order(models.Model):
         PAYMENT_FAILED = "payment_failed", "Pago rechazado"
         CANCELED = "canceled", "Cancelado"
         COMPLETED = "completed", "Completada"
+        EXPIRED = "expired", "Expirada"
+        MANUAL_REVIEW = "manual_review", "Revisión manual"
+
+    class StockReservationStatus(models.TextChoices):
+        NONE = "none", "Sin reserva"
+        RESERVED = "reserved", "Reservada"
+        RELEASED = "released", "Liberada"
+        CONSUMED = "consumed", "Consumida"
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -211,6 +220,14 @@ class Order(models.Model):
 
     paid_at = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
+    stock_reserved_at = models.DateTimeField(null=True, blank=True)
+    stock_reservation_expires_at = models.DateTimeField(null=True, blank=True)
+    stock_released_at = models.DateTimeField(null=True, blank=True)
+    stock_reservation_status = models.CharField(
+        max_length=20,
+        choices=StockReservationStatus.choices,
+        default=StockReservationStatus.NONE,
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -234,6 +251,14 @@ class Order(models.Model):
     @property
     def can_be_paid(self):
         return self.status in [self.Status.PENDING_PAYMENT, self.Status.PAYMENT_FAILED]
+
+    @property
+    def stock_reservation_is_active(self):
+        return (
+            self.stock_reservation_status == self.StockReservationStatus.RESERVED
+            and self.stock_reservation_expires_at is not None
+            and self.stock_reservation_expires_at > timezone.now()
+        )
 
     @property
     def can_be_canceled(self):

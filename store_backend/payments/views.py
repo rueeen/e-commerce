@@ -13,6 +13,7 @@ from .services import (
     commit_webpay_transaction,
     create_webpay_transaction,
     finalize_paid_order,
+    release_order_stock_reservation,
     validate_order_for_webpay_commit,
 )
 
@@ -121,6 +122,7 @@ class WebpayCommitView(APIView):
                 payment.save()
                 order = payment.order
                 if order.status != Order.Status.PAID:
+                    release_order_stock_reservation(order, payment=payment)
                     order.status = Order.Status.PAYMENT_FAILED
                     order.save(update_fields=['status', 'updated_at'])
                 detail = 'Pago rechazado.' if payment.status in {PaymentTransaction.Status.FAILED, PaymentTransaction.Status.REJECTED} else 'Pago cancelado.'

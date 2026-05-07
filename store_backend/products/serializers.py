@@ -124,6 +124,7 @@ class ProductSerializer(serializers.ModelSerializer):
     bundle_items = BundleItemSerializer(many=True, read_only=True)
 
     computed_price_clp = serializers.IntegerField(read_only=True)
+    available_stock = serializers.IntegerField(read_only=True)
     cost_real_clp = serializers.IntegerField(read_only=True)
     margin_clp = serializers.SerializerMethodField()
     margin_percentage = serializers.SerializerMethodField()
@@ -150,6 +151,8 @@ class ProductSerializer(serializers.ModelSerializer):
             "price_clp",
             "computed_price_clp",
             "stock",
+            "stock_reserved",
+            "available_stock",
             "stock_minimum",
             "average_cost_clp",
             "last_purchase_cost_clp",
@@ -251,6 +254,7 @@ class ProductSerializer(serializers.ModelSerializer):
 class ProductCatalogSerializer(serializers.ModelSerializer):
     category = serializers.StringRelatedField(read_only=True)
     computed_price_clp = serializers.IntegerField(read_only=True)
+    available_stock = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Product
@@ -261,6 +265,8 @@ class ProductCatalogSerializer(serializers.ModelSerializer):
             "product_type",
             "computed_price_clp",
             "stock",
+            "stock_reserved",
+            "available_stock",
             "image",
             "is_active",
         )
