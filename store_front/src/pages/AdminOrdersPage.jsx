@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/endpoints';
 import { notyf } from '../api/notifier';
+import AdminManualOrderModal from '../components/AdminManualOrderModal';
+import { useAuth } from '../hooks/useAuth';
 
 const statuses = [
   { value: 'pending', label: 'Pendiente' },
@@ -48,11 +50,14 @@ const formatDate = (value) => {
 };
 
 export default function AdminOrdersPage() {
+  const { isAdmin, isWorker } = useAuth();
+  const canManage = isAdmin || isWorker;
   const [orders, setOrders] = useState([]);
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState(null);
+  const [showManualModal, setShowManualModal] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -122,7 +127,8 @@ export default function AdminOrdersPage() {
   };
 
   return (
-    <div className="panel-card p-3">
+    <>
+      <div className="panel-card p-3">
       <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <div>
           <h2 className="mb-1">Pedidos</h2>
@@ -131,14 +137,25 @@ export default function AdminOrdersPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          className="btn btn-outline-secondary"
-          onClick={load}
-          disabled={loading}
-        >
-          {loading ? 'Actualizando...' : 'Actualizar'}
-        </button>
+        <div className="d-flex gap-2">
+          {canManage && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setShowManualModal(true)}
+            >
+              Nueva orden manual
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn-outline-secondary"
+            onClick={load}
+            disabled={loading}
+          >
+            {loading ? 'Actualizando...' : 'Actualizar'}
+          </button>
+        </div>
       </div>
 
       <div className="row g-2 mb-3">
@@ -275,6 +292,12 @@ export default function AdminOrdersPage() {
           </tbody>
         </table>
       </div>
-    </div>
+      </div>
+      <AdminManualOrderModal
+        show={showManualModal}
+        onClose={() => setShowManualModal(false)}
+        onCreated={load}
+      />
+    </>
   );
 }

@@ -253,6 +253,7 @@ export const api = {
   orderById: (id) => apiClient.get(`/api/orders/${id}/`),
 
   createOrderFromCart: () => apiClient.post('/api/orders/from-cart/'),
+  createManualOrder: (payload) => apiClient.post('/api/orders/manual/', payload),
 
   confirmOrderPayment: (id) =>
     apiClient.post(`/api/orders/${id}/confirm-payment/`),
