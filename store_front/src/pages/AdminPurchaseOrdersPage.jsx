@@ -1067,7 +1067,7 @@ export default function AdminPurchaseOrdersPage() {
                       )}
                     </td>
 
-                    <td>{formatMoney(order.real_total_clp || order.grand_total_clp)}</td>
+                    <td>{formatMoney(order.real_total_clp ?? order.grand_total_clp)}</td>
                     <td>{formatDate(order.created_at)}</td>
 
                     <td className="text-end">

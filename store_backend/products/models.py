@@ -531,6 +531,8 @@ class PurchaseOrder(models.Model):
     total_origin_clp = models.PositiveIntegerField(default=0)
     total_extra_costs_clp = models.PositiveIntegerField(default=0)
     grand_total_clp = models.PositiveIntegerField(default=0)
+    # TODO: real_total_clp es alias de grand_total_clp. Unificar en una migración futura
+    # eliminando real_total_clp y actualizando el frontend.
     real_total_clp = models.PositiveIntegerField(default=0)
 
     tax_rate_percent = models.DecimalField(

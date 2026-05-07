@@ -157,6 +157,9 @@ def calculate_purchase_order_totals(order):
 
     real_total = subtotal_clp + total_extra
 
+    # grand_total_clp y real_total_clp son equivalentes.
+    # real_total_clp se mantiene por retrocompatibilidad con el frontend
+    # pero siempre debe ser igual a grand_total_clp.
     return {
         "subtotal_clp": subtotal_clp,
         "shipping_clp": shipping_clp,
@@ -164,7 +167,7 @@ def calculate_purchase_order_totals(order):
         "total_origin_clp": total_origin_clp,
         "total_extra_costs_clp": total_extra,
         "grand_total_clp": real_total,
-        "real_total_clp": real_total,
+        "real_total_clp": real_total,  # alias de grand_total_clp, mantener sincronizados
     }
 
 
