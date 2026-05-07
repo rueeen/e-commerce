@@ -19,14 +19,6 @@ const getPriceAlertClass = (priceClp, suggestedClp, costClp) => {
   return '';
 };
 
-const getCategoryName = (product) => {
-  if (typeof product.category === 'object' && product.category !== null) {
-    return product.category.name || '-';
-  }
-
-  return product.category_name || product.category || '-';
-};
-
 const getSingleCard = (product) => {
   return product.single_card || {};
 };
@@ -135,8 +127,7 @@ export default function ProductTable({
             <th>ID</th>
             <th>Imagen</th>
             <th>Nombre</th>
-            <th>Categoría</th>
-            <th>Tipo</th>
+                        <th>Tipo</th>
             <th>Condición</th>
             <th>Foil</th>
             <th>Idioma</th>
@@ -197,7 +188,6 @@ export default function ProductTable({
                   )}
                 </td>
 
-                <td>{getCategoryName(product)}</td>
 
                 <td>{typeLabel[product.product_type] || product.product_type}</td>
 

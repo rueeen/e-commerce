@@ -9,6 +9,7 @@ from .views import (
     MTGScryfallViewSet,
     PricingSettingsViewSet,
     ProductViewSet,
+    ProductTypeConfigViewSet,
     PurchaseOrderViewSet,
     SupplierViewSet,
 )
@@ -18,6 +19,7 @@ app_name = "products"
 
 router = DefaultRouter()
 router.register("products", ProductViewSet, basename="product")
+router.register("product-types", ProductTypeConfigViewSet, basename="product-type")
 router.register("categories", CategoryViewSet, basename="category")
 router.register("cards", CardViewSet, basename="card")
 router.register("scryfall", MTGScryfallViewSet, basename="scryfall")

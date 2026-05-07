@@ -16,7 +16,6 @@ const normalizeProductForForm = (product) => {
   return {
     ...initialFormState,
     name: product.name || '',
-    category_id: String(product.category_id || product.category?.id || ''),
     description: product.description || '',
     product_type: product.product_type || initialFormState.product_type,
     price_clp:
@@ -49,7 +48,6 @@ const normalizeProductForForm = (product) => {
 const buildProductPayload = (form) => {
   return {
     name: form.name?.trim() || '',
-    category_id: form.category_id ? Number(form.category_id) : null,
     description: form.description || '',
     product_type: form.product_type,
     price_clp: Number(form.price_clp || 0),
@@ -72,7 +70,6 @@ const buildProductPayload = (form) => {
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
 
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
@@ -88,13 +85,8 @@ export default function AdminProductsPage() {
     setLoading(true);
 
     try {
-      const [productsData, { data: categoriesData }] = await Promise.all([
-        fetchAllPaginated(api.getProducts),
-        api.getCategories(),
-      ]);
-
+      const productsData = await fetchAllPaginated(api.getProducts);
       setProducts(productsData);
-      setCategories(normalizeList(categoriesData));
     } catch {
       // El apiClient ya muestra el error.
     } finally {
@@ -348,8 +340,7 @@ export default function AdminProductsPage() {
                 <div className="modal-body">
                   <ProductForm
                     form={form}
-                    categories={categories}
-                    cards={cards}
+                          cards={cards}
                     cardQuery={cardQuery}
                     setCardQuery={setCardQuery}
                     onCardSearch={searchCards}

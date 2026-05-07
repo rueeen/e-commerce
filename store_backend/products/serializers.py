@@ -7,6 +7,7 @@ from rest_framework import serializers
 from .models import (
     BundleItem,
     Category,
+    ProductTypeConfig,
     InventoryLot,
     KardexMovement,
     MTGCard,
@@ -106,6 +107,15 @@ class ProductSerializer(serializers.ModelSerializer):
         allow_null=True,
         write_only=True,
     )
+    product_type_config = serializers.PrimaryKeyRelatedField(read_only=True)
+    product_type_config_name = serializers.CharField(source="product_type_config.name", read_only=True)
+    product_type_config_id = serializers.PrimaryKeyRelatedField(
+        source="product_type_config",
+        queryset=ProductTypeConfig.objects.all(),
+        required=False,
+        allow_null=True,
+        write_only=True,
+    )
 
     single_card = SingleCardSerializer(read_only=True)
     sealed_product = SealedProductSerializer(read_only=True)
@@ -133,6 +143,9 @@ class ProductSerializer(serializers.ModelSerializer):
             "name",
             "description",
             "product_type",
+            "product_type_config",
+            "product_type_config_id",
+            "product_type_config_name",
             "product_type_display",
             "price_clp",
             "computed_price_clp",
@@ -236,6 +249,12 @@ class CategorySerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
+
+
+class ProductTypeConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductTypeConfig
+        fields = "__all__"
 
 
 class SupplierSerializer(serializers.ModelSerializer):

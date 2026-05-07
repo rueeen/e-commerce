@@ -22,6 +22,7 @@ from .models import (
     MTGCard,
     PricingSettings,
     Product,
+    ProductTypeConfig,
     PurchaseOrder,
     PurchaseOrderItem,
     SingleCard,
@@ -48,6 +49,7 @@ from .serializers import (
     MTGCardSerializer,
     PricingSettingsSerializer,
     ProductSerializer,
+    ProductTypeConfigSerializer,
     PurchaseOrderItemSerializer,
     PurchaseOrderSerializer,
     SupplierSerializer,
@@ -298,6 +300,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         queryset = (
             Product.objects.select_related(
                 "category",
+                "product_type_config",
                 "single_card__mtg_card",
                 "sealed_product",
             )
@@ -311,6 +314,8 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         if params.get("product_type"):
             queryset = queryset.filter(product_type=params["product_type"])
+        if params.get("product_type_config"):
+            queryset = queryset.filter(product_type_config_id=params["product_type_config"])
 
         if params.get("category"):
             queryset = queryset.filter(category_id=params["category"])
@@ -917,6 +922,20 @@ class CategoryViewSet(viewsets.ModelViewSet):
             )
             .order_by("sort_order", "name")
         )
+        is_active = self.request.query_params.get("is_active")
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active.lower() in {"1", "true", "yes"})
+        return queryset
+
+
+class ProductTypeConfigViewSet(viewsets.ModelViewSet):
+    serializer_class = ProductTypeConfigSerializer
+    permission_classes = [IsAdminOrWorkerOrReadOnly]
+    filter_backends = [filters.SearchFilter]
+    search_fields = ["name", "slug", "description"]
+
+    def get_queryset(self):
+        queryset = ProductTypeConfig.objects.all().order_by("sort_order", "name")
         is_active = self.request.query_params.get("is_active")
         if is_active is not None:
             queryset = queryset.filter(is_active=is_active.lower() in {"1", "true", "yes"})

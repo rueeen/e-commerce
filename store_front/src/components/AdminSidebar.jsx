@@ -15,9 +15,9 @@ const menuItems = [
     roles: ['admin', 'worker'],
   },
   {
-    to: '/admin/categorias',
+    to: '/admin/tipos-producto',
     icon: 'bi-tags',
-    label: 'Categorías',
+    label: 'Tipos de producto',
     roles: ['admin', 'worker'],
   },
   {
