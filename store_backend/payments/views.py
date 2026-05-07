@@ -1,4 +1,5 @@
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.utils.dateparse import parse_datetime
 from rest_framework import permissions, status
 from rest_framework.response import Response
@@ -29,77 +30,89 @@ class WebpayCreateView(APIView):
 
 class WebpayCommitView(APIView):
     permission_classes = [permissions.AllowAny]
+    FINAL_STATUSES = {
+        PaymentTransaction.Status.AUTHORIZED,
+        PaymentTransaction.Status.FAILED,
+        PaymentTransaction.Status.REJECTED,
+        PaymentTransaction.Status.CANCELLED,
+        PaymentTransaction.Status.ERROR,
+    }
+
+    def _serialize_payment(self, payment, already_committed=False, detail=None):
+        payload = {
+            'status': payment.raw_response.get('status', payment.status.upper()),
+            'response_code': payment.response_code,
+            'buy_order': payment.buy_order,
+            'session_id': payment.session_id,
+            'amount': payment.amount_clp,
+            'authorization_code': payment.authorization_code,
+            'payment_type_code': payment.payment_type_code,
+            'card_detail': {'card_number': payment.card_last_digits},
+            'transaction_date': payment.transaction_date,
+            'order_id': payment.order_id,
+            'already_committed': already_committed,
+        }
+        if detail:
+            payload['detail'] = detail
+        return payload
 
     def post(self, request):
         s = WebpayCommitSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         token = s.validated_data['token']
         try:
-            payment = PaymentTransaction.objects.get(token=token)
+            with transaction.atomic():
+                payment = PaymentTransaction.objects.select_for_update().get(token=token)
+
+                if payment.status in self.FINAL_STATUSES:
+                    return Response(self._serialize_payment(payment, already_committed=True))
+
+                try:
+                    response = commit_webpay_transaction(token)
+                except ValidationError as exc:
+                    message = str(exc)
+                    if 'Transaction already locked by another process' in message:
+                        payment.refresh_from_db()
+                        if payment.status in self.FINAL_STATUSES:
+                            return Response(self._serialize_payment(
+                                payment,
+                                already_committed=True,
+                                detail='La transacción ya está siendo procesada o ya fue confirmada. Revisa el estado de la orden.',
+                            ))
+                        return Response({
+                            'detail': 'La transacción ya está siendo procesada o ya fue confirmada. Revisa el estado de la orden.'
+                        }, status=status.HTTP_409_CONFLICT)
+                    raise
+
+                payment.raw_response = response
+                payment.authorization_code = response.get('authorization_code', '')
+                payment.payment_type_code = response.get('payment_type_code', '')
+                payment.response_code = response.get('response_code')
+                payment.installments_number = response.get('installments_number') or 0
+                payment.card_last_digits = (response.get('card_detail') or {}).get('card_number', '')
+                payment.transaction_date = parse_datetime(response.get('transaction_date')) if response.get('transaction_date') else None
+
+                is_authorized = response.get('response_code') == 0 and response.get('status') == 'AUTHORIZED'
+                if is_authorized:
+                    payment.status = PaymentTransaction.Status.AUTHORIZED
+                    payment.save()
+                    finalize_paid_order(payment.order, payment)
+                    return Response(self._serialize_payment(payment, detail='Pago aprobado.'))
+
+                if response.get('status') == 'FAILED':
+                    payment.status = PaymentTransaction.Status.FAILED
+                elif response.get('status') == 'CANCELLED':
+                    payment.status = PaymentTransaction.Status.CANCELLED
+                else:
+                    payment.status = PaymentTransaction.Status.REJECTED
+                payment.save()
+                order = payment.order
+                if order.status != Order.Status.PAID:
+                    order.status = Order.Status.PAYMENT_FAILED
+                    order.save(update_fields=['status', 'updated_at'])
+                detail = 'Pago rechazado.' if payment.status in {PaymentTransaction.Status.FAILED, PaymentTransaction.Status.REJECTED} else 'Pago cancelado.'
+                return Response(self._serialize_payment(payment, detail=detail), status=status.HTTP_200_OK)
         except PaymentTransaction.DoesNotExist:
             return Response({'detail': 'No existe una transacción local asociada al token entregado.'}, status=status.HTTP_404_NOT_FOUND)
-
-        if payment.status == PaymentTransaction.Status.AUTHORIZED:
-            return Response({
-                'status': payment.status,
-                'response_code': payment.response_code,
-                'buy_order': payment.buy_order,
-                'session_id': payment.session_id,
-                'amount': payment.amount_clp,
-                'authorization_code': payment.authorization_code,
-                'payment_type_code': payment.payment_type_code,
-                'card_detail': {'card_number': payment.card_last_digits},
-                'transaction_date': payment.transaction_date,
-                'order_id': payment.order_id,
-                'already_committed': True,
-            })
-
-        try:
-            response = commit_webpay_transaction(token)
         except ValidationError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
-        payment.raw_response = response
-        payment.authorization_code = response.get('authorization_code', '')
-        payment.payment_type_code = response.get('payment_type_code', '')
-        payment.response_code = response.get('response_code')
-        payment.installments_number = response.get('installments_number') or 0
-        payment.card_last_digits = (response.get('card_detail') or {}).get('card_number', '')
-        payment.transaction_date = parse_datetime(response.get('transaction_date')) if response.get('transaction_date') else None
-
-        is_authorized = response.get('response_code') == 0 and response.get('status') == 'AUTHORIZED'
-        if is_authorized:
-            payment.status = PaymentTransaction.Status.AUTHORIZED
-            payment.save()
-            order = finalize_paid_order(payment.order, payment)
-            return Response({
-                'status': response.get('status', 'AUTHORIZED'),
-                'response_code': payment.response_code,
-                'buy_order': response.get('buy_order', payment.buy_order),
-                'session_id': response.get('session_id', payment.session_id),
-                'amount': response.get('amount', payment.amount_clp),
-                'authorization_code': payment.authorization_code,
-                'payment_type_code': payment.payment_type_code,
-                'card_detail': response.get('card_detail', {'card_number': payment.card_last_digits}),
-                'transaction_date': response.get('transaction_date'),
-                'order_id': order.id,
-            })
-
-        payment.status = PaymentTransaction.Status.FAILED
-        payment.save()
-        order = payment.order
-        if order.status != Order.Status.PAID:
-            order.status = Order.Status.PAYMENT_FAILED
-            order.save(update_fields=['status', 'updated_at'])
-        return Response({
-            'status': response.get('status', 'FAILED'),
-            'response_code': payment.response_code,
-            'buy_order': response.get('buy_order', payment.buy_order),
-            'session_id': response.get('session_id', payment.session_id),
-            'amount': response.get('amount', payment.amount_clp),
-            'authorization_code': payment.authorization_code,
-            'payment_type_code': payment.payment_type_code,
-            'card_detail': response.get('card_detail', {'card_number': payment.card_last_digits}),
-            'transaction_date': response.get('transaction_date'),
-            'order_id': order.id,
-        }, status=status.HTTP_400_BAD_REQUEST)

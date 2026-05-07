@@ -13,7 +13,9 @@ class PaymentTransaction(models.Model):
         PENDING = 'pending', 'Pendiente'
         AUTHORIZED = 'authorized', 'Autorizada'
         FAILED = 'failed', 'Fallida'
+        REJECTED = 'rejected', 'Rechazada'
         CANCELLED = 'cancelled', 'Cancelada'
+        ERROR = 'error', 'Error'
         REVERSED = 'reversed', 'Revertida'
 
     class AccountingStatus(models.TextChoices):
