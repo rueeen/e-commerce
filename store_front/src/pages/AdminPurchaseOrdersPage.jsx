@@ -327,7 +327,10 @@ export default function AdminPurchaseOrdersPage() {
     const newItem = buildManualItemFromProduct(product, form.original_currency);
 
     if (String(form.original_currency || 'CLP').toUpperCase() === 'USD' && Number(newItem.unit_price_original || 0) <= 0) {
-      notyf.warning('Este producto no tiene precio USD de referencia. Ingresa costo unitario USD manualmente.');
+      notyf.open({
+        type: 'warning',
+        message: 'Producto agregado. Ingresa el costo unitario de compra antes de guardar la orden.',
+      });
     }
 
     setForm((current) => ({
