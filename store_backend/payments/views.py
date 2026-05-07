@@ -34,7 +34,26 @@ class WebpayCommitView(APIView):
         s = WebpayCommitSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         token = s.validated_data['token']
-        payment = PaymentTransaction.objects.get(token=token)
+        try:
+            payment = PaymentTransaction.objects.get(token=token)
+        except PaymentTransaction.DoesNotExist:
+            return Response({'detail': 'No existe una transacción local asociada al token entregado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if payment.status == PaymentTransaction.Status.AUTHORIZED:
+            return Response({
+                'status': payment.status,
+                'response_code': payment.response_code,
+                'buy_order': payment.buy_order,
+                'session_id': payment.session_id,
+                'amount': payment.amount_clp,
+                'authorization_code': payment.authorization_code,
+                'payment_type_code': payment.payment_type_code,
+                'card_detail': {'card_number': payment.card_last_digits},
+                'transaction_date': payment.transaction_date,
+                'order_id': payment.order_id,
+                'already_committed': True,
+            })
+
         try:
             response = commit_webpay_transaction(token)
         except ValidationError as exc:
@@ -53,7 +72,18 @@ class WebpayCommitView(APIView):
             payment.status = PaymentTransaction.Status.AUTHORIZED
             payment.save()
             order = finalize_paid_order(payment.order, payment)
-            return Response({'status': 'authorized', 'order_id': order.id})
+            return Response({
+                'status': response.get('status', 'AUTHORIZED'),
+                'response_code': payment.response_code,
+                'buy_order': response.get('buy_order', payment.buy_order),
+                'session_id': response.get('session_id', payment.session_id),
+                'amount': response.get('amount', payment.amount_clp),
+                'authorization_code': payment.authorization_code,
+                'payment_type_code': payment.payment_type_code,
+                'card_detail': response.get('card_detail', {'card_number': payment.card_last_digits}),
+                'transaction_date': response.get('transaction_date'),
+                'order_id': order.id,
+            })
 
         payment.status = PaymentTransaction.Status.FAILED
         payment.save()
@@ -61,4 +91,15 @@ class WebpayCommitView(APIView):
         if order.status != Order.Status.PAID:
             order.status = Order.Status.PAYMENT_FAILED
             order.save(update_fields=['status', 'updated_at'])
-        return Response({'status': 'failed', 'order_id': order.id}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            'status': response.get('status', 'FAILED'),
+            'response_code': payment.response_code,
+            'buy_order': response.get('buy_order', payment.buy_order),
+            'session_id': response.get('session_id', payment.session_id),
+            'amount': response.get('amount', payment.amount_clp),
+            'authorization_code': payment.authorization_code,
+            'payment_type_code': payment.payment_type_code,
+            'card_detail': response.get('card_detail', {'card_number': payment.card_last_digits}),
+            'transaction_date': response.get('transaction_date'),
+            'order_id': order.id,
+        }, status=status.HTTP_400_BAD_REQUEST)
