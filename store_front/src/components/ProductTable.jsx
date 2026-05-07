@@ -159,13 +159,8 @@ export default function ProductTable({
             const precioVenta = price;
             const costoReal = cost;
             const sugeridoClp = Number(product.suggested_price_clp ?? 0);
-            const apiMarginClp = Number(product.margin_clp ?? product.margen_clp ?? 0);
-            const apiMarginPct = Number(product.margin_percentage ?? product.margen_pct ?? 0);
-            const calculatedMarginClp = cost > 0 ? price - cost : 0;
-            const calculatedMarginPct = cost > 0 ? (calculatedMarginClp / cost) * 100 : 0;
-            const useCalculatedMargin = apiMarginClp < 0 && price > cost;
-            const marginClp = useCalculatedMargin ? calculatedMarginClp : apiMarginClp;
-            const marginPercentage = useCalculatedMargin ? calculatedMarginPct : apiMarginPct;
+            const marginClp = cost > 0 ? price - cost : 0;
+            const marginPercentage = cost > 0 ? (marginClp / cost) * 100 : 0;
             const alertClass = getPriceAlertClass(precioVenta, sugeridoClp, costoReal);
             const isApplyingSuggested = actionLoading.applySuggestedId === product.id;
             const isToggling = actionLoading.togglingId === product.id;
