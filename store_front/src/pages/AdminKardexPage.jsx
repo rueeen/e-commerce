@@ -74,6 +74,8 @@ export default function AdminKardexPage() {
   const [loading, setLoading] = useState(false);
   const [productsLoading, setProductsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ count: 0, next: null, previous: null });
 
   const selectedMovementType = useMemo(
     () => movementTypes.find((item) => item.value === form.movement_type),
@@ -98,6 +100,7 @@ export default function AdminKardexPage() {
 
     try {
       const params = {
+        page,
         product_id: filters.product_id || undefined,
         movement_type: filters.movement_type || undefined,
         date_from: filters.date_from || undefined,
@@ -106,6 +109,11 @@ export default function AdminKardexPage() {
 
       const { data } = await api.getKardex(params);
       setMovements(normalizeList(data));
+      setPagination({
+        count: Number(data?.count || 0),
+        next: data?.next || null,
+        previous: data?.previous || null,
+      });
     } catch {
       // El apiClient ya muestra el error.
     } finally {
@@ -124,13 +132,17 @@ export default function AdminKardexPage() {
     filters.movement_type,
     filters.date_from,
     filters.date_to,
+    page,
   ]);
+
+  const totalPages = Math.max(1, Math.ceil((pagination.count || movements.length || 1) / 20));
 
   const updateFilter = (field, value) => {
     setFilters((current) => ({
       ...current,
       [field]: value,
     }));
+    setPage(1);
   };
 
   const updateForm = (field, value) => {
@@ -210,6 +222,26 @@ export default function AdminKardexPage() {
           disabled={loading}
         >
           {loading ? 'Actualizando...' : 'Actualizar'}
+        </button>
+      </div>
+
+      <div className="d-flex justify-content-between align-items-center mt-3 mb-3">
+        <button
+          type="button"
+          className="btn btn-outline-secondary"
+          onClick={() => setPage((current) => Math.max(1, current - 1))}
+          disabled={loading || !pagination.previous}
+        >
+          Anterior
+        </button>
+        <span className="text-muted">Página {page} de {totalPages}</span>
+        <button
+          type="button"
+          className="btn btn-outline-secondary"
+          onClick={() => setPage((current) => current + 1)}
+          disabled={loading || !pagination.next}
+        >
+          Siguiente
         </button>
       </div>
 

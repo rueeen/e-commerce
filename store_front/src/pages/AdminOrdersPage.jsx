@@ -18,30 +18,16 @@ const getStatusLabel = (value) => {
 };
 
 const getStatusBadgeClass = (status) => {
-  if (status === 'paid' || status === 'delivered') {
-    return 'badge-success';
-  }
-
-  if (status === 'pending' || status === 'processing' || status === 'shipped') {
-    return 'badge-warning';
-  }
-
-  if (status === 'canceled') {
-    return 'badge-error';
-  }
-
+  if (status === 'paid' || status === 'delivered') return 'badge-success';
+  if (status === 'pending' || status === 'processing' || status === 'shipped') return 'badge-warning';
+  if (status === 'canceled') return 'badge-error';
   return 'badge-soft';
 };
 
-const normalizeList = (data) => data?.results || data || [];
-
-const formatMoney = (value) => {
-  return `$${Number(value || 0).toLocaleString('es-CL')}`;
-};
+const formatMoney = (value) => `$${Number(value || 0).toLocaleString('es-CL')}`;
 
 const formatDate = (value) => {
   if (!value) return '-';
-
   try {
     return new Date(value).toLocaleString('es-CL');
   } catch {
@@ -49,22 +35,40 @@ const formatDate = (value) => {
   }
 };
 
+const getTotalPages = (count, pageSize, fallbackLength) => {
+  if (count && pageSize) return Math.max(1, Math.ceil(count / pageSize));
+  if (fallbackLength && pageSize) return Math.max(1, Math.ceil(fallbackLength / pageSize));
+  return 1;
+};
+
 export default function AdminOrdersPage() {
   const { isAdmin, isWorker } = useAuth();
   const canManage = isAdmin || isWorker;
+
   const [orders, setOrders] = useState([]);
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ count: 0, next: null, previous: null });
   const [loading, setLoading] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [showManualModal, setShowManualModal] = useState(false);
 
   const load = async () => {
     setLoading(true);
-
     try {
-      const { data } = await api.orders();
-      setOrders(normalizeList(data));
+      const params = {
+        page,
+        search: q.trim() || undefined,
+        status: status || undefined,
+      };
+      const { data } = await api.orders(params);
+      setOrders(data?.results || []);
+      setPagination({
+        count: Number(data?.count || 0),
+        next: data?.next || null,
+        previous: data?.previous || null,
+      });
     } catch {
       // El apiClient ya muestra el error.
     } finally {
@@ -74,35 +78,32 @@ export default function AdminOrdersPage() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [page, q, status]);
 
-  const filtered = useMemo(() => {
-    const search = q.trim().toLowerCase();
+  const totalPages = useMemo(() => getTotalPages(pagination.count, 20, orders.length), [pagination.count, orders.length]);
 
-    return orders.filter((order) => {
-      const userText =
-        typeof order.user === 'object'
-          ? `${order.user?.username || ''} ${order.user?.email || ''}`
-          : String(order.user || '');
+  const resetFilters = () => {
+    setQ('');
+    setStatus('');
+    setPage(1);
+  };
 
-      const text = `${order.id} ${userText}`.toLowerCase();
+  const onChangeSearch = (event) => {
+    setQ(event.target.value);
+    setPage(1);
+  };
 
-      const matchesSearch = !search || text.includes(search);
-      const matchesStatus = !status || order.status === status;
-
-      return matchesSearch && matchesStatus;
-    });
-  }, [orders, q, status]);
+  const onChangeStatus = (event) => {
+    setStatus(event.target.value);
+    setPage(1);
+  };
 
   const confirmPayment = async (order) => {
     setActionLoadingId(order.id);
-
     try {
       await api.confirmOrderPayment(order.id);
       notyf.success(`Orden #${order.id} marcada como pagada.`);
       await load();
-    } catch {
-      // El apiClient ya muestra el error.
     } finally {
       setActionLoadingId(null);
     }
@@ -110,17 +111,12 @@ export default function AdminOrdersPage() {
 
   const cancelOrder = async (order) => {
     const ok = window.confirm(`¿Seguro que quieres cancelar la orden #${order.id}?`);
-
     if (!ok) return;
-
     setActionLoadingId(order.id);
-
     try {
       await api.cancelOrder(order.id);
       notyf.success(`Orden #${order.id} cancelada correctamente.`);
       await load();
-    } catch {
-      // El apiClient ya muestra el error.
     } finally {
       setActionLoadingId(null);
     }
@@ -129,175 +125,77 @@ export default function AdminOrdersPage() {
   return (
     <>
       <div className="panel-card p-3">
-      <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <div>
-          <h2 className="mb-1">Pedidos</h2>
-          <p className="text-muted mb-0">
-            Administra órdenes generadas desde el carrito.
-          </p>
-        </div>
-
-        <div className="d-flex gap-2">
-          {canManage && (
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => setShowManualModal(true)}
-            >
-              Nueva orden manual
+        <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+          <div>
+            <h2 className="mb-1">Pedidos</h2>
+            <p className="text-muted mb-0">Administra órdenes generadas desde el carrito.</p>
+          </div>
+          <div className="d-flex gap-2">
+            {canManage && (
+              <button type="button" className="btn btn-primary" onClick={() => setShowManualModal(true)}>
+                Nueva orden manual
+              </button>
+            )}
+            <button type="button" className="btn btn-outline-secondary" onClick={load} disabled={loading}>
+              {loading ? 'Actualizando...' : 'Actualizar'}
             </button>
-          )}
-          <button
-            type="button"
-            className="btn btn-outline-secondary"
-            onClick={load}
-            disabled={loading}
-          >
-            {loading ? 'Actualizando...' : 'Actualizar'}
-          </button>
-        </div>
-      </div>
-
-      <div className="row g-2 mb-3">
-        <div className="col-md-4">
-          <input
-            className="form-control"
-            placeholder="Buscar por usuario o número de pedido"
-            value={q}
-            onChange={(event) => setQ(event.target.value)}
-          />
+          </div>
         </div>
 
-        <div className="col-md-3">
-          <select
-            className="form-select"
-            value={status}
-            onChange={(event) => setStatus(event.target.value)}
-          >
-            <option value="">Todos los estados</option>
-            {statuses.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
+        <div className="row g-2 mb-3">
+          <div className="col-md-4">
+            <input className="form-control" placeholder="Buscar por usuario o número de pedido" value={q} onChange={onChangeSearch} />
+          </div>
+          <div className="col-md-3">
+            <select className="form-select" value={status} onChange={onChangeStatus}>
+              <option value="">Todos los estados</option>
+              {statuses.map((item) => (
+                <option key={item.value} value={item.value}>{item.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="col-md-2">
+            <button type="button" className="btn btn-outline-secondary w-100" onClick={resetFilters}>Limpiar</button>
+          </div>
         </div>
 
-        <div className="col-md-2">
-          <button
-            type="button"
-            className="btn btn-outline-secondary w-100"
-            onClick={() => {
-              setQ('');
-              setStatus('');
-            }}
-          >
-            Limpiar
-          </button>
-        </div>
-      </div>
-
-      <div className="table-responsive">
-        <table className="table align-middle mb-0">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Usuario</th>
-              <th>Estado</th>
-              <th>Subtotal</th>
-              <th>Total CLP</th>
-              <th>Stock</th>
-              <th>Creada</th>
-              <th className="text-end">Acciones</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {loading && (
-              <tr>
-                <td colSpan="8" className="text-center text-muted py-4">
-                  Cargando pedidos...
-                </td>
-              </tr>
-            )}
-
-            {!loading && filtered.length === 0 && (
-              <tr>
-                <td colSpan="8" className="text-center text-muted py-4">
-                  No hay pedidos para los filtros seleccionados.
-                </td>
-              </tr>
-            )}
-
-            {!loading &&
-              filtered.map((order) => {
-                const userLabel =
-                  typeof order.user === 'object'
-                    ? order.user?.username || order.user?.email || `Usuario #${order.user?.id}`
-                    : `Usuario #${order.user}`;
-
+        <div className="table-responsive">
+          <table className="table align-middle mb-0">
+            <thead><tr><th>#</th><th>Usuario</th><th>Estado</th><th>Subtotal</th><th>Total CLP</th><th>Stock</th><th>Creada</th><th className="text-end">Acciones</th></tr></thead>
+            <tbody>
+              {loading && <tr><td colSpan="8" className="text-center text-muted py-4">Cargando pedidos...</td></tr>}
+              {!loading && orders.length === 0 && <tr><td colSpan="8" className="text-center text-muted py-4">No hay pedidos para los filtros seleccionados.</td></tr>}
+              {!loading && orders.map((order) => {
+                const userLabel = typeof order.user === 'object' ? order.user?.username || order.user?.email || `Usuario #${order.user?.id}` : `Usuario #${order.user}`;
                 const actionBusy = actionLoadingId === order.id;
                 const canConfirmPayment = order.status === 'pending';
                 const canCancel = ['pending', 'paid', 'processing'].includes(order.status);
-
                 return (
                   <tr key={order.id}>
-                    <td>#{order.id}</td>
-                    <td>{userLabel}</td>
-                    <td>
-                      <span className={`badge ${getStatusBadgeClass(order.status)}`}>
-                        {getStatusLabel(order.status)}
-                      </span>
-                    </td>
-                    <td>{formatMoney(order.subtotal_clp)}</td>
-                    <td>{formatMoney(order.total_clp)}</td>
-                    <td>
-                      {order.stock_consumed ? (
-                        <span className="badge badge-success">Consumido</span>
-                      ) : (
-                        <span className="badge badge-soft">Pendiente</span>
-                      )}
-                    </td>
+                    <td>#{order.id}</td><td>{userLabel}</td>
+                    <td><span className={`badge ${getStatusBadgeClass(order.status)}`}>{getStatusLabel(order.status)}</span></td>
+                    <td>{formatMoney(order.subtotal_clp)}</td><td>{formatMoney(order.total_clp)}</td>
+                    <td>{order.stock_consumed ? <span className="badge badge-success">Consumido</span> : <span className="badge badge-soft">Pendiente</span>}</td>
                     <td>{formatDate(order.created_at)}</td>
                     <td className="text-end">
-                      {canConfirmPayment && (
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline-success me-2"
-                          onClick={() => confirmPayment(order)}
-                          disabled={actionBusy}
-                        >
-                          Confirmar pago
-                        </button>
-                      )}
-
-                      {canCancel && (
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline-danger"
-                          onClick={() => cancelOrder(order)}
-                          disabled={actionBusy}
-                        >
-                          Cancelar
-                        </button>
-                      )}
-
-                      {!canConfirmPayment && !canCancel && (
-                        <span className="text-muted small">Sin acciones</span>
-                      )}
+                      {canConfirmPayment && <button type="button" className="btn btn-sm btn-outline-success me-2" onClick={() => confirmPayment(order)} disabled={actionBusy}>Confirmar pago</button>}
+                      {canCancel && <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => cancelOrder(order)} disabled={actionBusy}>Cancelar</button>}
+                      {!canConfirmPayment && !canCancel && <span className="text-muted small">Sin acciones</span>}
                     </td>
                   </tr>
                 );
               })}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
+
+        <div className="d-flex justify-content-between align-items-center mt-3">
+          <button type="button" className="btn btn-outline-secondary" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={loading || !pagination.previous}>Anterior</button>
+          <span className="text-muted">Página {page} de {totalPages}</span>
+          <button type="button" className="btn btn-outline-secondary" onClick={() => setPage((p) => p + 1)} disabled={loading || !pagination.next}>Siguiente</button>
+        </div>
       </div>
-      </div>
-      <AdminManualOrderModal
-        show={showManualModal}
-        onClose={() => setShowManualModal(false)}
-        onCreated={load}
-      />
+      <AdminManualOrderModal show={showManualModal} onClose={() => setShowManualModal(false)} onCreated={load} />
     </>
   );
 }

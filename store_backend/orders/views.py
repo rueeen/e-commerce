@@ -1,6 +1,6 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from rest_framework import permissions, status, viewsets
+from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -35,6 +35,8 @@ def validation_error_response(exc):
 class OrderViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = OrderSerializer
     permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [filters.SearchFilter]
+    search_fields = ["id", "user__username", "user__email"]
 
     def get_queryset(self):
         qs = Order.objects.select_related("user").prefetch_related(
@@ -42,6 +44,11 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
         if is_admin_user(self.request.user) or is_worker_user(self.request.user):
+            status_value = self.request.query_params.get("status")
+
+            if status_value:
+                qs = qs.filter(status=status_value)
+
             return qs
 
         return qs.filter(user=self.request.user)
@@ -205,6 +212,11 @@ class AssistedPurchaseOrderViewSet(viewsets.ModelViewSet):
         )
 
         if is_admin_user(self.request.user) or is_worker_user(self.request.user):
+            status_value = self.request.query_params.get("status")
+
+            if status_value:
+                qs = qs.filter(status=status_value)
+
             return qs
 
         return qs.filter(user=self.request.user)
