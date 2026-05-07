@@ -53,8 +53,23 @@ def create_order_from_cart(user):
         if not product.is_active:
             raise ValidationError(f"Producto inactivo: {product.name}")
 
-        if product.stock < item.quantity:
-            raise ValidationError(f"Stock insuficiente para {product.name}.")
+        if product.product_type == Product.ProductType.BUNDLE:
+            bundle_items = product.bundle_items.select_related("item").all()
+            if not bundle_items.exists():
+                raise ValidationError(
+                    f"El bundle '{product.name}' no tiene componentes."
+                )
+            for bundle_item in bundle_items:
+                stock_needed = bundle_item.quantity * item.quantity
+                if bundle_item.item.stock < stock_needed:
+                    raise ValidationError(
+                        f"Stock insuficiente para '{bundle_item.item.name}' "
+                        f"(componente de '{product.name}'). "
+                        f"Disponible: {bundle_item.item.stock}, requerido: {stock_needed}."
+                    )
+        else:
+            if product.stock < item.quantity:
+                raise ValidationError(f"Stock insuficiente para {product.name}.")
 
         unit_price = int(product.computed_price_clp or product.price_clp or 0)
 
@@ -115,14 +130,69 @@ def confirm_order_payment(order: Order, user=None):
         if not product.is_active:
             raise ValidationError(f"Producto inactivo: {product.name}")
 
-        if product.stock < item.quantity:
-            raise ValidationError(f"Stock insuficiente para {product.name}.")
+        if product.product_type == Product.ProductType.BUNDLE:
+            bundle_items = list(
+                product.bundle_items.select_related("item").all()
+            )
+            if not bundle_items:
+                raise ValidationError(
+                    f"El bundle '{product.name}' no tiene componentes definidos."
+                )
 
-        fifo_cost = consume_fifo_stock(product, item.quantity)
+            total_bundle_cost = 0
 
-        total_cost_clp = int(fifo_cost["total_cost_clp"])
-        unit_cost_clp = int(fifo_cost["unit_cost_clp"])
-        gross_profit_clp = item.subtotal_clp - total_cost_clp
+            for bundle_item in bundle_items:
+                component = Product.objects.select_for_update().get(
+                    pk=bundle_item.item_id
+                )
+                component_qty = bundle_item.quantity * item.quantity
+
+                if component.stock < component_qty:
+                    raise ValidationError(
+                        f"Stock insuficiente para '{component.name}' "
+                        f"(componente de '{product.name}')."
+                    )
+
+                fifo_cost = consume_fifo_stock(component, component_qty)
+                total_bundle_cost += int(fifo_cost["total_cost_clp"])
+
+                create_stock_movement(
+                    product=component,
+                    movement_type=KardexMovement.MovementType.SALE_OUT,
+                    quantity=component_qty,
+                    created_by=user,
+                    unit_cost_clp=int(fifo_cost["unit_cost_clp"]),
+                    unit_price_clp=0,
+                    reference_type="ORDER",
+                    reference_id=order.id,
+                    reference_label=f"Orden #{order.id} (bundle: {product.name})",
+                    notes=f"Salida por bundle '{product.name}' - venta confirmada",
+                )
+
+            unit_cost_clp = int(round(total_bundle_cost / item.quantity)) if item.quantity else 0
+            total_cost_clp = total_bundle_cost
+            gross_profit_clp = item.subtotal_clp - total_cost_clp
+        else:
+            if product.stock < item.quantity:
+                raise ValidationError(f"Stock insuficiente para {product.name}.")
+
+            fifo_cost = consume_fifo_stock(product, item.quantity)
+            total_cost_clp = int(fifo_cost["total_cost_clp"])
+            unit_cost_clp = int(fifo_cost["unit_cost_clp"])
+            gross_profit_clp = item.subtotal_clp - total_cost_clp
+
+            create_stock_movement(
+                product=product,
+                movement_type=KardexMovement.MovementType.SALE_OUT,
+                quantity=item.quantity,
+                created_by=user,
+                unit_cost_clp=unit_cost_clp,
+                unit_price_clp=item.unit_price_clp,
+                reference_type="ORDER",
+                reference_id=order.id,
+                reference_label=f"Orden #{order.id}",
+                notes="Salida por venta confirmada",
+            )
 
         item.unit_cost_clp = unit_cost_clp
         item.total_cost_clp = total_cost_clp
@@ -133,19 +203,6 @@ def confirm_order_payment(order: Order, user=None):
                 "total_cost_clp",
                 "gross_profit_clp",
             ]
-        )
-
-        create_stock_movement(
-            product=product,
-            movement_type=KardexMovement.MovementType.SALE_OUT,
-            quantity=item.quantity,
-            created_by=user,
-            unit_cost_clp=unit_cost_clp,
-            unit_price_clp=item.unit_price_clp,
-            reference_type="ORDER",
-            reference_id=order.id,
-            reference_label=f"Orden #{order.id}",
-            notes="Salida por venta confirmada",
         )
 
     order.status = Order.Status.PAID
@@ -188,18 +245,46 @@ def cancel_order(order: Order, user=None, requesting_user=None):
 
     if order.stock_consumed:
         for item in order.items.select_related("product"):
-            create_stock_movement(
-                product=item.product,
-                movement_type=KardexMovement.MovementType.RETURN_IN,
-                quantity=item.quantity,
-                created_by=user,
-                unit_cost_clp=item.unit_cost_clp,
-                unit_price_clp=item.unit_price_clp,
-                reference_type="ORDER",
-                reference_id=order.id,
-                reference_label=f"Orden #{order.id}",
-                notes="Reposición por cancelación de orden",
-            )
+            product = Product.objects.select_for_update().get(pk=item.product_id)
+            if product.product_type == Product.ProductType.BUNDLE:
+                bundle_items = list(
+                    product.bundle_items.select_related("item").all()
+                )
+                if not bundle_items:
+                    raise ValidationError(
+                        f"El bundle '{product.name}' no tiene componentes definidos."
+                    )
+
+                for bundle_item in bundle_items:
+                    component = Product.objects.select_for_update().get(
+                        pk=bundle_item.item_id
+                    )
+                    component_qty = bundle_item.quantity * item.quantity
+                    create_stock_movement(
+                        product=component,
+                        movement_type=KardexMovement.MovementType.RETURN_IN,
+                        quantity=component_qty,
+                        created_by=user,
+                        unit_cost_clp=item.unit_cost_clp,
+                        unit_price_clp=0,
+                        reference_type="ORDER",
+                        reference_id=order.id,
+                        reference_label=f"Orden #{order.id} (bundle: {product.name})",
+                        notes=f"Reposición por cancelación de bundle '{product.name}'",
+                    )
+            else:
+                create_stock_movement(
+                    product=product,
+                    movement_type=KardexMovement.MovementType.RETURN_IN,
+                    quantity=item.quantity,
+                    created_by=user,
+                    unit_cost_clp=item.unit_cost_clp,
+                    unit_price_clp=item.unit_price_clp,
+                    reference_type="ORDER",
+                    reference_id=order.id,
+                    reference_label=f"Orden #{order.id}",
+                    notes="Reposición por cancelación de orden",
+                )
 
     order.status = Order.Status.CANCELED
     order.cancelled_at = timezone.now()
