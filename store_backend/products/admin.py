@@ -126,6 +126,8 @@ class ProductAdmin(admin.ModelAdmin):
         "price_clp",
         "computed_price_display",
         "stock",
+        "stock_reserved",
+        "available_stock_display",
         "stock_minimum",
         "cost_real_display",
         "margin_display",
@@ -140,6 +142,8 @@ class ProductAdmin(admin.ModelAdmin):
         "pricing_source",
         "created_at",
         "updated_at",
+        "stock_reserved",
+        "available_stock_display",
     )
     search_fields = (
         "name",
@@ -187,6 +191,8 @@ class ProductAdmin(admin.ModelAdmin):
                     "computed_price_display",
                     "suggested_price_display",
                     "stock",
+                    "stock_reserved",
+                    "available_stock_display",
                     "stock_minimum",
                 )
             },
@@ -252,6 +258,11 @@ class ProductAdmin(admin.ModelAdmin):
         return obj.suggested_price_clp
 
     suggested_price_display.short_description = "Precio sugerido CLP"
+
+    def available_stock_display(self, obj):
+        return obj.available_stock
+
+    available_stock_display.short_description = "Stock disponible"
 
 
 @admin.register(ProductTypeConfig)

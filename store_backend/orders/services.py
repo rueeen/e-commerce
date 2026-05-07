@@ -29,7 +29,7 @@ def create_order_from_cart(user):
     - Congela precios.
     - No descuenta stock.
     - No crea Kardex.
-    - Vacía el carrito.
+    - Mantiene el carrito hasta pago aprobado.
     """
     cart, _ = Cart.objects.select_for_update().get_or_create(user=user)
 
@@ -58,17 +58,17 @@ def create_order_from_cart(user):
             if bundle_items.exists():
                 for bundle_item in bundle_items:
                     stock_needed = bundle_item.quantity * item.quantity
-                    if bundle_item.item.stock < stock_needed:
+                    if bundle_item.item.available_stock < stock_needed:
                         raise ValidationError(
                             f"Stock insuficiente para '{bundle_item.item.name}' "
                             f"(componente de '{product.name}'). "
-                            f"Disponible: {bundle_item.item.stock}, requerido: {stock_needed}."
+                            f"Disponible: {bundle_item.item.available_stock}, requerido: {stock_needed}."
                         )
-            elif product.stock < item.quantity:
+            elif product.available_stock < item.quantity:
                 raise ValidationError(f"Stock insuficiente para bundle {product.name}.")
         else:
-            if product.stock < item.quantity:
-                raise ValidationError(f"Stock insuficiente para {product.name}.")
+            if product.available_stock < item.quantity:
+                raise ValidationError(f"Stock insuficiente. Disponible actualmente: {product.available_stock}.")
 
         unit_price = int(get_product_sale_price_clp(product))
 
@@ -99,8 +99,6 @@ def create_order_from_cart(user):
         0,
     )
     order.save(update_fields=["subtotal_clp", "total_clp", "updated_at"])
-
-    cart.items.all().delete()
 
     return order
 

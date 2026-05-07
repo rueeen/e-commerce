@@ -138,6 +138,7 @@ class Product(models.Model):
     )
     price_clp = models.PositiveIntegerField(default=0)
     stock = models.PositiveIntegerField(default=0)
+    stock_reserved = models.PositiveIntegerField(default=0)
     stock_minimum = models.PositiveIntegerField(default=0)
     average_cost_clp = models.PositiveIntegerField(default=0)
     last_purchase_cost_clp = models.PositiveIntegerField(default=0)
@@ -185,6 +186,10 @@ class Product(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def available_stock(self):
+        return max((self.stock or 0) - (self.stock_reserved or 0), 0)
 
     @property
     def bundle_total_price_clp(self):

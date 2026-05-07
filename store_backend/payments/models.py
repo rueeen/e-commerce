@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 from orders.models import Order
 
@@ -22,6 +23,11 @@ class PaymentTransaction(models.Model):
         PENDING = 'pending', 'Pendiente'
         REGISTERED = 'registered', 'Registrado'
         ERROR = 'error', 'Error'
+    class StockReservationStatus(models.TextChoices):
+        NONE = 'none', 'Sin reserva'
+        RESERVED = 'reserved', 'Reservada'
+        RELEASED = 'released', 'Liberada'
+        CONSUMED = 'consumed', 'Consumida'
 
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='payment_transactions')
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='payment_transactions')
@@ -40,8 +46,20 @@ class PaymentTransaction(models.Model):
     raw_request = models.JSONField(default=dict, blank=True)
     raw_response = models.JSONField(default=dict, blank=True)
     accounting_status = models.CharField(max_length=20, choices=AccountingStatus.choices, default=AccountingStatus.PENDING)
+    stock_reserved_at = models.DateTimeField(null=True, blank=True)
+    stock_reservation_expires_at = models.DateTimeField(null=True, blank=True)
+    stock_released_at = models.DateTimeField(null=True, blank=True)
+    stock_reservation_status = models.CharField(max_length=20, choices=StockReservationStatus.choices, default=StockReservationStatus.NONE)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def reservation_is_active(self):
+        return (
+            self.stock_reservation_status == self.StockReservationStatus.RESERVED
+            and self.stock_reservation_expires_at
+            and self.stock_reservation_expires_at > timezone.now()
+        )
 
 
 class SalesReceipt(models.Model):
