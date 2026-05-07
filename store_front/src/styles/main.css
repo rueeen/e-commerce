@@ -322,6 +322,11 @@ img {
   max-height: 320px;
 }
 
+.product-card-bundle,
+.product-card-sealed {
+  min-height: 100%;
+}
+
 .product-card-description {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -329,10 +334,23 @@ img {
   overflow: hidden;
 }
 
-.catalog-section {
+
+.catalog-sections {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 2.5rem;
+}
+
+.catalog-section {
+  margin-top: 1.5rem;
+}
+
+.catalog-section-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
 }
 
 .product-card:hover .product-card-image {
