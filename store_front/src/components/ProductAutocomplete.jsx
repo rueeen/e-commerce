@@ -96,28 +96,34 @@ const buildProductMeta = (product) => {
   };
 };
 
-const buildSearchText = (product) =>
+const getProductSearchText = (product) =>
   normalizeText(
     [
-      product?.id,
       product?.name,
+      product?.description,
+      product?.id,
       getProductType(product),
       getProductTypeLabel(product),
-      product?.description,
-      product?.single_card?.mtg_card?.name,
-      product?.single_card?.mtg_card?.set_code,
-      product?.single_card?.mtg_card?.collector_number,
+      product?.product_type_display,
+      product?.single_card?.name,
+      product?.single_card?.edition,
       product?.single_card?.condition,
       product?.single_card?.language,
       product?.single_card?.is_foil ? 'foil' : 'non foil',
+      product?.single_card?.mtg_card?.name,
+      product?.single_card?.mtg_card?.set_name,
+      product?.single_card?.mtg_card?.set_code,
+      product?.single_card?.mtg_card?.collector_number,
+      product?.sealed_product?.name,
+      product?.sealed_product?.description,
+      product?.sealed_product?.sealed_kind,
       product?.sealed_product?.set_name,
       product?.sealed_product?.set_code,
-      product?.sealed_product?.sealed_kind,
       product?.category?.name,
       product?.category_name,
       product?.edition,
     ]
-      .filter(Boolean)
+      .filter((value) => value !== null && value !== undefined)
       .join(' ')
   );
 
@@ -140,7 +146,7 @@ export default function ProductAutocomplete({
 
     return products
       .filter((product) => {
-        const searchableText = buildSearchText(product);
+        const searchableText = getProductSearchText(product);
         if (searchableText.includes(normalizedQuery)) return true;
         return words.every((word) => searchableText.includes(word));
       })
