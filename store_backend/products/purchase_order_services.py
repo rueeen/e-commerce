@@ -384,24 +384,9 @@ def receive_purchase_order(order, user):
             item.suggested_sale_price_clp = suggested_price
             item.save(update_fields=["suggested_sale_price_clp"])
 
-        product = item.product
-        previous_stock = int(product.stock or 0)
-        previous_average_cost = int(product.average_cost_clp or 0)
-
-        weighted_average_cost = max(real_cost, 0)
-        if previous_stock > 0:
-            weighted_average_cost = _clp(
-                (
-                    _d(previous_stock) * _d(previous_average_cost)
-                    + _d(qty) * _d(real_cost)
-                )
-                / _d(previous_stock + qty)
-            )
-
-        update_payload = {
-            "last_purchase_cost_clp": max(real_cost, 0),
-            "average_cost_clp": max(weighted_average_cost, 0),
-        }
+        # average_cost_clp y last_purchase_cost_clp se actualizan internamente
+        # en create_stock_movement para ingresos PURCHASE_IN.
+        update_payload = {}
 
         if purchase_order.update_prices_on_receive:
             manual_sale_price = int(item.sale_price_to_apply_clp or 0)
@@ -417,11 +402,15 @@ def receive_purchase_order(order, user):
             if real_cost > 0 and int(update_payload.get("price_clp", 0)) < real_cost:
                 update_payload["is_active"] = False
         else:
-            current_price = int(item.product.price_clp or 0)
+            current_price = int(
+                Product.objects.values_list("price_clp", flat=True).get(pk=item.product_id)
+                or 0
+            )
             if real_cost > 0 and current_price < real_cost:
                 update_payload["is_active"] = False
 
-        Product.objects.filter(pk=item.product_id).update(**update_payload)
+        if update_payload:
+            Product.objects.filter(pk=item.product_id).update(**update_payload)
 
         item.quantity_received = int(item.quantity_received or 0) + qty
         item.save(update_fields=["quantity_received"])
