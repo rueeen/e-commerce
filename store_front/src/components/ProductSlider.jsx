@@ -3,6 +3,8 @@ import ProductCard from './ProductCard';
 const getProductType = (product) =>
   product?.product_type_slug ||
   product?.product_type?.slug ||
+  product?.product_type_data?.slug ||
+  product?.product_type_detail?.slug ||
   product?.product_type ||
   'other';
 

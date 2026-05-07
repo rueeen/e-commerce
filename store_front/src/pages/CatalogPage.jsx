@@ -13,7 +13,15 @@ const FALLBACK_PRODUCT_TYPES = [
   { value: 'other', label: 'Otro' },
 ];
 
-const CATALOG_TYPE_ORDER = ['single', 'sealed', 'bundle', 'accessory', 'service', 'other'];
+const PRODUCT_TYPE_ORDER = ['bundle', 'sealed', 'single', 'accessory', 'service', 'other'];
+const PRODUCT_TYPE_LABELS = {
+  bundle: 'Bundles',
+  sealed: 'Productos sellados',
+  single: 'Cartas individuales',
+  accessory: 'Accesorios',
+  service: 'Servicios / encargos',
+  other: 'Otros productos',
+};
 
 const RARITIES = [
   { value: 'common', label: 'Common' },
@@ -22,23 +30,27 @@ const RARITIES = [
   { value: 'mythic', label: 'Mythic' },
 ];
 
-const getProductType = (product) =>
+const getProductTypeValue = (product) =>
   product?.product_type_slug ||
   product?.product_type?.slug ||
+  product?.product_type_data?.slug ||
+  product?.product_type_detail?.slug ||
   product?.product_type ||
   'other';
 
-const getProductTypeLabel = (type) => {
-  const labels = {
-    single: 'Cartas individuales',
-    sealed: 'Productos sellados',
-    bundle: 'Bundles',
-    accessory: 'Accesorios',
-    service: 'Servicios / encargos',
-    other: 'Otros',
-  };
+const groupProductsByType = (items) => {
+  return items.reduce((groups, product) => {
+    const type = getProductTypeValue(product) || 'other';
+    if (!groups[type]) groups[type] = [];
+    groups[type].push(product);
+    return groups;
+  }, {});
+};
 
-  return labels[type] || type;
+const getOrderedProductTypes = (groups) => {
+  const knownTypes = PRODUCT_TYPE_ORDER.filter((type) => groups[type]?.length);
+  const extraTypes = Object.keys(groups).filter((type) => !PRODUCT_TYPE_ORDER.includes(type));
+  return [...knownTypes, ...extraTypes];
 };
 
 const getProductRarity = (product) => {
@@ -81,11 +93,7 @@ export default function CatalogPage() {
           ? typesResponse.data
           : [];
 
-      if (typeResults.length > 0) {
-        setProductTypes(typeResults);
-      } else {
-        setProductTypes(FALLBACK_PRODUCT_TYPES);
-      }
+      setProductTypes(typeResults.length > 0 ? typeResults : FALLBACK_PRODUCT_TYPES);
     } catch {
       setProductTypes(FALLBACK_PRODUCT_TYPES);
       try {
@@ -111,59 +119,38 @@ export default function CatalogPage() {
     return products.filter((product) => {
       const name = String(product.name || '').toLowerCase();
       const description = String(product.description || '').toLowerCase();
-      const productType = getProductType(product);
+      const productType = getProductTypeValue(product);
       const isSingle = productType === 'single';
 
       const matchesSearch = !search || name.includes(search) || description.includes(search);
       const matchesType = !type || productType === type;
+      const hasStock = Number(product.stock || 0) > 0 || productType === 'service';
 
-      const matchesRarity = !rarity || !isSingle || getProductRarity(product).toLowerCase() === rarity;
-      const matchesFoil = !foil || !isSingle || String(getProductIsFoil(product)) === foil;
+      const appliesSingleFilters =
+        type === 'single' ||
+        (!type && isSingle && (rarity !== '' || foil !== ''));
 
-      const hasStock = Number(product.stock || 0) > 0;
+      const matchesRarity =
+        !appliesSingleFilters || !rarity || getProductRarity(product).toLowerCase() === rarity;
+      const matchesFoil =
+        !appliesSingleFilters || !foil || String(getProductIsFoil(product)) === foil;
 
       return matchesSearch && matchesType && matchesRarity && matchesFoil && hasStock;
     });
   }, [products, query, type, rarity, foil]);
 
-  const groupedProducts = useMemo(() => {
-    return filtered.reduce((groups, product) => {
-      const productType = getProductType(product);
-      const groupType = productType || 'other';
+  const groupedProducts = useMemo(() => groupProductsByType(filtered), [filtered]);
 
-      if (!groups[groupType]) {
-        groups[groupType] = [];
-      }
-
-      groups[groupType].push(product);
-      return groups;
-    }, {});
-  }, [filtered]);
+  const orderedTypes = useMemo(() => {
+    if (type) return groupedProducts[type]?.length ? [type] : [];
+    return getOrderedProductTypes(groupedProducts);
+  }, [groupedProducts, type]);
 
   const clearFilters = () => {
     setQuery('');
     setType('');
     setRarity('');
     setFoil('');
-  };
-
-  const renderCatalogSection = (sectionType) => {
-    const sectionProducts = groupedProducts[sectionType] || [];
-
-    if (!sectionProducts.length) {
-      return null;
-    }
-
-    return (
-      <section className="catalog-section" key={sectionType}>
-        <div className="catalog-section-header d-flex justify-content-between align-items-center mb-3">
-          <h2 className="h4 mb-0">{getProductTypeLabel(sectionType)}</h2>
-          <span className="text-muted small">{sectionProducts.length} producto(s)</span>
-        </div>
-
-        <ProductSlider products={sectionProducts} onAdd={addItem} variant={sectionType} />
-      </section>
-    );
   };
 
   return (
@@ -180,27 +167,15 @@ export default function CatalogPage() {
         <div className="row g-2">
           <div className="col-md-4">
             <label className="form-label">Buscar</label>
-            <input
-              className="form-control"
-              placeholder="Buscar carta o producto"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
+            <input className="form-control" placeholder="Buscar carta o producto" value={query} onChange={(event) => setQuery(event.target.value)} />
           </div>
 
           <div className="col-md-2">
             <label className="form-label">Tipo</label>
-            <select
-              className="form-select"
-              value={type}
-              onChange={(event) => setType(event.target.value)}
-            >
+            <select className="form-select" value={type} onChange={(event) => setType(event.target.value)}>
               <option value="">Todos</option>
               {productTypes.map((option) => (
-                <option
-                  key={option.id || option.slug || option.value || option.code}
-                  value={option.slug || option.value || option.code}
-                >
+                <option key={option.id || option.slug || option.value || option.code} value={option.slug || option.value || option.code}>
                   {option.name || option.label}
                 </option>
               ))}
@@ -211,26 +186,16 @@ export default function CatalogPage() {
             <>
               <div className="col-md-2">
                 <label className="form-label">Rareza</label>
-                <select
-                  className="form-select"
-                  value={rarity}
-                  onChange={(event) => setRarity(event.target.value)}
-                >
+                <select className="form-select" value={rarity} onChange={(event) => setRarity(event.target.value)}>
                   <option value="">Todas</option>
                   {RARITIES.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
+                    <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
               </div>
               <div className="col-md-2">
                 <label className="form-label">Foil</label>
-                <select
-                  className="form-select"
-                  value={foil}
-                  onChange={(event) => setFoil(event.target.value)}
-                >
+                <select className="form-select" value={foil} onChange={(event) => setFoil(event.target.value)}>
                   <option value="">Todos</option>
                   <option value="true">Foil</option>
                   <option value="false">Non-foil</option>
@@ -241,39 +206,33 @@ export default function CatalogPage() {
 
           <div className="col-md-2">
             <label className="form-label d-none d-md-block">&nbsp;</label>
-            <button
-              type="button"
-              className="btn btn-outline-secondary w-100"
-              onClick={clearFilters}
-            >
-              Limpiar
-            </button>
+            <button type="button" className="btn btn-outline-secondary w-100" onClick={clearFilters}>Limpiar</button>
           </div>
         </div>
 
         <div className="small text-muted mt-3">
-          {loading
-            ? 'Cargando productos...'
-            : `${filtered.length} producto(s) encontrados.`}
+          {loading ? 'Cargando productos...' : `${filtered.length} producto(s) encontrados.`}
         </div>
       </div>
 
       {loading ? (
-        <div className="panel-card p-4 text-center text-muted">
-          Cargando catálogo...
-        </div>
+        <div className="panel-card p-4 text-center text-muted">Cargando catálogo...</div>
       ) : filtered.length === 0 ? (
-        <div className="panel-card p-4 text-center text-muted">
-          No hay productos disponibles para los filtros seleccionados.
-        </div>
-      ) : type ? (
-        <ProductSlider products={groupedProducts[type] || []} onAdd={addItem} variant={type} />
+        <div className="panel-card p-4 text-center text-muted">No hay productos disponibles para los filtros seleccionados.</div>
       ) : (
-        <div className="d-flex flex-column gap-4">
-          {CATALOG_TYPE_ORDER.map((sectionType) => renderCatalogSection(sectionType))}
-          {Object.keys(groupedProducts)
-            .filter((sectionType) => !CATALOG_TYPE_ORDER.includes(sectionType))
-            .map((sectionType) => renderCatalogSection(sectionType))}
+        <div className="catalog-sections">
+          {orderedTypes.map((sectionType) => (
+            <section key={sectionType} className="catalog-section">
+              <div className="catalog-section-header">
+                <div>
+                  <h2 className="h4 mb-1">{PRODUCT_TYPE_LABELS[sectionType] || sectionType}</h2>
+                  <p className="text-muted mb-0">{groupedProducts[sectionType].length} producto(s)</p>
+                </div>
+              </div>
+
+              <ProductSlider products={groupedProducts[sectionType]} onAdd={addItem} variant={sectionType} />
+            </section>
+          ))}
         </div>
       )}
     </>

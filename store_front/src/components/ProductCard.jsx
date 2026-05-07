@@ -9,6 +9,8 @@ const formatMoney = (value) => {
 const getProductType = (product) =>
   product?.product_type_slug ||
   product?.product_type?.slug ||
+  product?.product_type_data?.slug ||
+  product?.product_type_detail?.slug ||
   product?.product_type ||
   'other';
 
@@ -74,7 +76,6 @@ export default function ProductCard({ product, onAdd }) {
   const typeLabel = getProductTypeLabel(type);
   const isSingle = type === 'single';
   const isService = type === 'service';
-  const isWideProduct = ['bundle', 'sealed', 'accessory'].includes(type);
   const canBuy = product?.is_active !== false && (isService || stock > 0);
 
   const setCode = getSetCode(product, card);
@@ -84,9 +85,12 @@ export default function ProductCard({ product, onAdd }) {
 
   const shortDescription = product?.short_description || product?.description || '';
 
+  const cardClass = `card product-card h-100 product-card-${type || 'other'}`;
+  const imageWrapperClass = `product-card-image-wrapper ${isSingle ? 'single' : 'wide'}`;
+
   return (
-    <div className={`card product-card h-100 product-card-${type}`}>
-      <div className={`product-card-image-wrapper ${isWideProduct ? 'wide' : 'single'}`}>
+    <div className={cardClass}>
+      <div className={imageWrapperClass}>
         <img
           src={getImage(product, card)}
           className="product-card-image"

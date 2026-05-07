@@ -7,22 +7,57 @@ import ProductCarousel from '../components/ProductCarousel';
 import ProductSlider from '../components/ProductSlider';
 import { useCart } from '../hooks/useCart';
 
+const PRODUCT_TYPE_ORDER = ['bundle', 'sealed', 'single', 'accessory', 'service', 'other'];
+
+const PRODUCT_TYPE_LABELS = {
+  bundle: 'Bundles',
+  sealed: 'Productos sellados',
+  single: 'Cartas individuales',
+  accessory: 'Accesorios',
+  service: 'Servicios / encargos',
+  other: 'Otros productos',
+};
+
+const getProductTypeValue = (product) =>
+  product?.product_type_slug ||
+  product?.product_type?.slug ||
+  product?.product_type_data?.slug ||
+  product?.product_type_detail?.slug ||
+  product?.product_type ||
+  'other';
+
+const groupProductsByType = (items) => {
+  return items.reduce((groups, product) => {
+    const type = getProductTypeValue(product) || 'other';
+    if (!groups[type]) groups[type] = [];
+    groups[type].push(product);
+    return groups;
+  }, {});
+};
+
+const getOrderedProductTypes = (groups) => {
+  const knownTypes = PRODUCT_TYPE_ORDER.filter((type) => groups[type]?.length);
+  const extraTypes = Object.keys(groups).filter((type) => !PRODUCT_TYPE_ORDER.includes(type));
+  return [...knownTypes, ...extraTypes];
+};
+
 export default function HomePage() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const { addItem } = useCart();
 
-  const featuredProducts = useMemo(() => {
-    return products
-      .filter((product) => product.stock > 0)
-      .slice(0, 8);
+  const availableProducts = useMemo(() => {
+    return products.filter((product) => {
+      return Number(product?.stock || 0) > 0 || getProductTypeValue(product) === 'service';
+    });
   }, [products]);
 
+  const groupedProducts = useMemo(() => groupProductsByType(availableProducts), [availableProducts]);
+  const orderedTypes = useMemo(() => getOrderedProductTypes(groupedProducts), [groupedProducts]);
+
   const carouselProducts = useMemo(() => {
-    return products
-      .filter((product) => product.image)
-      .slice(0, 6);
+    return products.filter((product) => product.image).slice(0, 6);
   }, [products]);
 
   const loadProducts = async () => {
@@ -105,9 +140,9 @@ export default function HomePage() {
 
           <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
             <div>
-              <h3 className="mb-1">Destacados</h3>
+              <h3 className="mb-1">Destacados por categoría</h3>
               <p className="text-muted mb-0">
-                Productos disponibles para comprar ahora.
+                Priorizamos bundles y productos sellados para compra inmediata.
               </p>
             </div>
 
@@ -116,8 +151,34 @@ export default function HomePage() {
             </Link>
           </div>
 
-          {featuredProducts.length > 0 ? (
-            <ProductSlider products={featuredProducts} onAdd={addItem} />
+          {orderedTypes.length > 0 ? (
+            <div className="catalog-sections">
+              {orderedTypes.map((sectionType) => (
+                <section key={sectionType} className="catalog-section">
+                  <div className="catalog-section-header">
+                    <div>
+                      <h3 className="mb-1">{PRODUCT_TYPE_LABELS[sectionType] || sectionType}</h3>
+                      <p className="text-muted mb-0">
+                        {groupedProducts[sectionType].length} producto(s) disponibles
+                      </p>
+                    </div>
+
+                    <Link to={`/catalogo?type=${sectionType}`} className="btn btn-outline-primary btn-sm">
+                      Ver sección
+                    </Link>
+                  </div>
+
+                  <ProductSlider
+                    products={groupedProducts[sectionType].slice(
+                      0,
+                      sectionType === 'bundle' || sectionType === 'sealed' ? 6 : 8,
+                    )}
+                    onAdd={addItem}
+                    variant={sectionType}
+                  />
+                </section>
+              ))}
+            </div>
           ) : (
             <div className="panel-card p-4 text-center text-muted">
               No hay productos con stock disponible por ahora.
