@@ -1336,6 +1336,8 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
             False,
         )
 
+        # Fase 1: persistimos orden + ítems dentro de una transacción corta
+        # (sin requests HTTP externos para evitar locks largos).
         with transaction.atomic():
             currency = str(parsed.get("currency") or "USD").upper()
             exchange_rate = self._get_exchange_rate_for_currency(currency)
@@ -1369,6 +1371,8 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
                 ),
             )
 
+            created_items = []
+
             for item_data in parsed.get("items", []):
                 item = PurchaseOrderItem.objects.create(
                     purchase_order=purchase_order,
@@ -1392,45 +1396,51 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
                     },
                 )
 
-                if auto_match:
-                    try:
-                        self._match_item_with_scryfall(item)
-                    except Exception as exc:
-                        logger.warning(
-                            "No se pudo hacer match Scryfall item_id=%s error=%s",
-                            item.id,
-                            exc,
-                        )
+                created_items.append(item)
 
-                if not item.product_id:
-                    existing_product = find_existing_single_product_for_purchase_item(
-                        item
+        # Fase 2: fuera de transaction.atomic, hacemos matching con Scryfall.
+        for item in created_items:
+            if auto_match:
+                try:
+                    self._match_item_with_scryfall(item)
+                except Exception as exc:
+                    logger.warning(
+                        "No se pudo hacer match Scryfall item_id=%s error=%s",
+                        item.id,
+                        exc,
                     )
-                    if existing_product:
-                        item.product = existing_product
-                        item.save(update_fields=["product"])
 
-            if create_missing_products:
-                category = resolve_purchase_order_product_category(None)
+            if not item.product_id:
+                existing_product = find_existing_single_product_for_purchase_item(
+                    item
+                )
+                if existing_product:
+                    item.product = existing_product
+                    item.save(update_fields=["product"])
 
-                for item in purchase_order.items.filter(product__isnull=True):
-                    try:
-                        product, _ = create_product_from_purchase_order_item(
-                            item,
-                            category=category,
-                            created_by=request.user,
-                        )
+        if create_missing_products:
+            category = resolve_purchase_order_product_category(None)
 
-                        if activate_products:
-                            product.is_active = True
-                            product.save(update_fields=["is_active"])
-                    except Exception as exc:
-                        logger.warning(
-                            "No se pudo crear producto desde item_id=%s error=%s",
-                            item.id,
-                            exc,
-                        )
+            for item in purchase_order.items.filter(product__isnull=True):
+                try:
+                    product, _ = create_product_from_purchase_order_item(
+                        item,
+                        category=category,
+                        created_by=request.user,
+                    )
 
+                    if activate_products:
+                        product.is_active = True
+                        product.save(update_fields=["is_active"])
+                except Exception as exc:
+                    logger.warning(
+                        "No se pudo crear producto desde item_id=%s error=%s",
+                        item.id,
+                        exc,
+                    )
+
+        # Segunda transacción corta: recalcular totales finales.
+        with transaction.atomic():
             recalculate_purchase_order(purchase_order)
             purchase_order.refresh_from_db()
 
@@ -1635,9 +1645,13 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
     def apply_suggested_prices(self, request, pk=None):
         purchase_order = self.get_object()
 
-        for item in purchase_order.items.all():
+        items = list(purchase_order.items.all())
+        for item in items:
             item.sale_price_to_apply_clp = item.suggested_sale_price_clp
-            item.save(update_fields=["sale_price_to_apply_clp"])
+        PurchaseOrderItem.objects.bulk_update(
+            items,
+            ["sale_price_to_apply_clp"],
+        )
 
         return Response(self.get_serializer(purchase_order).data)
 
