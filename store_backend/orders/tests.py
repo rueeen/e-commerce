@@ -1,8 +1,11 @@
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from rest_framework import status
+from rest_framework.test import APIClient
 
 from cart.models import Cart, CartItem
+from orders.models import Order
 from orders.services import create_order_from_cart
 from products.inventory_services import consume_fifo_stock, receive_purchase_order
 from products.models import InventoryLot, Product, PurchaseOrder, PurchaseOrderItem, Supplier
@@ -91,3 +94,52 @@ class OrderStockDeductionTests(TestCase):
 
         self.assertEqual(movement.unit_cost_clp, 1000)
         self.assertEqual(movement.quantity, 2)
+
+
+class OrderCancelPermissionTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.customer = get_user_model().objects.create_user(
+            username="customer", password="x", role="customer"
+        )
+        self.other_customer = get_user_model().objects.create_user(
+            username="other_customer", password="x", role="customer"
+        )
+        self.worker = get_user_model().objects.create_user(
+            username="worker", password="x", role="worker", is_staff=True
+        )
+
+        self.order = Order.objects.create(user=self.customer, status=Order.Status.PENDING)
+        self.other_order = Order.objects.create(user=self.other_customer, status=Order.Status.PENDING)
+
+    def test_customer_cannot_cancel_other_users_order(self):
+        self.client.force_authenticate(self.customer)
+
+        response = self.client.post(f"/api/orders/{self.other_order.id}/cancel/")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_customer_can_cancel_own_order(self):
+        self.client.force_authenticate(self.customer)
+
+        response = self.client.post(f"/api/orders/{self.order.id}/cancel/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.CANCELED)
+
+    def test_worker_can_cancel_any_order(self):
+        self.client.force_authenticate(self.worker)
+
+        response = self.client.post(f"/api/orders/{self.order.id}/cancel/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.CANCELED)
+
+    def test_confirm_payment_returns_404_for_foreign_order(self):
+        self.client.force_authenticate(self.customer)
+
+        response = self.client.post(f"/api/orders/{self.other_order.id}/confirm-payment/")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

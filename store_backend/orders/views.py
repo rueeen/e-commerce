@@ -86,18 +86,12 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
     def cancel(self, request, pk=None):
         order = self.get_object()
 
-        is_owner = order.user_id == request.user.id
-        is_staff_role = is_admin_user(
-            request.user) or is_worker_user(request.user)
-
-        if not is_owner and not is_staff_role:
-            return Response(
-                {"detail": "No autorizado."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
         try:
-            order = cancel_order(order, user=request.user)
+            order = cancel_order(
+                order,
+                user=request.user,
+                requesting_user=request.user,
+            )
         except ValidationError as exc:
             return validation_error_response(exc)
 
