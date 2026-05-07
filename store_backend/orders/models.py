@@ -179,12 +179,15 @@ class AssistedPurchaseItem(models.Model):
 
 class Order(models.Model):
     class Status(models.TextChoices):
-        PENDING = "pending", "Pendiente"
+        PENDING_PAYMENT = "pending_payment", "Pendiente de pago"
+        PAYMENT_STARTED = "payment_started", "Pago iniciado"
         PAID = "paid", "Pagado"
         PROCESSING = "processing", "Procesando"
         SHIPPED = "shipped", "Enviado"
         DELIVERED = "delivered", "Entregado"
+        PAYMENT_FAILED = "payment_failed", "Pago rechazado"
         CANCELED = "canceled", "Cancelado"
+        COMPLETED = "completed", "Completada"
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -194,7 +197,7 @@ class Order(models.Model):
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
-        default=Status.PENDING,
+        default=Status.PENDING_PAYMENT,
         db_index=True,
     )
 
@@ -230,12 +233,13 @@ class Order(models.Model):
 
     @property
     def can_be_paid(self):
-        return self.status == self.Status.PENDING
+        return self.status in [self.Status.PENDING_PAYMENT, self.Status.PAYMENT_FAILED]
 
     @property
     def can_be_canceled(self):
         return self.status in [
-            self.Status.PENDING,
+            self.Status.PENDING_PAYMENT,
+            self.Status.PAYMENT_STARTED,
             self.Status.PAID,
             self.Status.PROCESSING,
         ]
@@ -245,6 +249,7 @@ class Order(models.Model):
         return self.status in [
             self.Status.DELIVERED,
             self.Status.CANCELED,
+            self.Status.COMPLETED,
         ]
 
 

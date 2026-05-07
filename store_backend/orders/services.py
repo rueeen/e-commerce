@@ -42,7 +42,7 @@ def create_order_from_cart(user):
 
     order = Order.objects.create(
         user=user,
-        status=Order.Status.PENDING,
+        status=Order.Status.PENDING_PAYMENT,
     )
 
     subtotal = 0
@@ -100,8 +100,6 @@ def create_order_from_cart(user):
         0,
     )
     order.save(update_fields=["subtotal_clp", "total_clp", "updated_at"])
-
-    cart.items.all().delete()
 
     return order
 

@@ -26,11 +26,11 @@ export default function CartPage() {
 
     try {
       const { data } = await api.createOrderFromCart();
-
-      notyf.success('Orden creada correctamente.');
-      await fetchCart();
-
-      navigate(`/mis-pedidos`);
+      const payment = await api.createWebpayTransaction(data.id);
+      const token = payment.data.token;
+      const url = payment.data.url;
+      notyf.success('Redirigiendo a Webpay...');
+      window.location.href = `${url}?token_ws=${token}`;
     } catch {
       // El apiClient ya muestra el error.
     } finally {
@@ -44,7 +44,7 @@ export default function CartPage() {
         <div>
           <h2 className="mb-1">Carrito</h2>
           <p className="text-muted mb-0">
-            Revisa tus productos antes de generar la orden.
+            Revisa tus productos antes de pagar con Webpay.
           </p>
         </div>
       </div>
@@ -103,7 +103,7 @@ export default function CartPage() {
               disabled={checkingOut || !items.length}
               onClick={createOrder}
             >
-              {checkingOut ? 'Creando orden...' : 'Crear orden'}
+              {checkingOut ? 'Iniciando pago...' : 'Pagar con Webpay'}
             </button>
           </div>
         </div>
