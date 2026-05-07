@@ -98,7 +98,7 @@ def create_webpay_transaction(order, user):
         raw_request=payload,
         raw_response=response,
     )
-    order.status = getattr(Order.Status, 'AWAITING_PAYMENT', Order.Status.PAYMENT_STARTED)
+    order.status = Order.Status.PAYMENT_STARTED
     order.save(update_fields=['status', 'updated_at'])
     return payment, response
 

@@ -131,4 +131,4 @@ WEBPAY_API_KEY_SECRET = os.getenv('WEBPAY_API_KEY_SECRET', '')
 WEBPAY_RETURN_URL = os.getenv(
     'WEBPAY_RETURN_URL', 'http://localhost:5173/pago/retorno')
 WEBPAY_FINAL_URL = os.getenv(
-    'WEBPAY_FINAL_URL', 'http://localhost:35173000/pago/final')
+    'WEBPAY_FINAL_URL', 'http://localhost:5173/pago/final')
