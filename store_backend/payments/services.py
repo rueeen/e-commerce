@@ -28,12 +28,13 @@ def _headers():
     }
 
 
-def _post(path, payload):
+def _request(path, payload=None, method='POST'):
+    body = None if payload is None else json.dumps(payload).encode('utf-8')
     req = urllib.request.Request(
         f"{_webpay_base_url()}{path}",
-        data=json.dumps(payload).encode('utf-8'),
+        data=body,
         headers=_headers(),
-        method='POST',
+        method=method,
     )
     try:
         with urllib.request.urlopen(req, timeout=20) as response:
@@ -41,10 +42,18 @@ def _post(path, payload):
     except urllib.error.HTTPError as exc:
         body = exc.read().decode('utf-8', errors='ignore') if hasattr(exc, 'read') else ''
         details = body or str(exc)
-        raise ValidationError(
-            f'Webpay rechazó la solicitud ({exc.code}). Revisa WEBPAY_COMMERCE_CODE y '
-            f'WEBPAY_API_KEY_SECRET para el ambiente "{settings.WEBPAY_ENVIRONMENT}". Detalle: {details}'
-        ) from exc
+        if exc.code == 401:
+            message = (
+                f'Webpay rechazó la solicitud (401). Posible problema de credenciales para el ambiente '
+                f'"{settings.WEBPAY_ENVIRONMENT}".'
+            )
+        elif exc.code == 405:
+            message = 'Webpay rechazó la solicitud (405). Método HTTP o endpoint de commit incorrecto.'
+        elif exc.code in (404, 422):
+            message = 'Webpay rechazó la solicitud. El token es inválido, expiró o ya fue confirmado.'
+        else:
+            message = f'Webpay rechazó la solicitud ({exc.code}).'
+        raise ValidationError(f'{message} Detalle técnico: {details}') from exc
     except urllib.error.URLError as exc:
         raise ValidationError(f'No fue posible conectar con Webpay: {exc.reason}') from exc
 
@@ -65,7 +74,7 @@ def create_webpay_transaction(order, user):
         'amount': int(order.total_clp),
         'return_url': settings.WEBPAY_RETURN_URL,
     }
-    response = _post('/rswebpaytransaction/api/webpay/v1.2/transactions', payload)
+    response = _request('/rswebpaytransaction/api/webpay/v1.2/transactions', payload, method='POST')
 
     payment = PaymentTransaction.objects.create(
         order=order,
@@ -84,7 +93,7 @@ def create_webpay_transaction(order, user):
 
 
 def commit_webpay_transaction(token):
-    return _post(f'/rswebpaytransaction/api/webpay/v1.2/transactions/{token}', {})
+    return _request(f'/rswebpaytransaction/api/webpay/v1.2/transactions/{token}', {}, method='PUT')
 
 
 @transaction.atomic

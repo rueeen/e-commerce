@@ -6,4 +6,12 @@ class WebpayCreateSerializer(serializers.Serializer):
 
 
 class WebpayCommitSerializer(serializers.Serializer):
-    token = serializers.CharField()
+    token = serializers.CharField(required=False)
+    token_ws = serializers.CharField(required=False)
+
+    def validate(self, attrs):
+        token = attrs.get('token') or attrs.get('token_ws')
+        if not token:
+            raise serializers.ValidationError('Debes enviar "token" o "token_ws".')
+        attrs['token'] = token
+        return attrs
