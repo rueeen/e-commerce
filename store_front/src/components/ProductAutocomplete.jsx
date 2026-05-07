@@ -164,7 +164,7 @@ export default function ProductAutocomplete({
   }, []);
 
   const selectProduct = (product) => {
-    onSelect?.(product);
+    onSelect(product);
     setQuery('');
     setOpen(false);
   };
@@ -244,7 +244,16 @@ export default function ProductAutocomplete({
                 type="button"
                 key={product.id}
                 className="list-group-item list-group-item-action bg-dark text-light border-secondary"
-                onClick={() => selectProduct(product)}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                }}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onSelect(product);
+                  setQuery('');
+                  setOpen(false);
+                }}
               >
                 <div className="d-flex align-items-center gap-2">
                   {image ? (
