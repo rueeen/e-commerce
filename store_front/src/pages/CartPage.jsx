@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-
 import { api } from '../api/endpoints';
 import CartItem from '../components/CartItem';
 import ConfirmModal from '../components/ConfirmModal';
 import { notyf } from '../api/notifier';
+import { submitWebpayForm } from '../utils/webpay';
 import { useCart } from '../hooks/useCart';
 
 const formatMoney = (value) => {
@@ -12,7 +11,6 @@ const formatMoney = (value) => {
 };
 
 export default function CartPage() {
-  const navigate = useNavigate();
   const { items, total, updateItem, removeItem, clear, fetchCart } = useCart();
   const [checkingOut, setCheckingOut] = useState(false);
 
@@ -27,10 +25,8 @@ export default function CartPage() {
     try {
       const { data } = await api.createOrderFromCart();
       const payment = await api.createWebpayTransaction(data.id);
-      const token = payment.data.token;
-      const url = payment.data.url;
       notyf.success('Redirigiendo a Webpay...');
-      window.location.href = `${url}?token_ws=${token}`;
+      submitWebpayForm(payment.url, payment.token);
     } catch {
       // El apiClient ya muestra el error.
     } finally {
