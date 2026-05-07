@@ -125,8 +125,8 @@ class ProductSerializer(serializers.ModelSerializer):
 
     computed_price_clp = serializers.IntegerField(read_only=True)
     cost_real_clp = serializers.IntegerField(read_only=True)
-    margin_clp = serializers.IntegerField(read_only=True)
-    margin_percentage = serializers.FloatField(read_only=True)
+    margin_clp = serializers.SerializerMethodField()
+    margin_percentage = serializers.SerializerMethodField()
     suggested_price_clp = serializers.SerializerMethodField()
     margen_clp = serializers.SerializerMethodField()
     margen_pct = serializers.SerializerMethodField()
@@ -188,23 +188,47 @@ class ProductSerializer(serializers.ModelSerializer):
             "bundle_items",
         )
 
+
+    def _get_margin_values(self, obj):
+        price = int((getattr(obj, "price_clp", 0) or getattr(obj, "computed_price_clp", 0) or 0))
+        cost = int(
+            (
+                getattr(obj, "cost_real_clp", 0)
+                or getattr(obj, "average_cost_clp", 0)
+                or getattr(obj, "last_purchase_cost_clp", 0)
+                or 0
+            )
+        )
+
+        if cost > 0:
+            margin_clp = price - cost
+            margin_percentage = round((margin_clp / cost) * 100, 2)
+        else:
+            margin_clp = 0
+            margin_percentage = 0.0
+
+        is_profitable = cost <= 0 or price >= cost
+        return margin_clp, margin_percentage, is_profitable
+
+    def get_margin_clp(self, obj):
+        margin_clp, _, _ = self._get_margin_values(obj)
+        return margin_clp
+
+    def get_margin_percentage(self, obj):
+        _, margin_percentage, _ = self._get_margin_values(obj)
+        return margin_percentage
+
     def get_is_profitable(self, obj):
-        cost = int(getattr(obj, "cost_real_clp", 0) or 0)
-        price = int(getattr(obj, "computed_price_clp", 0) or 0)
-
-        if cost <= 0:
-            return True
-
-        return price >= cost
+        _, _, is_profitable = self._get_margin_values(obj)
+        return is_profitable
 
     def get_margen_clp(self, obj):
-        return int(obj.computed_price_clp or 0) - int(obj.cost_real_clp or 0)
+        margin_clp, _, _ = self._get_margin_values(obj)
+        return margin_clp
 
     def get_margen_pct(self, obj):
-        cost = int(obj.cost_real_clp or 0)
-        if cost <= 0:
-            return 0.0
-        return round((self.get_margen_clp(obj) / cost) * 100, 2)
+        _, margin_percentage, _ = self._get_margin_values(obj)
+        return margin_percentage
 
     def _get_pricing_settings_cached(self):
         cache_key = "_active_pricing_settings"
