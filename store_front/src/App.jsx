@@ -29,6 +29,7 @@ import PurchaseOrderImport from './pages/PurchaseOrderImport';
 import RegisterPage from './pages/RegisterPage';
 import ScryfallSingleCreate from './pages/ScryfallSingleCreate';
 import PricingSettingsPage from './pages/PricingSettingsPage';
+import PaymentFinalPage from './pages/PaymentFinalPage';
 import PaymentReturnPage from './pages/PaymentReturnPage';
 
 export default function App() {
@@ -72,6 +73,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/registro" element={<RegisterPage />} />
         <Route path="/pago/retorno" element={<PaymentReturnPage />} />
+        <Route path="/pago/final" element={<PaymentFinalPage />} />
       </Route>
 
       <Route
