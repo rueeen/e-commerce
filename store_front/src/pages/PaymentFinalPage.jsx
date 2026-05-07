@@ -12,7 +12,9 @@ const formatAmount = (amount) => {
 
 export default function PaymentFinalPage() {
   const location = useLocation();
-  const payment = location.state?.payment;
+  const payment =
+    location.state?.payment ||
+    JSON.parse(sessionStorage.getItem('lastWebpayResult') || 'null');
 
   if (!payment) {
     return (
@@ -48,12 +50,8 @@ export default function PaymentFinalPage() {
         {!!payment?.card_detail?.card_number && (
           <li><strong>Tarjeta (últimos 4):</strong> {payment.card_detail.card_number}</li>
         )}
-        {!isApproved && (
-          <>
-            <li><strong>response_code:</strong> {String(payment?.response_code ?? '-')}</li>
-            <li><strong>status:</strong> {payment?.status || '-'}</li>
-          </>
-        )}
+        <li><strong>response_code:</strong> {String(payment?.response_code ?? '-')}</li>
+        <li><strong>status:</strong> {payment?.status || '-'}</li>
       </ul>
 
       <div className="d-flex gap-2 flex-wrap">

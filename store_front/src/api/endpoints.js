@@ -264,8 +264,14 @@ export const api = {
 
   cancelOrder: (id) => apiClient.post(`/api/orders/${id}/cancel/`),
 
-  createWebpayTransaction: (order_id) => apiClient.post('/api/payments/webpay/create/', { order_id }),
-  commitWebpayTransaction: (tokenWs) => apiClient.post('/api/payments/webpay/commit/', { token_ws: tokenWs }),
+  createWebpayTransaction: async (order_id) => {
+    const { data } = await apiClient.post('/api/payments/webpay/create/', { order_id });
+    return data;
+  },
+  commitWebpayTransaction: async (tokenWs) => {
+    const { data } = await apiClient.post('/api/payments/webpay/commit/', { token_ws: tokenWs });
+    return data;
+  },
 
   // =========================
   // Assisted Orders
