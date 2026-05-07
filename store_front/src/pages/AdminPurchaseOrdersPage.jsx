@@ -35,8 +35,13 @@ const statusLabels = {
 
 const normalizeList = (data) => data?.results || data || [];
 
-const formatMoney = (value) => {
-  return `$${Number(value || 0).toLocaleString('es-CL')}`;
+const formatMoney = (value, currency = 'CLP') => {
+  const normalizedCurrency = String(currency || 'CLP').toUpperCase();
+
+  return new Intl.NumberFormat('es-CL', {
+    style: 'currency',
+    currency: normalizedCurrency === 'USD' ? 'USD' : 'CLP',
+  }).format(Number(value || 0));
 };
 
 const formatDate = (value) => {
@@ -80,21 +85,33 @@ const estimateSuggestedPrice = (unitCost) => {
   return roundUp(toNumber(unitCost) * MARGIN_FACTOR_PREVIEW);
 };
 
-const buildManualItemFromProduct = (product) => {
-  const costUnit = Number(
+const getProductUnitCostForOrder = (product, currency) => {
+  const normalizedCurrency = String(currency || 'CLP').toUpperCase();
+
+  if (normalizedCurrency === 'USD') {
+    return Number(
+      product.single_card?.price_usd_reference ??
+        product.price_external_usd ??
+        0
+    );
+  }
+
+  return Number(
     product.last_purchase_cost_clp ??
       product.average_cost_clp ??
       product.cost_real_clp ??
-      product.computed_price_clp ??
       product.price_clp ??
       0
   );
+};
+
+const buildManualItemFromProduct = (product, currency) => {
+  const costUnit = getProductUnitCostForOrder(product, currency);
 
   const suggestedPrice = Number(
     product.price_clp_suggested ??
       product.suggested_price_clp ??
       product.precio_sugerido_clp ??
-      product.computed_price_clp ??
       product.price_clp ??
       0
   );
@@ -104,6 +121,7 @@ const buildManualItemFromProduct = (product) => {
   return {
     product: product.id,
     name: product.name,
+    source_product: product,
     quantity_ordered: String(quantity),
     unit_price_original: String(costUnit || 0),
     subtotal_clp: costUnit * quantity,
@@ -203,7 +221,7 @@ export default function AdminPurchaseOrdersPage() {
 
       return {
         ...current,
-        items: [...current.items, buildManualItemFromProduct(product)],
+        items: [...current.items, buildManualItemFromProduct(product, current.original_currency)],
       };
     });
   }, [search, products]);
@@ -292,7 +310,11 @@ export default function AdminPurchaseOrdersPage() {
     }
 
     const index = form.items.length;
-    const newItem = buildManualItemFromProduct(product);
+    const newItem = buildManualItemFromProduct(product, form.original_currency);
+
+    if (String(form.original_currency || 'CLP').toUpperCase() === 'USD' && Number(newItem.unit_price_original || 0) <= 0) {
+      notyf.warning('Este producto no tiene precio USD de referencia. Ingresa costo unitario USD manualmente.');
+    }
 
     setForm((current) => ({
       ...current,
@@ -557,9 +579,36 @@ export default function AdminPurchaseOrdersPage() {
               <select
                 className="form-select"
                 value={form.original_currency}
-                onChange={(event) =>
-                  updateForm('original_currency', event.target.value)
-                }
+                onChange={(event) => {
+                  const nextCurrency = event.target.value;
+
+                  setForm((current) => {
+                    if (current.original_currency === nextCurrency) return current;
+
+                    const shouldRecalculate = current.items.length === 0
+                      ? true
+                      : window.confirm('Cambiar la moneda recalculará los costos unitarios.');
+
+                    if (!shouldRecalculate) return current;
+
+                    const updatedItems = current.items.map((item) => {
+                      const sourceProduct = products.find((product) => product.id === item.product) || item.source_product || {};
+                      const nextUnitCost = getProductUnitCostForOrder(sourceProduct, nextCurrency);
+
+                      return {
+                        ...item,
+                        unit_price_original: String(nextUnitCost || 0),
+                        subtotal_clp: toNumber(item.quantity_ordered) * toNumber(nextUnitCost),
+                      };
+                    });
+
+                    return {
+                      ...current,
+                      original_currency: nextCurrency,
+                      items: updatedItems,
+                    };
+                  });
+                }}
               >
                 <option value="CLP">CLP</option>
                 <option value="USD">USD</option>
@@ -611,8 +660,8 @@ export default function AdminPurchaseOrdersPage() {
                 <tr>
                   <th>Producto</th>
                   <th>Cantidad</th>
-                  <th>Costo unitario compra</th>
-                  <th>Subtotal compra</th>
+                  <th>{`Costo unitario compra (${String(form.original_currency || 'CLP').toUpperCase()})`}</th>
+                  <th>{`Subtotal compra (${String(form.original_currency || 'CLP').toUpperCase()})`}</th>
                   <th>Precio sugerido venta</th>
                   <th>Precio venta a aplicar</th>
                   <th>Acciones</th>
@@ -671,7 +720,7 @@ export default function AdminPurchaseOrdersPage() {
                       />
                     </td>
 
-                    <td>{formatMoney(buildItemSubtotal(item))}</td>
+                    <td>{formatMoney(buildItemSubtotal(item), form.original_currency)}</td>
 
                     <td>
                       {(item.suggested || item.suggested_sale_price_clp) ? (
