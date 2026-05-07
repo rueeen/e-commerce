@@ -246,10 +246,6 @@ export default function ProductAutocomplete({
                 className="list-group-item list-group-item-action bg-dark text-light border-secondary"
                 onMouseDown={(event) => {
                   event.preventDefault();
-                }}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
                   onSelect(product);
                   setQuery('');
                   setOpen(false);

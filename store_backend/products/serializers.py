@@ -340,6 +340,7 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             "external_reference",
             "status",
             "source_store",
+            "purchase_order_type",
             "original_currency",
             "exchange_rate_snapshot_clp",
             "subtotal_original",
@@ -415,7 +416,17 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
         if currency == "USD":
             get_active_exchange_rate()
 
+        purchase_order_type = (
+            attrs.get("purchase_order_type")
+            or getattr(self.instance, "purchase_order_type", PurchaseOrder.PurchaseOrderType.GENERAL)
+        )
+
         for item in items or []:
+            if purchase_order_type == PurchaseOrder.PurchaseOrderType.GENERAL and not item.get("product"):
+                raise serializers.ValidationError({
+                    "items": "Las órdenes generales deben seleccionar productos existentes desde el mantenedor."
+                })
+
             qty = int(item.get("quantity_ordered") or 0)
 
             if qty <= 0:
@@ -428,6 +439,14 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             if unit_price_original is None or unit_price_original < 0:
                 raise serializers.ValidationError({
                     "items": "unit_price_original debe ser mayor o igual a 0."
+                })
+
+            if (
+                purchase_order_type == PurchaseOrder.PurchaseOrderType.GENERAL
+                and unit_price_original <= 0
+            ):
+                raise serializers.ValidationError({
+                    "items": "El costo unitario de compra debe ser mayor a 0."
                 })
 
             expected = (unit_price_original * qty).quantize(D("0.01"))

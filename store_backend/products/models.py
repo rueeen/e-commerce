@@ -465,6 +465,11 @@ class PurchaseOrder(models.Model):
         RECEIVED = "RECEIVED", "Recibida"
         CANCELLED = "CANCELLED", "Cancelada"
 
+    class PurchaseOrderType(models.TextChoices):
+        SINGLES = "singles", "Singles"
+        GENERAL = "general", "General"
+        MIXED = "mixed", "Mixta"
+
     supplier = models.ForeignKey(
         Supplier,
         on_delete=models.PROTECT,
@@ -478,6 +483,11 @@ class PurchaseOrder(models.Model):
         default=Status.DRAFT,
     )
     source_store = models.CharField(max_length=120, blank=True)
+    purchase_order_type = models.CharField(
+        max_length=20,
+        choices=PurchaseOrderType.choices,
+        default=PurchaseOrderType.GENERAL,
+    )
     original_currency = models.CharField(
         max_length=3,
         choices=(("CLP", "CLP"), ("USD", "USD")),
