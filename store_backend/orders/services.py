@@ -4,7 +4,11 @@ from django.utils import timezone
 
 from accounts.permissions import is_admin_user, is_worker_user
 from cart.models import Cart, get_product_sale_price_clp
-from products.inventory_services import consume_fifo_stock, create_stock_movement
+from products.inventory_services import (
+    consume_fifo_stock,
+    create_stock_movement,
+    return_fifo_stock,
+)
 from products.models import KardexMovement, Product
 
 from .models import Order, OrderItem
@@ -269,6 +273,11 @@ def cancel_order(order: Order, user=None, requesting_user=None):
                     product.bundle_items.select_related("item").all()
                 )
                 if not bundle_items:
+                    return_fifo_stock(
+                        product,
+                        item.quantity,
+                        unit_cost_clp=item.unit_cost_clp,
+                    )
                     create_stock_movement(
                         product=product,
                         movement_type=KardexMovement.MovementType.RETURN_IN,
@@ -283,17 +292,26 @@ def cancel_order(order: Order, user=None, requesting_user=None):
                     )
                     continue
 
+                total_component_qty = sum(bundle_item.quantity for bundle_item in bundle_items) * item.quantity
+
                 for bundle_item in bundle_items:
                     component = Product.objects.select_for_update().get(
                         pk=bundle_item.item_id
                     )
                     component_qty = bundle_item.quantity * item.quantity
+                    proportional_total_cost = int(round((item.total_cost_clp * component_qty) / total_component_qty)) if total_component_qty else 0
+                    component_unit_cost_clp = int(round(proportional_total_cost / component_qty)) if component_qty else 0
+                    return_fifo_stock(
+                        component,
+                        component_qty,
+                        unit_cost_clp=component_unit_cost_clp,
+                    )
                     create_stock_movement(
                         product=component,
                         movement_type=KardexMovement.MovementType.RETURN_IN,
                         quantity=component_qty,
                         created_by=user,
-                        unit_cost_clp=item.unit_cost_clp,
+                        unit_cost_clp=component_unit_cost_clp,
                         unit_price_clp=0,
                         reference_type="ORDER",
                         reference_id=order.id,
@@ -301,6 +319,11 @@ def cancel_order(order: Order, user=None, requesting_user=None):
                         notes=f"Reposición por cancelación de bundle '{product.name}'",
                     )
             else:
+                return_fifo_stock(
+                    product,
+                    item.quantity,
+                    unit_cost_clp=item.unit_cost_clp,
+                )
                 create_stock_movement(
                     product=product,
                     movement_type=KardexMovement.MovementType.RETURN_IN,
