@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { api } from '../api/endpoints';
+import { useCart } from '../hooks/useCart';
 import { notyf } from '../api/notifier';
 import { submitWebpayForm } from '../utils/webpay';
 
@@ -44,6 +45,7 @@ const getStoredPaymentResult = () => {
 
 export default function PaymentFinalPage() {
   const location = useLocation();
+  const { fetchCart } = useCart();
   const [retryingPayment, setRetryingPayment] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
   const [receiptLoading, setReceiptLoading] = useState(false);
@@ -54,6 +56,16 @@ export default function PaymentFinalPage() {
     if (location.state?.payment) return location.state.payment;
     return getStoredPaymentResult();
   }, [location.state]);
+
+  const isApproved =
+    payment?.status === 'AUTHORIZED' &&
+    Number(payment?.response_code) === 0;
+
+  useEffect(() => {
+    if (isApproved) {
+      fetchCart();
+    }
+  }, [isApproved, fetchCart]);
 
   const retryPayment = async () => {
     if (!payment?.order_id || retryingPayment) return;
@@ -102,10 +114,6 @@ export default function PaymentFinalPage() {
       </div>
     );
   }
-
-  const isApproved =
-    payment?.status === 'AUTHORIZED' &&
-    Number(payment?.response_code) === 0;
 
   const isCancelled = payment?.status === 'CANCELLED';
   const DOCUMENT_TYPE_LABELS = {
