@@ -14,6 +14,21 @@ const formatAmount = (amount) => {
   }).format(value);
 };
 
+const formatDateTime = (value) => {
+  if (!value) return '-';
+  try {
+    return new Date(value).toLocaleString('es-CL', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return value;
+  }
+};
+
 const getStoredPaymentResult = () => {
   const stored = sessionStorage.getItem('lastWebpayResult');
   sessionStorage.removeItem('lastWebpayResult');
@@ -93,6 +108,11 @@ export default function PaymentFinalPage() {
     Number(payment?.response_code) === 0;
 
   const isCancelled = payment?.status === 'CANCELLED';
+  const DOCUMENT_TYPE_LABELS = {
+    internal_receipt: 'Comprobante interno',
+    boleta: 'Boleta',
+    factura: 'Factura',
+  };
 
   return (
     <div className="panel-card p-4">
@@ -113,7 +133,7 @@ export default function PaymentFinalPage() {
         {!!payment?.card_detail?.card_number && (
           <li><strong>Tarjeta (últimos 4):</strong> {payment.card_detail.card_number}</li>
         )}
-        <li><strong>Fecha:</strong> {payment?.transaction_date || '-'}</li>
+        <li><strong>Fecha:</strong> {formatDateTime(payment?.transaction_date)}</li>
       </ul>
 
       <div className="d-flex gap-2 flex-wrap">
@@ -160,11 +180,11 @@ export default function PaymentFinalPage() {
           ) : receipt ? (
             <ul className="list-unstyled mb-0">
               <li><strong>Número de documento:</strong> {receipt.document_number || '-'}</li>
-              <li><strong>Neto:</strong> {formatAmount(receipt.net_amount)}</li>
-              <li><strong>IVA (19%):</strong> {formatAmount(receipt.vat_amount)}</li>
-              <li><strong>Total:</strong> {formatAmount(receipt.total_amount)}</li>
-              <li><strong>Tipo:</strong> {receipt.document_type || '-'}</li>
-              <li><strong>Fecha de emisión:</strong> {receipt.issued_at || '-'}</li>
+              <li><strong>Neto:</strong> {formatAmount(receipt.net_amount_clp)}</li>
+              <li><strong>IVA (19%):</strong> {formatAmount(receipt.tax_amount_clp)}</li>
+              <li><strong>Total:</strong> {formatAmount(receipt.total_amount_clp)}</li>
+              <li><strong>Tipo:</strong> {DOCUMENT_TYPE_LABELS[receipt.document_type] || receipt.document_type || '-'}</li>
+              <li><strong>Fecha de emisión:</strong> {formatDateTime(receipt.issued_at)}</li>
             </ul>
           ) : null}
         </div>
