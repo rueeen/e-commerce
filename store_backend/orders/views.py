@@ -274,21 +274,65 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
 
         for item, order_item in created_order_items:
             product = item["product"]
-            fifo_cost = consume_fifo_stock(product, item["quantity"])
-            total_cost_clp = int(fifo_cost["total_cost_clp"])
-            unit_cost_clp = int(fifo_cost["unit_cost_clp"])
-            create_stock_movement(
-                product=product,
-                movement_type=KardexMovement.MovementType.SALE_OUT,
-                quantity=item["quantity"],
-                created_by=request.user,
-                unit_cost_clp=unit_cost_clp,
-                unit_price_clp=item["unit_price_clp"],
-                reference_type="ORDER",
-                reference_id=order.id,
-                reference_label=f"Orden #{order.id}",
-                notes="Salida por venta manual",
-            )
+            total_cost_clp = 0
+            unit_cost_clp = 0
+
+            if product.product_type == product.ProductType.BUNDLE:
+                bundle_items = list(product.bundle_items.select_related("item").all())
+                if bundle_items:
+                    for bundle_item in bundle_items:
+                        component = Product.objects.select_for_update().get(pk=bundle_item.item_id)
+                        component_qty = bundle_item.quantity * item["quantity"]
+                        fifo_cost = consume_fifo_stock(component, component_qty)
+                        comp_cost = int(fifo_cost["total_cost_clp"])
+                        total_cost_clp += comp_cost
+                        create_stock_movement(
+                            product=component,
+                            movement_type=KardexMovement.MovementType.SALE_OUT,
+                            quantity=component_qty,
+                            created_by=request.user,
+                            unit_cost_clp=int(fifo_cost["unit_cost_clp"]),
+                            unit_price_clp=0,
+                            reference_type="ORDER",
+                            reference_id=order.id,
+                            reference_label=f"Orden #{order.id} (bundle: {product.name})",
+                            notes="Salida por venta manual de bundle",
+                        )
+                    unit_cost_clp = int(round(total_cost_clp / item["quantity"])) if item["quantity"] else 0
+                else:
+                    # Bundle sin componentes: consume sobre el bundle mismo
+                    fifo_cost = consume_fifo_stock(product, item["quantity"])
+                    total_cost_clp = int(fifo_cost["total_cost_clp"])
+                    unit_cost_clp = int(fifo_cost["unit_cost_clp"])
+                    create_stock_movement(
+                        product=product,
+                        movement_type=KardexMovement.MovementType.SALE_OUT,
+                        quantity=item["quantity"],
+                        created_by=request.user,
+                        unit_cost_clp=unit_cost_clp,
+                        unit_price_clp=item["unit_price_clp"],
+                        reference_type="ORDER",
+                        reference_id=order.id,
+                        reference_label=f"Orden #{order.id}",
+                        notes="Salida por venta manual (bundle sin componentes)",
+                    )
+            else:
+                fifo_cost = consume_fifo_stock(product, item["quantity"])
+                total_cost_clp = int(fifo_cost["total_cost_clp"])
+                unit_cost_clp = int(fifo_cost["unit_cost_clp"])
+                create_stock_movement(
+                    product=product,
+                    movement_type=KardexMovement.MovementType.SALE_OUT,
+                    quantity=item["quantity"],
+                    created_by=request.user,
+                    unit_cost_clp=unit_cost_clp,
+                    unit_price_clp=item["unit_price_clp"],
+                    reference_type="ORDER",
+                    reference_id=order.id,
+                    reference_label=f"Orden #{order.id}",
+                    notes="Salida por venta manual",
+                )
+
             order_item.unit_cost_clp = unit_cost_clp
             order_item.total_cost_clp = total_cost_clp
             order_item.gross_profit_clp = item["subtotal_clp"] - total_cost_clp
