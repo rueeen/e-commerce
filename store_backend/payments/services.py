@@ -27,8 +27,16 @@ def release_order_stock_reservation(order, payment=None):
         return order
     for item in order.items.select_related("product"):
         product = item.product
-        product.stock_reserved = max((product.stock_reserved or 0) - item.quantity, 0)
-        product.save(update_fields=["stock_reserved", "updated_at"])
+
+        if product.product_type == product.ProductType.BUNDLE and product.bundle_items.exists():
+            for bundle_item in product.bundle_items.select_related("item"):
+                component = bundle_item.item
+                component_qty = bundle_item.quantity * item.quantity
+                component.stock_reserved = max((component.stock_reserved or 0) - component_qty, 0)
+                component.save(update_fields=["stock_reserved", "updated_at"])
+        else:
+            product.stock_reserved = max((product.stock_reserved or 0) - item.quantity, 0)
+            product.save(update_fields=["stock_reserved", "updated_at"])
     now = timezone.now()
     order.stock_reservation_status = Order.StockReservationStatus.RELEASED
     order.stock_released_at = now
