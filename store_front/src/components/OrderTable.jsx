@@ -4,7 +4,12 @@ import DataTable from 'datatables.net-bs5';
 import 'datatables.net-bs5/css/dataTables.bootstrap5.css';
 
 const statusLabels = {
-  pending: 'Pendiente',
+  pending_payment: 'Pendiente de pago',
+  payment_started: 'Pago iniciado',
+  payment_failed: 'Pago rechazado',
+  expired: 'Expirada',
+  completed: 'Completada',
+  manual_review: 'Revisión manual',
   paid: 'Pagado',
   processing: 'Procesando',
   shipped: 'Enviado',
@@ -13,15 +18,15 @@ const statusLabels = {
 };
 
 const getStatusBadgeClass = (status) => {
-  if (status === 'paid' || status === 'delivered') {
+  if (status === 'paid' || status === 'delivered' || status === 'completed') {
     return 'badge-success';
   }
 
-  if (status === 'pending' || status === 'processing' || status === 'shipped') {
+  if (status === 'payment_started' || status === 'processing' || status === 'shipped') {
     return 'badge-warning';
   }
 
-  if (status === 'canceled') {
+  if (status === 'payment_failed' || status === 'expired' || status === 'canceled') {
     return 'badge-error';
   }
 

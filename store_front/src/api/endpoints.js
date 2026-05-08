@@ -262,6 +262,9 @@ export const api = {
   confirmOrderPayment: (id) =>
     apiClient.post(`/api/orders/${id}/confirm-payment/`),
 
+  updateOrderStatus: (id, status) =>
+    apiClient.patch('/api/orders/' + id + '/update-status/', { status }),
+
   cancelOrder: (id) => apiClient.post(`/api/orders/${id}/cancel/`),
 
   createWebpayTransaction: async (order_id) => {

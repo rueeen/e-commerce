@@ -5,7 +5,12 @@ import AdminManualOrderModal from '../components/AdminManualOrderModal';
 import { useAuth } from '../hooks/useAuth';
 
 const statuses = [
-  { value: 'pending', label: 'Pendiente' },
+  { value: 'pending_payment', label: 'Pendiente de pago' },
+  { value: 'payment_started', label: 'Pago iniciado' },
+  { value: 'payment_failed', label: 'Pago rechazado' },
+  { value: 'expired', label: 'Expirada' },
+  { value: 'completed', label: 'Completada' },
+  { value: 'manual_review', label: 'Revisión manual' },
   { value: 'paid', label: 'Pagado' },
   { value: 'processing', label: 'Procesando' },
   { value: 'shipped', label: 'Enviado' },
@@ -109,6 +114,17 @@ export default function AdminOrdersPage() {
     }
   };
 
+  const updateOrderStatus = async (order, nextStatus, successMessage) => {
+    setActionLoadingId(order.id);
+    try {
+      await api.updateOrderStatus(order.id, nextStatus);
+      notyf.success(successMessage);
+      await load();
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
   const cancelOrder = async (order) => {
     const ok = window.confirm(`¿Seguro que quieres cancelar la orden #${order.id}?`);
     if (!ok) return;
@@ -168,8 +184,8 @@ export default function AdminOrdersPage() {
               {!loading && orders.map((order) => {
                 const userLabel = typeof order.user === 'object' ? order.user?.username || order.user?.email || `Usuario #${order.user?.id}` : `Usuario #${order.user}`;
                 const actionBusy = actionLoadingId === order.id;
-                const canConfirmPayment = order.status === 'pending';
-                const canCancel = ['pending', 'paid', 'processing'].includes(order.status);
+                const canConfirmPayment = ['pending_payment', 'payment_failed'].includes(order.status);
+                const canCancel = ['pending_payment', 'payment_failed', 'paid', 'processing'].includes(order.status);
                 return (
                   <tr key={order.id}>
                     <td>#{order.id}</td><td>{userLabel}</td>
@@ -179,8 +195,12 @@ export default function AdminOrdersPage() {
                     <td>{formatDate(order.created_at)}</td>
                     <td className="text-end">
                       {canConfirmPayment && <button type="button" className="btn btn-sm btn-outline-success me-2" onClick={() => confirmPayment(order)} disabled={actionBusy}>Confirmar pago</button>}
+                      {order.status === 'paid' && <button type="button" className="btn btn-sm btn-outline-primary me-2" onClick={() => updateOrderStatus(order, 'processing', `Orden #${order.id} en procesamiento.`)} disabled={actionBusy}>Procesar</button>}
+                      {order.status === 'processing' && <button type="button" className="btn btn-sm btn-outline-primary me-2" onClick={() => updateOrderStatus(order, 'shipped', `Orden #${order.id} enviada.`)} disabled={actionBusy}>Enviar</button>}
+                      {order.status === 'shipped' && <button type="button" className="btn btn-sm btn-outline-primary me-2" onClick={() => updateOrderStatus(order, 'delivered', `Orden #${order.id} marcada como entregada.`)} disabled={actionBusy}>Entregado</button>}
+                      {order.status === 'delivered' && <button type="button" className="btn btn-sm btn-outline-primary me-2" onClick={() => updateOrderStatus(order, 'completed', `Orden #${order.id} completada.`)} disabled={actionBusy}>Completar</button>}
                       {canCancel && <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => cancelOrder(order)} disabled={actionBusy}>Cancelar</button>}
-                      {!canConfirmPayment && !canCancel && <span className="text-muted small">Sin acciones</span>}
+                      {!canConfirmPayment && !canCancel && !['paid', 'processing', 'shipped', 'delivered'].includes(order.status) && <span className="text-muted small">Sin acciones</span>}
                     </td>
                   </tr>
                 );
