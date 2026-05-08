@@ -143,7 +143,6 @@ class ProductAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
         "stock_reserved",
-        "available_stock_display",
     )
     search_fields = (
         "name",
