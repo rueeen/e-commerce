@@ -18,6 +18,12 @@ const formatDate = (value) => {
   }
 };
 
+const getChilexpressTrackingUrl = (trackingNumber) => {
+  const baseUrl = 'https://www.chilexpress.cl/views/herramientas/seguimiento';
+  if (!trackingNumber) return baseUrl;
+  return `${baseUrl}?tracking_number=${encodeURIComponent(trackingNumber)}`;
+};
+
 const statusLabels = {
   pending_payment: 'Pendiente de pago',
   payment_started: 'Pago iniciado',
@@ -199,6 +205,24 @@ export default function OrdersPage() {
                       </tbody>
                     </table>
                   </div>
+
+                  {['shipped', 'delivered'].includes(selected.status) ? (
+                    <div className="mt-4">
+                      <h6>Seguimiento de envío</h6>
+                      <p className="mb-1">
+                        <strong>Número de tracking:</strong>{' '}
+                        {selected.tracking_number || 'Pendiente de asignación'}
+                      </p>
+                      <a
+                        href={getChilexpressTrackingUrl(selected.tracking_number)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="link-light"
+                      >
+                        Ver en Chilexpress
+                      </a>
+                    </div>
+                  ) : null}
 
                   {canShowReceipt ? (
                     <div className="mt-4">

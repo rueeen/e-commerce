@@ -27,6 +27,8 @@ export const api = {
   register: (payload) => apiClient.post('/api/accounts/register/', payload),
   login: (payload) => apiClient.post('/api/accounts/login/', payload),
   me: () => apiClient.get('/api/accounts/me/'),
+  getOrderTracking: (orderId) =>
+    apiClient.get('/api/orders/' + orderId + '/tracking/'),
 
   adminUsers: (params = {}) => apiClient.get('/api/accounts/users/', { params }),
   adminUserById: (id) => apiClient.get(`/api/accounts/users/${id}/`),
