@@ -40,6 +40,12 @@ const formatDate = (value) => {
   }
 };
 
+const getChilexpressTrackingUrl = (trackingNumber) => {
+  const baseUrl = 'https://www.chilexpress.cl/views/herramientas/seguimiento';
+  if (!trackingNumber) return baseUrl;
+  return `${baseUrl}?tracking_number=${encodeURIComponent(trackingNumber)}`;
+};
+
 const getTotalPages = (count, pageSize, fallbackLength) => {
   if (count && pageSize) return Math.max(1, Math.ceil(count / pageSize));
   if (fallbackLength && pageSize) return Math.max(1, Math.ceil(fallbackLength / pageSize));
@@ -189,7 +195,27 @@ export default function AdminOrdersPage() {
                 return (
                   <tr key={order.id}>
                     <td>#{order.id}</td><td>{userLabel}</td>
-                    <td><span className={`badge ${getStatusBadgeClass(order.status)}`}>{getStatusLabel(order.status)}</span></td>
+                    <td>
+                      <span className={`badge ${getStatusBadgeClass(order.status)}`}>{getStatusLabel(order.status)}</span>
+                      {order.status === 'shipped' && order.tracking_number ? (
+                        <div className="mt-2">
+                          <span className="badge badge-soft me-2">{order.tracking_number}</span>
+                          <a
+                            href={getChilexpressTrackingUrl(order.tracking_number)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="small"
+                          >
+                            Ver seguimiento
+                          </a>
+                        </div>
+                      ) : null}
+                      {order.status === 'shipped' && !order.tracking_number ? (
+                        <div className="mt-2 text-warning small">
+                          ⚠ Despacho sin tracking — revisar Chilexpress
+                        </div>
+                      ) : null}
+                    </td>
                     <td>{formatMoney(order.subtotal_clp)}</td><td>{formatMoney(order.total_clp)}</td>
                     <td>{order.stock_consumed ? <span className="badge badge-success">Consumido</span> : <span className="badge badge-soft">Pendiente</span>}</td>
                     <td>{formatDate(order.created_at)}</td>
