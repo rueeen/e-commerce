@@ -2,13 +2,16 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils.dateparse import parse_datetime
 from rest_framework import permissions, status
+from rest_framework.generics import RetrieveAPIView
+from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.permissions import is_admin_user, is_worker_user
 from orders.models import Order
 
-from .models import PaymentTransaction
-from .serializers import WebpayCommitSerializer, WebpayCreateSerializer
+from .models import PaymentTransaction, SalesReceipt
+from .serializers import SalesReceiptSerializer, WebpayCommitSerializer, WebpayCreateSerializer
 from .services import (
     commit_webpay_transaction,
     create_webpay_transaction,
@@ -131,3 +134,30 @@ class WebpayCommitView(APIView):
             return Response({'detail': 'No existe una transacción local asociada al token entregado.'}, status=status.HTTP_404_NOT_FOUND)
         except ValidationError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class SalesReceiptView(RetrieveAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = SalesReceiptSerializer
+    lookup_url_kwarg = 'order_id'
+
+    def get_object(self):
+        order_id = self.kwargs[self.lookup_url_kwarg]
+
+        try:
+            order = Order.objects.get(pk=order_id)
+        except Order.DoesNotExist as exc:
+            raise NotFound('Orden no encontrada.') from exc
+
+        user = self.request.user
+        if not (
+            user == order.user
+            or is_admin_user(user)
+            or is_worker_user(user)
+        ):
+            raise PermissionDenied('No autorizado.')
+
+        try:
+            return order.sales_receipt
+        except SalesReceipt.DoesNotExist as exc:
+            raise NotFound('No existe comprobante para esta orden.') from exc
