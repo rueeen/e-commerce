@@ -3,6 +3,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -10,8 +11,8 @@ from rest_framework.response import Response
 from accounts.permissions import is_admin_user, is_worker_user
 from django.contrib.auth import get_user_model
 from payments.models import SalesReceipt
-from products.inventory_services import consume_fifo_stock
-from products.models import Product
+from products.inventory_services import consume_fifo_stock, create_stock_movement
+from products.models import KardexMovement, Product
 
 from .models import AssistedPurchaseOrder, Order
 from .serializers import (
@@ -226,31 +227,54 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
 
         order = Order.objects.create(
             user=user,
-            status=Order.Status.PENDING_PAYMENT,
+            status=Order.Status.PAID,
             subtotal_clp=subtotal,
             shipping_clp=shipping_clp,
             discount_clp=discount_clp,
             total_clp=total_clp,
-            stock_consumed=False,
+            stock_consumed=True,
+            paid_at=timezone.now(),
         )
 
+        created_order_items = []
         for item in validated_items:
+            order_item = order.items.create(
+                product=item["product"],
+                product_name_snapshot=item["product"].name,
+                product_type_snapshot=item["product"].product_type,
+                quantity=item["quantity"],
+                unit_price_clp=item["unit_price_clp"],
+                subtotal_clp=item["subtotal_clp"],
+            )
+            created_order_items.append((item, order_item))
+
+        for item, order_item in created_order_items:
             product = item["product"]
             fifo_cost = consume_fifo_stock(product, item["quantity"])
             total_cost_clp = int(fifo_cost["total_cost_clp"])
             unit_cost_clp = int(fifo_cost["unit_cost_clp"])
-            gross_profit_clp = item["subtotal_clp"] - total_cost_clp
-
-            order.items.create(
+            create_stock_movement(
                 product=product,
-                product_name_snapshot=product.name,
-                product_type_snapshot=product.product_type,
+                movement_type=KardexMovement.MovementType.SALE_OUT,
                 quantity=item["quantity"],
-                unit_price_clp=item["unit_price_clp"],
-                subtotal_clp=item["subtotal_clp"],
+                created_by=request.user,
                 unit_cost_clp=unit_cost_clp,
-                total_cost_clp=total_cost_clp,
-                gross_profit_clp=gross_profit_clp,
+                unit_price_clp=item["unit_price_clp"],
+                reference_type="ORDER",
+                reference_id=order.id,
+                reference_label=f"Orden #{order.id}",
+                notes="Salida por venta manual",
+            )
+            order_item.unit_cost_clp = unit_cost_clp
+            order_item.total_cost_clp = total_cost_clp
+            order_item.gross_profit_clp = item["subtotal_clp"] - total_cost_clp
+            order_item.save(
+                update_fields=[
+                    "unit_cost_clp",
+                    "total_cost_clp",
+                    "gross_profit_clp",
+                    "updated_at",
+                ]
             )
 
         return Response(
