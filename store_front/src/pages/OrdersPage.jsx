@@ -19,12 +19,25 @@ const formatDate = (value) => {
 };
 
 const statusLabels = {
-  pending: 'Pendiente',
+  pending_payment: 'Pendiente de pago',
+  payment_started: 'Pago iniciado',
+  payment_failed: 'Pago rechazado',
   paid: 'Pagado',
   processing: 'Procesando',
   shipped: 'Enviado',
   delivered: 'Entregado',
+  completed: 'Completado',
   canceled: 'Cancelado',
+  expired: 'Expirada',
+  manual_review: 'En revisión',
+};
+
+const getStatusBadgeClass = (status) => {
+  if (status === 'payment_failed' || status === 'expired') return 'badge-error';
+  if (status === 'paid' || status === 'delivered' || status === 'completed') return 'badge-success';
+  if (status === 'payment_started' || status === 'processing' || status === 'shipped') return 'badge-warning';
+  if (status === 'canceled') return 'badge-soft';
+  return 'badge-soft';
 };
 
 export default function OrdersPage() {
@@ -135,7 +148,9 @@ export default function OrdersPage() {
                   <div className="row g-2 mb-3">
                     <div className="col-md-6">
                       <strong>Estado:</strong>{' '}
-                      {statusLabels[selected.status] || selected.status}
+                      <span className={`badge ${getStatusBadgeClass(selected.status)}`}>
+                        {statusLabels[selected.status] || selected.status}
+                      </span>
                     </div>
 
                     <div className="col-md-6">
