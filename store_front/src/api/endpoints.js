@@ -272,6 +272,8 @@ export const api = {
     const { data } = await apiClient.post('/api/payments/webpay/commit/', { token_ws: tokenWs });
     return data;
   },
+  getReceiptByOrder: (orderId) =>
+    apiClient.get(`/api/payments/receipts/${orderId}/`),
 
   // =========================
   // Assisted Orders

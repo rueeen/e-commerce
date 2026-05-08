@@ -31,6 +31,9 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [receiptLoading, setReceiptLoading] = useState(false);
+  const [receiptNotAvailable, setReceiptNotAvailable] = useState(false);
+  const [receipt, setReceipt] = useState(null);
 
   const loadOrders = async () => {
     setLoading(true);
@@ -48,6 +51,33 @@ export default function OrdersPage() {
   useEffect(() => {
     loadOrders();
   }, []);
+
+  useEffect(() => {
+    setReceipt(null);
+    setReceiptNotAvailable(false);
+    setReceiptLoading(false);
+  }, [selected?.id]);
+
+  const canShowReceipt = ['paid', 'delivered', 'completed'].includes(selected?.status);
+
+  const loadReceipt = async () => {
+    if (!selected?.id || receiptLoading) return;
+
+    setReceiptLoading(true);
+    setReceiptNotAvailable(false);
+
+    try {
+      const { data } = await api.getReceiptByOrder(selected.id);
+      setReceipt(data);
+    } catch (error) {
+      if (error?.response?.status === 404) {
+        setReceiptNotAvailable(true);
+      }
+      setReceipt(null);
+    } finally {
+      setReceiptLoading(false);
+    }
+  };
 
   return (
     <>
@@ -154,6 +184,36 @@ export default function OrdersPage() {
                       </tbody>
                     </table>
                   </div>
+
+                  {canShowReceipt ? (
+                    <div className="mt-4">
+                      <button
+                        type="button"
+                        className="btn btn-outline-light mb-3"
+                        onClick={loadReceipt}
+                        disabled={receiptLoading}
+                      >
+                        {receiptLoading ? 'Cargando comprobante...' : 'Ver comprobante'}
+                      </button>
+
+                      {receiptLoading ? (
+                        <p className="mb-0 text-muted">Cargando comprobante...</p>
+                      ) : receiptNotAvailable ? (
+                        <p className="mb-0 text-warning">
+                          El comprobante aún no está disponible. Intenta nuevamente en unos minutos.
+                        </p>
+                      ) : receipt ? (
+                        <ul className="list-unstyled mb-0">
+                          <li><strong>Número de documento:</strong> {receipt.document_number || '-'}</li>
+                          <li><strong>Neto:</strong> {formatMoney(receipt.net_amount)}</li>
+                          <li><strong>IVA (19%):</strong> {formatMoney(receipt.vat_amount)}</li>
+                          <li><strong>Total:</strong> {formatMoney(receipt.total_amount)}</li>
+                          <li><strong>Tipo:</strong> {receipt.document_type || '-'}</li>
+                          <li><strong>Fecha de emisión:</strong> {formatDate(receipt.issued_at)}</li>
+                        </ul>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </>
               )}
             </div>

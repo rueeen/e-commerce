@@ -30,6 +30,10 @@ const getStoredPaymentResult = () => {
 export default function PaymentFinalPage() {
   const location = useLocation();
   const [retryingPayment, setRetryingPayment] = useState(false);
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [receiptLoading, setReceiptLoading] = useState(false);
+  const [receiptNotAvailable, setReceiptNotAvailable] = useState(false);
+  const [receipt, setReceipt] = useState(null);
 
   const payment = useMemo(() => {
     if (location.state?.payment) return location.state.payment;
@@ -48,6 +52,26 @@ export default function PaymentFinalPage() {
       // El apiClient ya muestra el error.
     } finally {
       setRetryingPayment(false);
+    }
+  };
+
+  const loadReceipt = async () => {
+    if (!payment?.order_id || receiptLoading) return;
+
+    setShowReceipt(true);
+    setReceiptLoading(true);
+    setReceiptNotAvailable(false);
+
+    try {
+      const { data } = await api.getReceiptByOrder(payment.order_id);
+      setReceipt(data);
+    } catch (error) {
+      if (error?.response?.status === 404) {
+        setReceiptNotAvailable(true);
+      }
+      setReceipt(null);
+    } finally {
+      setReceiptLoading(false);
     }
   };
 
@@ -94,7 +118,17 @@ export default function PaymentFinalPage() {
 
       <div className="d-flex gap-2 flex-wrap">
         {isApproved ? (
-          <Link className="btn btn-success" to="/mis-pedidos" replace>Ver mis pedidos</Link>
+          <>
+            <Link className="btn btn-success" to="/mis-pedidos" replace>Ver mis pedidos</Link>
+            <button
+              type="button"
+              className="btn btn-outline-light"
+              onClick={loadReceipt}
+              disabled={receiptLoading}
+            >
+              {receiptLoading ? 'Cargando comprobante...' : 'Ver comprobante'}
+            </button>
+          </>
         ) : (
           <>
             <Link className="btn btn-outline-primary" to="/carrito" replace>Volver al carrito</Link>
@@ -113,6 +147,28 @@ export default function PaymentFinalPage() {
           </>
         )}
       </div>
+
+      {isApproved && showReceipt ? (
+        <div className="mt-4 border rounded p-3">
+          <h5 className="mb-3">Comprobante</h5>
+          {receiptLoading ? (
+            <p className="mb-0 text-muted">Cargando comprobante...</p>
+          ) : receiptNotAvailable ? (
+            <p className="mb-0 text-warning">
+              El comprobante aún no está disponible. Intenta nuevamente en unos minutos.
+            </p>
+          ) : receipt ? (
+            <ul className="list-unstyled mb-0">
+              <li><strong>Número de documento:</strong> {receipt.document_number || '-'}</li>
+              <li><strong>Neto:</strong> {formatAmount(receipt.net_amount)}</li>
+              <li><strong>IVA (19%):</strong> {formatAmount(receipt.vat_amount)}</li>
+              <li><strong>Total:</strong> {formatAmount(receipt.total_amount)}</li>
+              <li><strong>Tipo:</strong> {receipt.document_type || '-'}</li>
+              <li><strong>Fecha de emisión:</strong> {receipt.issued_at || '-'}</li>
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
