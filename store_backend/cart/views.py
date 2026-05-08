@@ -57,7 +57,7 @@ class AddCartItemView(CartMixin, APIView):
         if not created:
             new_quantity = item.quantity + quantity
 
-            if product.stock < new_quantity:
+            if product.available_stock < new_quantity:
                 return Response(
                     {
                         "quantity": [
