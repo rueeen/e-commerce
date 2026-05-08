@@ -135,3 +135,7 @@ WEBPAY_FINAL_URL = os.getenv(
     'WEBPAY_FINAL_URL', 'http://localhost:5173/pago/final')
 TAX_RATE = Decimal(os.getenv('TAX_RATE', '0.19'))
 STOCK_RESERVATION_MINUTES = int(os.getenv('STOCK_RESERVATION_MINUTES', '15'))
+
+CHILEXPRESS_ENV = os.getenv("CHILEXPRESS_ENV", "test")
+CHILEXPRESS_ENVIOS_KEY = os.getenv("CHILEXPRESS_ENVIOS_KEY", "")
+CHILEXPRESS_TCC = os.getenv("CHILEXPRESS_TCC", "")
