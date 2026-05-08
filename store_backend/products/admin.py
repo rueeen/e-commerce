@@ -410,7 +410,6 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
         "original_currency",
         "total_original",
         "grand_total_clp",
-        "real_total_clp",
         "update_prices_on_receive",
         "created_at",
         "received_at",

@@ -1322,7 +1322,6 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
                 "subtotal_clp": purchase_order.subtotal_clp,
                 "total_extra_costs_clp": purchase_order.total_extra_costs_clp,
                 "grand_total_clp": purchase_order.grand_total_clp,
-                "real_total_clp": purchase_order.real_total_clp,
                 "items": PurchaseOrderItemSerializer(
                     purchase_order.items.all(),
                     many=True,

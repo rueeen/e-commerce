@@ -388,9 +388,6 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             "total_origin_clp",
             "total_extra_costs_clp",
             "grand_total_clp",
-            # real_total_clp es alias de grand_total_clp. Ambos siempre iguales.
-            # Conservado por compatibilidad con frontend existente.
-            "real_total_clp",
             "notes",
             "update_prices_on_receive",
             "missing_products_count",
@@ -408,7 +405,6 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             "total_origin_clp",
             "total_extra_costs_clp",
             "grand_total_clp",
-            "real_total_clp",
             "missing_products_count",
             "created_at",
             "updated_at",
