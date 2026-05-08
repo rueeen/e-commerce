@@ -6,6 +6,7 @@ from rest_framework.response import Response
 
 from accounts.permissions import is_admin_user, is_worker_user
 from django.contrib.auth import get_user_model
+from products.inventory_services import consume_fifo_stock
 from products.models import Product
 
 from .models import AssistedPurchaseOrder, Order
@@ -113,7 +114,8 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         user = User.objects.get(id=data["user_id"])
         item_payloads = data["items"]
         product_ids = [item["product_id"] for item in item_payloads]
-        products = Product.objects.in_bulk(product_ids)
+        products_queryset = Product.objects.select_for_update().filter(id__in=product_ids)
+        products = {product.id: product for product in products_queryset}
 
         validated_items = []
         subtotal = 0
@@ -134,7 +136,7 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            if product.stock < quantity:
+            if product.available_stock < quantity:
                 return Response(
                     {"detail": f"Stock insuficiente para '{product.name}'."},
                     status=status.HTTP_400_BAD_REQUEST,
@@ -175,6 +177,11 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
 
         for item in validated_items:
             product = item["product"]
+            fifo_cost = consume_fifo_stock(product, item["quantity"])
+            total_cost_clp = int(fifo_cost["total_cost_clp"])
+            unit_cost_clp = int(fifo_cost["unit_cost_clp"])
+            gross_profit_clp = item["subtotal_clp"] - total_cost_clp
+
             order.items.create(
                 product=product,
                 product_name_snapshot=product.name,
@@ -182,9 +189,9 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
                 quantity=item["quantity"],
                 unit_price_clp=item["unit_price_clp"],
                 subtotal_clp=item["subtotal_clp"],
-                unit_cost_clp=0,
-                total_cost_clp=0,
-                gross_profit_clp=0,
+                unit_cost_clp=unit_cost_clp,
+                total_cost_clp=total_cost_clp,
+                gross_profit_clp=gross_profit_clp,
             )
 
         return Response(
