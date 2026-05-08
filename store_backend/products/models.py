@@ -27,6 +27,7 @@ class Category(models.Model):
         verbose_name = "Categoría"
         verbose_name_plural = "Categorías"
 
+
     def __str__(self):
         return self.name
 
@@ -52,6 +53,7 @@ class ProductTypeConfig(models.Model):
         ordering = ["sort_order", "name"]
         verbose_name = "Tipo de producto"
         verbose_name_plural = "Tipos de producto"
+
 
     def __str__(self):
         return self.name
@@ -87,6 +89,7 @@ class MTGCard(models.Model):
         ]
         verbose_name = "Carta MTG"
         verbose_name_plural = "Cartas MTG"
+
 
     def __str__(self):
         if self.set_code and self.collector_number:
@@ -183,6 +186,7 @@ class Product(models.Model):
         ]
         verbose_name = "Producto"
         verbose_name_plural = "Productos"
+
 
     def __str__(self):
         return self.name
@@ -320,6 +324,7 @@ class SingleCard(models.Model):
         verbose_name = "Carta individual"
         verbose_name_plural = "Cartas individuales"
 
+
     def __str__(self):
         foil_text = "Foil" if self.is_foil else "Non-foil"
         return f"{self.product.name} - {self.condition} - {self.language} - {foil_text}"
@@ -347,6 +352,7 @@ class SealedProduct(models.Model):
     class Meta:
         verbose_name = "Producto sellado"
         verbose_name_plural = "Productos sellados"
+
 
     def __str__(self):
         return f"{self.product.name} - {self.get_sealed_kind_display()}"
@@ -389,6 +395,7 @@ class BundleItem(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
+
 
     def __str__(self):
         return f"{self.bundle} contiene {self.item} x {self.quantity}"
@@ -436,6 +443,7 @@ class KardexMovement(models.Model):
         verbose_name = "Movimiento Kardex"
         verbose_name_plural = "Movimientos Kardex"
 
+
     def __str__(self):
         return f"{self.product} - {self.get_movement_type_display()} x {self.quantity}"
 
@@ -458,6 +466,7 @@ class Supplier(models.Model):
         ordering = ["name"]
         verbose_name = "Proveedor"
         verbose_name_plural = "Proveedores"
+
 
     def __str__(self):
         return self.name
@@ -536,9 +545,6 @@ class PurchaseOrder(models.Model):
     total_origin_clp = models.PositiveIntegerField(default=0)
     total_extra_costs_clp = models.PositiveIntegerField(default=0)
     grand_total_clp = models.PositiveIntegerField(default=0)
-    # TODO: real_total_clp es alias de grand_total_clp. Unificar en una migración futura
-    # eliminando real_total_clp y actualizando el frontend.
-    real_total_clp = models.PositiveIntegerField(default=0)
 
     tax_rate_percent = models.DecimalField(
         max_digits=5,
@@ -569,6 +575,11 @@ class PurchaseOrder(models.Model):
         ordering = ["-created_at"]
         verbose_name = "Orden de compra"
         verbose_name_plural = "Órdenes de compra"
+
+    @property
+    def real_total_clp(self):
+        """Alias temporal de grand_total_clp para transición de API."""
+        return self.grand_total_clp
 
     def __str__(self):
         return f"OC {self.order_number} - {self.supplier}"
@@ -631,6 +642,7 @@ class PurchaseOrderItem(models.Model):
             self.unit_price_clp or 0) * self.quantity_ordered
         super().save(*args, **kwargs)
 
+
     def __str__(self):
         if self.product:
             return f"{self.product} x {self.quantity_ordered}"
@@ -668,6 +680,7 @@ class InventoryLot(models.Model):
         verbose_name = "Lote de inventario"
         verbose_name_plural = "Lotes de inventario"
 
+
     def __str__(self):
         return f"{self.product} - {self.quantity_remaining}/{self.quantity_initial} unidades"
 
@@ -682,6 +695,7 @@ class ExchangeRateConfig(models.Model):
     class Meta:
         verbose_name = "Configuración de dólar"
         verbose_name_plural = "Configuraciones de dólar"
+
 
     def __str__(self):
         return f"{self.name} - {self.usd_to_clp} CLP"
@@ -700,6 +714,7 @@ class ServiceFeeConfig(models.Model):
     class Meta:
         verbose_name = "Configuración de comisión"
         verbose_name_plural = "Configuraciones de comisión"
+
 
     def __str__(self):
         return f"{self.name} - {self.percentage}%"
@@ -722,6 +737,7 @@ class ShippingConfig(models.Model):
     class Meta:
         verbose_name = "Configuración de envío"
         verbose_name_plural = "Configuraciones de envío"
+
 
     def __str__(self):
         return self.name
@@ -779,6 +795,7 @@ class PricingSettings(models.Model):
     class Meta:
         verbose_name = "Configuración de precios"
         verbose_name_plural = "Configuraciones de precios"
+
 
     def __str__(self):
         return self.name

@@ -1101,7 +1101,7 @@ export default function AdminPurchaseOrdersPage() {
                       )}
                     </td>
 
-                    <td>{formatMoney(order.real_total_clp ?? order.grand_total_clp)}</td>
+                    <td>{formatMoney(order.grand_total_clp)}</td>
                     <td>{formatDate(order.created_at)}</td>
 
                     <td className="text-end">
@@ -1315,12 +1315,12 @@ export default function AdminPurchaseOrdersPage() {
 
                   <div className="col-md-6">
                     <strong>Total real CLP:</strong>{' '}
-                    {formatMoney(selectedOrder.real_total_clp)}
+                    {formatMoney(selectedOrder.grand_total_clp)}
                   </div>
                 </div>
 
                 <h5 className="mt-3">
-                  Total real: {formatMoney(selectedOrder.real_total_clp)}
+                  Total real: {formatMoney(selectedOrder.grand_total_clp)}
                 </h5>
 
                 <p className="small text-info">
