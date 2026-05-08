@@ -14,7 +14,7 @@ from payments.models import SalesReceipt
 from products.inventory_services import consume_fifo_stock, create_stock_movement
 from products.models import KardexMovement, Product
 
-from .models import AssistedPurchaseOrder, Order
+from .models import AssistedPurchaseOrder, Order, ShipmentTracking
 from .serializers import (
     AssistedPurchaseOrderSerializer,
     ManualOrderCreateSerializer,
@@ -140,6 +140,30 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
 
         order.status = new_status
         order.save(update_fields=["status", "updated_at"])
+
+        if new_status == Order.Status.SHIPPED:
+            from shipping.chilexpress_service import create_shipment
+
+            try:
+                shipment_data = create_shipment(order)
+                ShipmentTracking.objects.update_or_create(
+                    order=order,
+                    defaults={
+                        "tracking_number": shipment_data.get("tracking_number", ""),
+                        "label_url": shipment_data.get("label_url", ""),
+                        "status": ShipmentTracking.Status.CREATED,
+                        "raw_response": shipment_data,
+                    },
+                )
+            except Exception as e:
+                ShipmentTracking.objects.update_or_create(
+                    order=order,
+                    defaults={
+                        "status": ShipmentTracking.Status.FAILED,
+                        "error_message": str(e),
+                    },
+                )
+                # No bloquear el cambio de estado, solo registrar el error
 
         return Response(self.get_serializer(order).data)
 
