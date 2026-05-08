@@ -50,6 +50,13 @@ class OrderSerializer(serializers.ModelSerializer):
             "shipping_clp",
             "discount_clp",
             "total_clp",
+            "recipient_name",
+            "recipient_phone",
+            "shipping_street",
+            "shipping_number",
+            "shipping_commune",
+            "shipping_region",
+            "shipping_notes",
             "stock_consumed",
             "paid_at",
             "cancelled_at",
@@ -65,6 +72,13 @@ class OrderSerializer(serializers.ModelSerializer):
             "tracking_number",
             "subtotal_clp",
             "total_clp",
+            "recipient_name",
+            "recipient_phone",
+            "shipping_street",
+            "shipping_number",
+            "shipping_commune",
+            "shipping_region",
+            "shipping_notes",
             "stock_consumed",
             "paid_at",
             "cancelled_at",
@@ -224,3 +238,13 @@ class ManualOrderCreateSerializer(serializers.Serializer):
         if not value:
             raise serializers.ValidationError("Debe agregar al menos un ítem.")
         return value
+
+
+class CreateOrderFromCartSerializer(serializers.Serializer):
+    recipient_name = serializers.CharField(max_length=150, required=False, allow_blank=True, default="")
+    recipient_phone = serializers.CharField(max_length=20, required=False, allow_blank=True, default="")
+    shipping_street = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
+    shipping_number = serializers.CharField(max_length=20, required=False, allow_blank=True, default="")
+    shipping_commune = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
+    shipping_region = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
+    shipping_notes = serializers.CharField(required=False, allow_blank=True, default="")
