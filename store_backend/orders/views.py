@@ -1,3 +1,6 @@
+from decimal import Decimal, ROUND_HALF_UP
+
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from rest_framework import filters, permissions, status, viewsets
@@ -6,6 +9,7 @@ from rest_framework.response import Response
 
 from accounts.permissions import is_admin_user, is_worker_user
 from django.contrib.auth import get_user_model
+from payments.models import SalesReceipt
 from products.inventory_services import consume_fifo_stock
 from products.models import Product
 
@@ -93,6 +97,22 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
             order = confirm_order_payment(order, user=request.user)
         except ValidationError as exc:
             return validation_error_response(exc)
+
+        total = order.total_clp
+        tax_rate = Decimal(str(getattr(settings, "TAX_RATE", "0.19")))
+        net = int((Decimal(total) / (1 + tax_rate)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        SalesReceipt.objects.get_or_create(
+            order=order,
+            defaults={
+                "payment_transaction": None,
+                "document_type": SalesReceipt.DocumentType.INTERNAL_RECEIPT,
+                "document_number": f"MAN-{order.id}",
+                "net_amount_clp": net,
+                "tax_amount_clp": total - net,
+                "total_amount_clp": total,
+                "raw_data": {"source": "manual_confirmation"},
+            },
+        )
 
         return Response(self.get_serializer(order).data)
 
