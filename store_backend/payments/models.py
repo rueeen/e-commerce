@@ -73,7 +73,7 @@ class SalesReceipt(models.Model):
         VOID = 'void', 'Anulado'
 
     order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name='sales_receipt')
-    payment_transaction = models.OneToOneField(PaymentTransaction, on_delete=models.CASCADE, related_name='sales_receipt')
+    payment_transaction = models.OneToOneField(PaymentTransaction, on_delete=models.CASCADE, related_name='sales_receipt', null=True, blank=True)
     document_type = models.CharField(max_length=20, choices=DocumentType.choices, default=DocumentType.INTERNAL_RECEIPT)
     document_number = models.CharField(max_length=64, unique=True)
     net_amount_clp = models.PositiveIntegerField()

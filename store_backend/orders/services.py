@@ -1,3 +1,6 @@
+from decimal import Decimal, ROUND_HALF_UP
+
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -10,6 +13,7 @@ from products.inventory_services import (
     return_fifo_stock,
 )
 from products.models import KardexMovement, Product
+from payments.models import SalesReceipt
 
 from .models import Order, OrderItem
 
@@ -237,6 +241,23 @@ def confirm_order_payment(order: Order, user=None, allow_awaiting_payment=False)
             "paid_at",
             "updated_at",
         ]
+    )
+
+    tax_rate = Decimal(str(getattr(settings, 'TAX_RATE', '0.19')))
+    total = order.total_clp
+    net = int((Decimal(total) / (1 + tax_rate)).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+
+    SalesReceipt.objects.get_or_create(
+        order=order,
+        defaults={
+            'payment_transaction': None,
+            'document_type': SalesReceipt.DocumentType.INTERNAL_RECEIPT,
+            'document_number': f'MAN-{order.id}',
+            'net_amount_clp': net,
+            'tax_amount_clp': total - net,
+            'total_amount_clp': total,
+            'raw_data': {'source': 'manual_confirmation'},
+        }
     )
 
     return order
