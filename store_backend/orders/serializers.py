@@ -1,14 +1,9 @@
-from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from rest_framework import serializers
 
 from products.models import Product
 
-from .models import (
-    AssistedPurchaseItem,
-    AssistedPurchaseOrder,
-    Order,
-    OrderItem,
-)
+from .models import AssistedPurchaseItem, AssistedPurchaseOrder, Order, OrderItem
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
@@ -41,6 +36,7 @@ class OrderSerializer(serializers.ModelSerializer):
         source="get_status_display",
         read_only=True,
     )
+    tracking_number = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -49,6 +45,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "user",
             "status",
             "status_display",
+            "tracking_number",
             "subtotal_clp",
             "shipping_clp",
             "discount_clp",
@@ -65,6 +62,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "user",
             "status",
             "status_display",
+            "tracking_number",
             "subtotal_clp",
             "total_clp",
             "stock_consumed",
@@ -74,6 +72,12 @@ class OrderSerializer(serializers.ModelSerializer):
             "updated_at",
             "items",
         )
+
+    def get_tracking_number(self, obj):
+        try:
+            return obj.shipment.tracking_number
+        except Exception:
+            return None
 
 
 class AssistedPurchaseItemSerializer(serializers.ModelSerializer):

@@ -311,3 +311,25 @@ class OrderItem(models.Model):
 
     def __str__(self):
         return f"{self.product_name_snapshot} x {self.quantity}"
+
+
+class ShipmentTracking(models.Model):
+    class Status(models.TextChoices):
+        CREATED = "created", "Creado"
+        IN_TRANSIT = "in_transit", "En tránsito"
+        DELIVERED = "delivered", "Entregado"
+        FAILED = "failed", "Fallido"
+
+    order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name="shipment")
+    carrier = models.CharField(max_length=40, default="chilexpress")
+    tracking_number = models.CharField(max_length=120, blank=True)
+    label_url = models.CharField(max_length=500, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.CREATED)
+    raw_request = models.JSONField(default=dict, blank=True)
+    raw_response = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Seguimiento de envío"
