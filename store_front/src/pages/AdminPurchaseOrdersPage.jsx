@@ -80,13 +80,7 @@ const buildItemSubtotal = (item) => {
   return toNumber(item.quantity_ordered) * toNumber(item.unit_price_original);
 };
 
-const MARGIN_FACTOR_PREVIEW = 1.09;
-
 const roundUp = (value) => Math.ceil(Number(value || 0));
-
-const estimateSuggestedPrice = (unitCost) => {
-  return roundUp(toNumber(unitCost) * MARGIN_FACTOR_PREVIEW);
-};
 
 const getProductUnitCostForOrder = (product, currency) => {
   const normalizedCurrency = String(currency || 'CLP').toUpperCase();
@@ -175,6 +169,9 @@ export default function AdminPurchaseOrdersPage() {
 
   const [isSaving, setIsSaving] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [pricingSettings, setPricingSettings] = useState(null);
+  const [pricingSettingsLoading, setPricingSettingsLoading] = useState(true);
+  const [pricingSettingsError, setPricingSettingsError] = useState(false);
 
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -216,6 +213,25 @@ export default function AdminPurchaseOrdersPage() {
   }, []);
 
   useEffect(() => {
+    const loadPricingSettings = async () => {
+      setPricingSettingsLoading(true);
+      setPricingSettingsError(false);
+
+      try {
+        const { data } = await api.getActivePricingSettings();
+        setPricingSettings(data || null);
+      } catch {
+        setPricingSettings(null);
+        setPricingSettingsError(true);
+      } finally {
+        setPricingSettingsLoading(false);
+      }
+    };
+
+    loadPricingSettings();
+  }, []);
+
+  useEffect(() => {
     const preProduct = Number(search.get('product_id'));
 
     if (!preProduct || products.length === 0) return;
@@ -254,6 +270,12 @@ export default function AdminPurchaseOrdersPage() {
 
   const extraCostsClp =
     importDuties + customsFee + handlingFee + paypalVariation + otherCosts;
+
+  const marginFactorPreview = pricingSettings?.margin_factor ?? 1.09;
+
+  const estimateSuggestedPrice = (unitCost) => {
+    return roundUp(toNumber(unitCost) * marginFactorPreview);
+  };
 
   const updateForm = (field, value) => {
     setForm((current) => ({
@@ -564,6 +586,18 @@ export default function AdminPurchaseOrdersPage() {
           <LoadingButton className="btn btn-outline-secondary" onClick={load} loading={loading} loadingText="Actualizando...">Actualizar</LoadingButton>
         </div>
       </div>
+
+      {pricingSettingsLoading && (
+        <div className="alert alert-info" role="status">
+          Cargando configuración de precios para calcular sugeridos...
+        </div>
+      )}
+
+      {pricingSettingsError && (
+        <div className="alert alert-warning" role="alert">
+          No se pudo cargar la configuración de precios. Se usará el factor por defecto (1.09).
+        </div>
+      )}
 
       {showForm && (
         <div className="card card-body mb-4">
