@@ -244,9 +244,9 @@ export default function OrdersPage() {
                       ) : receipt ? (
                         <ul className="list-unstyled mb-0">
                           <li><strong>Número de documento:</strong> {receipt.document_number || '-'}</li>
-                          <li><strong>Neto:</strong> {formatMoney(receipt.net_amount)}</li>
-                          <li><strong>IVA (19%):</strong> {formatMoney(receipt.vat_amount)}</li>
-                          <li><strong>Total:</strong> {formatMoney(receipt.total_amount)}</li>
+                          <li><strong>Neto:</strong> {formatMoney(receipt.net_amount_clp)}</li>
+                          <li><strong>IVA (19%):</strong> {formatMoney(receipt.tax_amount_clp)}</li>
+                          <li><strong>Total:</strong> {formatMoney(receipt.total_amount_clp)}</li>
                           <li><strong>Tipo:</strong> {receipt.document_type || '-'}</li>
                           <li><strong>Fecha de emisión:</strong> {formatDate(receipt.issued_at)}</li>
                         </ul>
