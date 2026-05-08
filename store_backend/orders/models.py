@@ -214,6 +214,13 @@ class Order(models.Model):
     shipping_clp = models.PositiveIntegerField(default=0)
     discount_clp = models.PositiveIntegerField(default=0)
     total_clp = models.PositiveIntegerField(default=0)
+    recipient_name = models.CharField(max_length=150, blank=True)
+    recipient_phone = models.CharField(max_length=20, blank=True)
+    shipping_street = models.CharField(max_length=200, blank=True)
+    shipping_number = models.CharField(max_length=20, blank=True)
+    shipping_commune = models.CharField(max_length=100, blank=True)
+    shipping_region = models.CharField(max_length=100, blank=True)
+    shipping_notes = models.TextField(blank=True)
 
     # Evita dobles descuentos de stock/Kardex.
     stock_consumed = models.BooleanField(default=False)

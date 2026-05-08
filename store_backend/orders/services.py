@@ -24,7 +24,7 @@ def _validation_error_message(exc):
 
 
 @transaction.atomic
-def create_order_from_cart(user):
+def create_order_from_cart(user, **shipping_data):
     """
     Crea una orden desde el carrito.
 
@@ -46,6 +46,13 @@ def create_order_from_cart(user):
     order = Order.objects.create(
         user=user,
         status=Order.Status.PENDING_PAYMENT,
+        recipient_name=shipping_data.get("recipient_name", ""),
+        recipient_phone=shipping_data.get("recipient_phone", ""),
+        shipping_street=shipping_data.get("shipping_street", ""),
+        shipping_number=shipping_data.get("shipping_number", ""),
+        shipping_commune=shipping_data.get("shipping_commune", ""),
+        shipping_region=shipping_data.get("shipping_region", ""),
+        shipping_notes=shipping_data.get("shipping_notes", ""),
     )
 
     subtotal = 0
