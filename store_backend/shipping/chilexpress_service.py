@@ -29,8 +29,16 @@ def create_shipment(order):
         "reference": str(order.id),
         "tcc": tcc,
         "recipient": {
-            "name": getattr(order.user, "get_full_name", lambda: "")() or order.user.username,
-            "email": getattr(order.user, "email", ""),
+            "name": getattr(order, "recipient_name", "") or order.user.get_full_name() or order.user.username,
+            "email": order.user.email,
+            "phone": getattr(order, "recipient_phone", ""),
+        },
+        "delivery": {
+            "street_name": getattr(order, "shipping_street", ""),
+            "street_number": getattr(order, "shipping_number", ""),
+            "commune_name": getattr(order, "shipping_commune", ""),
+            "region_id": getattr(order, "shipping_region", ""),
+            "notes": getattr(order, "shipping_notes", ""),
         },
     }
     headers = {

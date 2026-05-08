@@ -13,6 +13,20 @@ const formatMoney = (value) => {
 export default function CartPage() {
   const { items, total, updateItem, removeItem, clear, fetchCart } = useCart();
   const [checkingOut, setCheckingOut] = useState(false);
+  const [shippingData, setShippingData] = useState({
+    recipient_name: '',
+    recipient_phone: '',
+    shipping_street: '',
+    shipping_number: '',
+    shipping_commune: '',
+    shipping_region: '',
+    shipping_notes: '',
+  });
+
+  const handleShippingChange = (event) => {
+    const { name, value } = event.target;
+    setShippingData((prev) => ({ ...prev, [name]: value }));
+  };
 
   const createOrder = async () => {
     if (!items.length) {
@@ -23,7 +37,7 @@ export default function CartPage() {
     setCheckingOut(true);
 
     try {
-      const { data } = await api.createOrderFromCart();
+      const { data } = await api.createOrderFromCart(shippingData);
       const payment = await api.createWebpayTransaction(data.id);
       notyf.success('Redirigiendo a Webpay...');
       submitWebpayForm(payment.url, payment.token);
@@ -46,6 +60,38 @@ export default function CartPage() {
       </div>
 
       <div className="panel-card p-3">
+        <h5 className="mb-3">Dirección de despacho</h5>
+        <div className="row g-3 mb-4">
+          <div className="col-md-6">
+            <label className="form-label">Nombre destinatario</label>
+            <input className="form-control" name="recipient_name" value={shippingData.recipient_name} onChange={handleShippingChange} />
+          </div>
+          <div className="col-md-6">
+            <label className="form-label">Teléfono destinatario</label>
+            <input className="form-control" name="recipient_phone" value={shippingData.recipient_phone} onChange={handleShippingChange} />
+          </div>
+          <div className="col-md-8">
+            <label className="form-label">Calle</label>
+            <input className="form-control" name="shipping_street" value={shippingData.shipping_street} onChange={handleShippingChange} />
+          </div>
+          <div className="col-md-4">
+            <label className="form-label">Número</label>
+            <input className="form-control" name="shipping_number" value={shippingData.shipping_number} onChange={handleShippingChange} />
+          </div>
+          <div className="col-md-6">
+            <label className="form-label">Comuna</label>
+            <input className="form-control" name="shipping_commune" value={shippingData.shipping_commune} onChange={handleShippingChange} />
+          </div>
+          <div className="col-md-6">
+            <label className="form-label">Región</label>
+            <input className="form-control" name="shipping_region" value={shippingData.shipping_region} onChange={handleShippingChange} />
+          </div>
+          <div className="col-12">
+            <label className="form-label">Notas</label>
+            <textarea className="form-control" rows="2" name="shipping_notes" value={shippingData.shipping_notes} onChange={handleShippingChange} />
+          </div>
+        </div>
+
         <div className="table-responsive">
           <table className="table align-middle mb-0">
             <thead>

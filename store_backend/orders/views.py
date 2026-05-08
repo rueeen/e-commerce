@@ -17,6 +17,7 @@ from products.models import KardexMovement, Product
 from .models import AssistedPurchaseOrder, Order, ShipmentTracking
 from .serializers import (
     AssistedPurchaseOrderSerializer,
+    CreateOrderFromCartSerializer,
     ManualOrderCreateSerializer,
     OrderSerializer,
 )
@@ -74,8 +75,11 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="from-cart")
     def from_cart(self, request):
+        serializer = CreateOrderFromCartSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
         try:
-            order = create_order_from_cart(request.user)
+            order = create_order_from_cart(request.user, **serializer.validated_data)
         except ValidationError as exc:
             return validation_error_response(exc)
 
