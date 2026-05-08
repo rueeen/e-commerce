@@ -1,4 +1,5 @@
 from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
+import warnings
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -52,6 +53,15 @@ def get_active_exchange_rate():
     )
 
     if exchange_config and exchange_config.usd_to_clp:
+        warnings.warn(
+            (
+                "Using ExchangeRateConfig as fallback in get_active_exchange_rate() "
+                "is deprecated and will be removed in a future sprint. "
+                "Populate an active PricingSettings.usd_to_clp instead."
+            ),
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return _q2(exchange_config.usd_to_clp)
 
     raise ValidationError("No existe un tipo de cambio activo.")
