@@ -19,6 +19,19 @@ from .services import cancel_order, confirm_order_payment, create_order_from_car
 
 User = get_user_model()
 
+
+VALID_TRANSITIONS = {
+    Order.Status.PAID: [Order.Status.PROCESSING, Order.Status.MANUAL_REVIEW],
+    Order.Status.PROCESSING: [Order.Status.SHIPPED, Order.Status.MANUAL_REVIEW],
+    Order.Status.SHIPPED: [Order.Status.DELIVERED, Order.Status.MANUAL_REVIEW],
+    Order.Status.DELIVERED: [Order.Status.COMPLETED],
+    Order.Status.MANUAL_REVIEW: [
+        Order.Status.PROCESSING,
+        Order.Status.SHIPPED,
+        Order.Status.DELIVERED,
+    ],
+}
+
 def validation_error_response(exc):
     if hasattr(exc, "message"):
         detail = exc.message
@@ -80,6 +93,32 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
             order = confirm_order_payment(order, user=request.user)
         except ValidationError as exc:
             return validation_error_response(exc)
+
+        return Response(self.get_serializer(order).data)
+
+
+    @action(detail=True, methods=["patch"], url_path="update-status")
+    def update_status(self, request, pk=None):
+        if not (is_admin_user(request.user) or is_worker_user(request.user)):
+            return Response(
+                {"detail": "No autorizado."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        order = self.get_object()
+        new_status = request.data.get("status")
+        allowed = VALID_TRANSITIONS.get(order.status, [])
+
+        if new_status not in [s.value for s in allowed]:
+            return Response(
+                {
+                    "detail": f"Transición no permitida: {order.status} → {new_status}",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        order.status = new_status
+        order.save(update_fields=["status", "updated_at"])
 
         return Response(self.get_serializer(order).data)
 
