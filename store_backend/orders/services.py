@@ -146,9 +146,6 @@ def confirm_order_payment(order: Order, user=None, allow_awaiting_payment=False)
                 product.bundle_items.select_related("item").all()
             )
             if not bundle_items:
-                if product.stock < item.quantity:
-                    raise ValidationError(f"Stock insuficiente para bundle {product.name}.")
-
                 fifo_cost = consume_fifo_stock(product, item.quantity)
                 total_cost_clp = int(fifo_cost["total_cost_clp"])
                 unit_cost_clp = int(fifo_cost["unit_cost_clp"])
@@ -175,12 +172,6 @@ def confirm_order_payment(order: Order, user=None, allow_awaiting_payment=False)
                     )
                     component_qty = bundle_item.quantity * item.quantity
     
-                    if component.stock < component_qty:
-                        raise ValidationError(
-                            f"Stock insuficiente para '{component.name}' "
-                            f"(componente de '{product.name}')."
-                        )
-    
                     fifo_cost = consume_fifo_stock(component, component_qty)
                     total_bundle_cost += int(fifo_cost["total_cost_clp"])
     
@@ -201,9 +192,6 @@ def confirm_order_payment(order: Order, user=None, allow_awaiting_payment=False)
                 total_cost_clp = total_bundle_cost
                 gross_profit_clp = item.subtotal_clp - total_cost_clp
         else:
-            if product.stock < item.quantity:
-                raise ValidationError(f"Stock insuficiente para {product.name}.")
-
             fifo_cost = consume_fifo_stock(product, item.quantity)
             total_cost_clp = int(fifo_cost["total_cost_clp"])
             unit_cost_clp = int(fifo_cost["unit_cost_clp"])
@@ -257,6 +245,10 @@ def cancel_order(order: Order, user=None, requesting_user=None):
     Si estaba pendiente y nunca consumió stock, solo cambia estado.
     """
     order = Order.objects.select_for_update().get(pk=order.pk)
+
+    if order.stock_reservation_status == Order.StockReservationStatus.RESERVED:
+        from payments.services import release_order_stock_reservation
+        release_order_stock_reservation(order)
 
     if requesting_user is not None:
         is_owner = order.user_id == requesting_user.id

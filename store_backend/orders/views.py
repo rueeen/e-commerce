@@ -2,7 +2,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
@@ -106,18 +106,21 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         total = order.total_clp
         tax_rate = Decimal(str(getattr(settings, "TAX_RATE", "0.19")))
         net = int((Decimal(total) / (1 + tax_rate)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-        SalesReceipt.objects.get_or_create(
-            order=order,
-            defaults={
-                "payment_transaction": None,
-                "document_type": SalesReceipt.DocumentType.INTERNAL_RECEIPT,
-                "document_number": f"MAN-{order.id}",
-                "net_amount_clp": net,
-                "tax_amount_clp": total - net,
-                "total_amount_clp": total,
-                "raw_data": {"source": "manual_confirmation"},
-            },
-        )
+        try:
+            SalesReceipt.objects.get_or_create(
+                order=order,
+                defaults={
+                    "payment_transaction": None,
+                    "document_type": SalesReceipt.DocumentType.INTERNAL_RECEIPT,
+                    "document_number": f"MAN-{order.id}",
+                    "net_amount_clp": net,
+                    "tax_amount_clp": total - net,
+                    "total_amount_clp": total,
+                    "raw_data": {"source": "manual_confirmation"},
+                },
+            )
+        except IntegrityError:
+            SalesReceipt.objects.get(order=order)
 
         return Response(self.get_serializer(order).data)
 

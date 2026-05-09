@@ -118,3 +118,22 @@ Desde Django Admin (`/admin/`) el staff puede:
 - activar/desactivar productos;
 - revisar pedidos e ítems del pedido;
 - revisar biblioteca digital de usuarios.
+
+
+## Configuración de producción
+
+Variables requeridas en entorno (`.env` o variables del sistema):
+- `SECRET_KEY`
+- `DEBUG`
+- `ALLOWED_HOSTS`
+- `DATABASE_URL`
+- `WEBPAY_COMMERCE_CODE`
+- `WEBPAY_API_KEY_SECRET`
+- `WEBPAY_ENVIRONMENT`
+- `WEBPAY_RETURN_URL`
+- `STOCK_RESERVATION_MINUTES`
+
+Debes programar la ejecución periódica del comando:
+`python manage.py release_expired_stock_reservations` cada 5 minutos (cron o scheduler equivalente).
+
+Para producción se recomienda migrar de SQLite a PostgreSQL.

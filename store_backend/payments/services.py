@@ -43,9 +43,8 @@ def release_order_stock_reservation(order, payment=None):
     order.stock_reservation_expires_at = None
     order.save(update_fields=["stock_reservation_status", "stock_released_at", "stock_reservation_expires_at", "updated_at"])
     if payment:
-        payment.stock_reservation_status = PaymentTransaction.StockReservationStatus.RELEASED
         payment.stock_released_at = now
-        payment.save(update_fields=["stock_reservation_status", "stock_released_at", "updated_at"])
+        payment.save(update_fields=["stock_released_at", "updated_at"])
     return order
 
 
@@ -149,7 +148,6 @@ def create_webpay_transaction(order, user):
         raw_response=response,
         stock_reserved_at=order.stock_reserved_at,
         stock_reservation_expires_at=order.stock_reservation_expires_at,
-        stock_reservation_status=PaymentTransaction.StockReservationStatus.RESERVED,
     )
     return payment, response
 
@@ -182,9 +180,8 @@ def finalize_paid_order(order, payment):
     locked.stock_released_at = timezone.now()
     locked.stock_reservation_expires_at = None
     locked.save(update_fields=["stock_reservation_status", "stock_released_at", "stock_reservation_expires_at", "updated_at"])
-    payment.stock_reservation_status = PaymentTransaction.StockReservationStatus.CONSUMED
     payment.stock_released_at = timezone.now()
-    payment.save(update_fields=["stock_reservation_status", "stock_released_at", "updated_at"])
+    payment.save(update_fields=["stock_released_at", "updated_at"])
 
     total = locked.total_clp
     tax_rate = Decimal(str(settings.TAX_RATE))

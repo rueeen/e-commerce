@@ -5,3 +5,7 @@ __pycache__/
 # Virtual envs
 .venv/
 venv/
+
+.env
+
+store_backend/db.sqlite3
