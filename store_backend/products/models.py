@@ -638,8 +638,6 @@ class PurchaseOrderItem(models.Model):
 
     def save(self, *args, **kwargs):
         self.line_total_original = self.unit_price_original * self.quantity_ordered
-        self.line_total_clp = int(
-            self.unit_price_clp or 0) * self.quantity_ordered
         super().save(*args, **kwargs)
 
 

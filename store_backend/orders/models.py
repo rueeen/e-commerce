@@ -243,6 +243,9 @@ class Order(models.Model):
         ordering = ["-created_at"]
         verbose_name = "Orden"
         verbose_name_plural = "Órdenes"
+        indexes = [
+            models.Index(fields=["user", "status"]),
+        ]
 
     def __str__(self):
         return f"Orden #{self.id} - {self.user} - {self.get_status_display()}"
