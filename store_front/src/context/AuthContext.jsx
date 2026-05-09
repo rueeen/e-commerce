@@ -162,7 +162,6 @@ export function AuthProvider({ children }) {
 
     try {
       await api.register(payload);
-      notyf.success('Registro exitoso.');
       return true;
     } catch {
       return false;

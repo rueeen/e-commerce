@@ -39,7 +39,6 @@ export default function CartPage() {
     try {
       const { data } = await api.createOrderFromCart(shippingData);
       const payment = await api.createWebpayTransaction(data.id);
-      notyf.success('Redirigiendo a Webpay...');
       submitWebpayForm(payment.url, payment.token);
     } catch {
       // El apiClient ya muestra el error.

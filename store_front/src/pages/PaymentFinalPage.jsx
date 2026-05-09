@@ -73,7 +73,6 @@ export default function PaymentFinalPage() {
     setRetryingPayment(true);
     try {
       const webpayTransaction = await api.createWebpayTransaction(payment.order_id);
-      notyf.success('Redirigiendo a Webpay...');
       submitWebpayForm(webpayTransaction.url, webpayTransaction.token);
     } catch {
       // El apiClient ya muestra el error.

@@ -154,28 +154,32 @@ export default function MainLayout() {
               <Link to="/carrito" className="footer-link">
                 Carrito
               </Link>
-              <Link to="/mis-pedidos" className="footer-link">
-                Mis pedidos
-              </Link>
-              <Link to="/mi-cuenta" className="footer-link">
-                Mi cuenta
-              </Link>
+              {isAuthenticated && (
+                <>
+                  <Link to="/mis-pedidos" className="footer-link">
+                    Mis pedidos
+                  </Link>
+                  <Link to="/mi-cuenta" className="footer-link">
+                    Mi cuenta
+                  </Link>
+                </>
+              )}
             </div>
 
             <div className="col-md-3">
               <h6>Comunidad</h6>
-              <a href="#" className="footer-link">
+              <span className="footer-link" style={{ opacity: 0.5, cursor: 'default' }}>
                 <i className="bi bi-discord me-2" />
                 Discord
-              </a>
-              <a href="#" className="footer-link">
+              </span>
+              <span className="footer-link" style={{ opacity: 0.5, cursor: 'default' }}>
                 <i className="bi bi-instagram me-2" />
                 Instagram
-              </a>
-              <a href="#" className="footer-link">
+              </span>
+              <span className="footer-link" style={{ opacity: 0.5, cursor: 'default' }}>
                 <i className="bi bi-facebook me-2" />
                 Facebook
-              </a>
+              </span>
             </div>
 
             <div className="col-md-2">
