@@ -31,6 +31,7 @@ import ScryfallSingleCreate from './pages/ScryfallSingleCreate';
 import PricingSettingsPage from './pages/PricingSettingsPage';
 import PaymentFinalPage from './pages/PaymentFinalPage';
 import PaymentReturnPage from './pages/PaymentReturnPage';
+import DigitalLibraryPage from './pages/DigitalLibraryPage';
 
 export default function App() {
   return (
@@ -57,6 +58,15 @@ export default function App() {
           element={
             <CustomerRoute>
               <OrdersPage />
+            </CustomerRoute>
+          }
+        />
+
+        <Route
+          path="/biblioteca"
+          element={
+            <CustomerRoute>
+              <DigitalLibraryPage />
             </CustomerRoute>
           }
         />
