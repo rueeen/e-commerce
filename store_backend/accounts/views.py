@@ -24,6 +24,7 @@ class RegisterView(generics.CreateAPIView):
 
 
 class LoginView(TokenObtainPairView):
+    permission_classes = [permissions.AllowAny]
     throttle_classes = [LoginThrottle]
 
 
