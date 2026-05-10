@@ -126,7 +126,11 @@ Variables requeridas en entorno (`.env` o variables del sistema):
 - `SECRET_KEY`
 - `DEBUG`
 - `ALLOWED_HOSTS`
-- `DATABASE_URL`
+- `MYSQL_NAME`
+- `MYSQL_USER`
+- `MYSQL_PASSWORD`
+- `MYSQL_HOST`
+- `MYSQL_PORT`
 - `WEBPAY_COMMERCE_CODE`
 - `WEBPAY_API_KEY_SECRET`
 - `WEBPAY_ENVIRONMENT`
@@ -136,4 +140,55 @@ Variables requeridas en entorno (`.env` o variables del sistema):
 Debes programar la ejecución periódica del comando:
 `python manage.py release_expired_stock_reservations` cada 5 minutos (cron o scheduler equivalente).
 
-Para producción se recomienda migrar de SQLite a PostgreSQL.
+
+## Deploy en PythonAnywhere
+
+### 1. Crear la base de datos MySQL
+En el panel de PythonAnywhere → Databases → Create a new database
+Nombre: manamarket (quedará como tu_usuario$manamarket)
+
+### 2. Instalar dependencias
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Configurar variables de entorno
+Editar `store_backend/.env` con los datos reales de MySQL:
+```env
+MYSQL_NAME=tu_usuario$manamarket
+MYSQL_USER=tu_usuario
+MYSQL_PASSWORD=contraseña_del_panel
+MYSQL_HOST=tu_usuario.mysql.pythonanywhere-services.com
+MYSQL_PORT=3306
+```
+
+### 4. Correr migraciones
+```bash
+cd store_backend
+python manage.py migrate
+```
+
+### 5. Crear superusuario
+```bash
+python manage.py createsuperuser
+```
+
+### 6. Configurar WSGI en PythonAnywhere
+En el panel Web → WSGI configuration file:
+```python
+import os, sys
+sys.path.insert(0, '/home/tu_usuario/e-commerce/store_backend')
+os.environ['DJANGO_SETTINGS_MODULE'] = 'store_backend.settings'
+from django.core.wsgi import get_wsgi_application
+application = get_wsgi_application()
+```
+
+### 7. Variables de entorno adicionales en .env para producción
+```env
+DEBUG=False
+SECRET_KEY=<clave-generada-con-python-c-"from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())">
+ALLOWED_HOSTS=tu_usuario.pythonanywhere.com
+CORS_ALLOWED_ORIGINS=https://tu-frontend.vercel.app
+```
+
+Para producción se recomienda migrar de SQLite a MySQL 8 (PythonAnywhere).
