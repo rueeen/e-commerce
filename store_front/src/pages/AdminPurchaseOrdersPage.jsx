@@ -7,6 +7,7 @@ import ProductAutocomplete from '../components/ProductAutocomplete';
 import LoadingOverlay from '../components/LoadingOverlay';
 import LoadingButton from '../components/LoadingButton';
 import ConfirmModal from '../components/ConfirmModal';
+import { formatMoney, formatDate } from '../utils/format';
 
 const emptyForm = {
   supplier: '',
@@ -38,35 +39,6 @@ const statusLabels = {
 };
 
 const normalizeList = (data) => data?.results || data || [];
-
-const formatMoney = (value, currency = 'CLP') => {
-  const normalizedCurrency = String(currency || 'CLP').toUpperCase();
-
-  return new Intl.NumberFormat('es-CL', {
-    style: 'currency',
-    currency: normalizedCurrency === 'USD' ? 'USD' : 'CLP',
-  }).format(Number(value || 0));
-};
-
-const formatDate = (value) => {
-  if (!value) return '-';
-
-  try {
-    return new Date(value).toLocaleDateString('es-CL');
-  } catch {
-    return value;
-  }
-};
-
-const formatDateTime = (value) => {
-  if (!value) return '-';
-
-  try {
-    return new Date(value).toLocaleString('es-CL');
-  } catch {
-    return value;
-  }
-};
 
 const getStatusBadgeClass = (status) => {
   if (status === 'RECEIVED') return 'badge-success';
@@ -1270,7 +1242,7 @@ export default function AdminPurchaseOrdersPage() {
                   </div>
 
                   <div className="col-md-6">
-                    <strong>Creada:</strong> {formatDateTime(selectedOrder.created_at)}
+                    <strong>Creada:</strong> {formatDate(selectedOrder.created_at)}
                   </div>
 
                   <div className="col-md-6">

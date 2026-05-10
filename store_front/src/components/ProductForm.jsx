@@ -1,4 +1,5 @@
 import ProductAutocomplete from './ProductAutocomplete';
+import { formatAmount } from '../utils/format';
 
 export const PRODUCT_TYPE_OPTIONS = [
   { value: 'single', label: 'Carta individual' },
@@ -51,13 +52,6 @@ export const initialFormState = {
   notes: '',
   is_active: true,
 };
-
-const formatMoney = (value) =>
-  new Intl.NumberFormat('es-CL', {
-    style: 'currency',
-    currency: 'CLP',
-    maximumFractionDigits: 0,
-  }).format(Number(value || 0));
 
 const getCardImage = (card) => {
   return (
@@ -301,7 +295,7 @@ export default function ProductForm({
                   <div key={bi.id} className="d-flex align-items-center gap-2 mb-2">
                     <span className="flex-grow-1">{bi.item_name}</span>
                     <span className="badge badge-soft">x{bi.quantity}</span>
-                    <span className="text-secondary small">{formatMoney(bi.item_price_clp)}</span>
+                    <span className="text-secondary small">{formatAmount(bi.item_price_clp)}</span>
                     <button
                       type="button"
                       className="btn btn-sm btn-outline-danger"
@@ -329,7 +323,7 @@ export default function ProductForm({
                 {bundleItems.length > 0 && (
                   <div className="mt-2 text-end text-secondary small">
                     Precio total bundle:{' '}
-                    {formatMoney(
+                    {formatAmount(
                       bundleItems.reduce(
                         (sum, bi) => sum + Number(bi.item_price_clp || 0) * Number(bi.quantity || 0),
                         0

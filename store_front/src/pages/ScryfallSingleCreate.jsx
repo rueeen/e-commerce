@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/endpoints';
 import { notyf } from '../api/notifier';
+import { formatMoney } from '../utils/format';
 
 const CONDITIONS = ['NM', 'LP', 'MP', 'HP', 'DMG'];
 const LANGUAGES = ['EN', 'ES', 'JP', 'DE', 'FR', 'IT', 'PT'];
@@ -41,9 +42,6 @@ const slugify = (value) =>
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
-
-const formatMoney = (value) =>
-  `$${Number(value || 0).toLocaleString('es-CL')}`;
 
 function getCardImage(card) {
   return (

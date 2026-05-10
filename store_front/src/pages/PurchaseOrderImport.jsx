@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import { notyf } from '../api/notifier';
 import LoadingOverlay from '../components/LoadingOverlay';
+import { formatMoney } from '../utils/format';
 
 const extraCostFields = [
   { key: 'import_duties_clp', label: 'Derechos de importación (CLP)' },
@@ -22,12 +23,6 @@ const initialExtraCosts = {
 };
 
 const normalizeList = (data) => data?.results || data || [];
-
-const formatMoney = (value, currency = '') => {
-  const number = Number(value || 0).toLocaleString('es-CL');
-
-  return currency ? `${currency} ${number}` : number;
-};
 
 export default function PurchaseOrderImport() {
   const navigate = useNavigate();
