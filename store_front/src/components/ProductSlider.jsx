@@ -1,15 +1,8 @@
 import ProductCard from './ProductCard';
-
-const getProductType = (product) =>
-  product?.product_type_slug ||
-  product?.product_type?.slug ||
-  product?.product_type_data?.slug ||
-  product?.product_type_detail?.slug ||
-  product?.product_type ||
-  'other';
+import { getProductTypeValue } from '../utils/product';
 
 const getColumnClass = (product, variant) => {
-  const type = variant || getProductType(product);
+  const type = variant || getProductTypeValue(product);
 
   if (['bundle', 'sealed', 'accessory'].includes(type)) {
     return 'col-12 col-md-6 col-xl-4';

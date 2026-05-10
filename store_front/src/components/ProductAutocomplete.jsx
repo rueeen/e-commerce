@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { getProductTypeValue } from '../utils/product';
 
 const getProductImage = (product) => {
   return (
@@ -30,13 +31,6 @@ const normalizeText = (value) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-const getProductType = (product) =>
-  product?.product_type_slug ||
-  product?.product_type?.slug ||
-  product?.product_type_data?.slug ||
-  product?.product_type ||
-  '';
-
 const getProductTypeLabel = (product) =>
   product?.product_type_name ||
   product?.product_type?.name ||
@@ -48,7 +42,7 @@ const getProductTitle = (product) =>
   product?.name || product?.single_card?.mtg_card?.name || `Producto #${product?.id}`;
 
 const getProductMeta = (product) => {
-  const type = getProductType(product);
+  const type = getProductTypeValue(product);
 
   if (type === 'single') {
     return [
@@ -102,7 +96,7 @@ const getProductSearchText = (product) =>
       product?.name,
       product?.description,
       product?.id,
-      getProductType(product),
+      getProductTypeValue(product),
       getProductTypeLabel(product),
       product?.product_type_display,
       product?.single_card?.name,

@@ -6,6 +6,7 @@ import { fetchAllPaginated } from '../api/pagination';
 import ProductCarousel from '../components/ProductCarousel';
 import ProductSlider from '../components/ProductSlider';
 import { useCart } from '../hooks/useCart';
+import { getProductTypeValue } from '../utils/product';
 
 const PRODUCT_TYPE_ORDER = ['bundle', 'sealed', 'single', 'accessory', 'service', 'other'];
 
@@ -17,14 +18,6 @@ const PRODUCT_TYPE_LABELS = {
   service: 'Servicios / encargos',
   other: 'Otros productos',
 };
-
-const getProductTypeValue = (product) =>
-  product?.product_type_slug ||
-  product?.product_type?.slug ||
-  product?.product_type_data?.slug ||
-  product?.product_type_detail?.slug ||
-  product?.product_type ||
-  'other';
 
 const groupProductsByType = (items) => {
   return items.reduce((groups, product) => {
