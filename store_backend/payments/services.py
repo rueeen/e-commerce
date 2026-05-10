@@ -121,13 +121,38 @@ def create_webpay_transaction(order, user):
         order = Order.objects.select_for_update().get(pk=order.pk)
         expires_at = timezone.now() + timedelta(minutes=_reservation_minutes())
         if not order.stock_reservation_is_active:
-            for item in order.items.select_related("product"):
+            for item in order.items.select_related('product'):
                 product = item.product
-                locked_product = type(product).objects.select_for_update().get(pk=product.pk)
-                if locked_product.available_stock < item.quantity:
-                    raise ValidationError(f"Stock insuficiente. Disponible actualmente: {locked_product.available_stock}.")
-                locked_product.stock_reserved = F("stock_reserved") + item.quantity
-                locked_product.save(update_fields=["stock_reserved", "updated_at"])
+                if product.product_type == product.ProductType.BUNDLE:
+                    bundle_items = list(
+                        product.bundle_items.select_related('item').select_for_update(of=('item',))
+                    )
+                    if bundle_items:
+                        for bundle_item in bundle_items:
+                            component = type(product).objects.select_for_update().get(pk=bundle_item.item_id)
+                            component_qty = bundle_item.quantity * item.quantity
+                            if component.available_stock < component_qty:
+                                raise ValidationError(
+                                    f"Stock insuficiente para '{component.name}' "
+                                    f"(componente de '{product.name}'). "
+                                    f'Disponible: {component.available_stock}, requerido: {component_qty}.'
+                                )
+                            component.stock_reserved = F('stock_reserved') + component_qty
+                            component.save(update_fields=['stock_reserved', 'updated_at'])
+                    else:
+                        locked_product = type(product).objects.select_for_update().get(pk=product.pk)
+                        if locked_product.available_stock < item.quantity:
+                            raise ValidationError(
+                                f'Stock insuficiente. Disponible actualmente: {locked_product.available_stock}.'
+                            )
+                        locked_product.stock_reserved = F('stock_reserved') + item.quantity
+                        locked_product.save(update_fields=['stock_reserved', 'updated_at'])
+                else:
+                    locked_product = type(product).objects.select_for_update().get(pk=product.pk)
+                    if locked_product.available_stock < item.quantity:
+                        raise ValidationError(f'Stock insuficiente. Disponible actualmente: {locked_product.available_stock}.')
+                    locked_product.stock_reserved = F('stock_reserved') + item.quantity
+                    locked_product.save(update_fields=['stock_reserved', 'updated_at'])
             order.stock_reserved_at = timezone.now()
             order.stock_reservation_expires_at = expires_at
             order.stock_reservation_status = Order.StockReservationStatus.RESERVED
@@ -170,10 +195,7 @@ def finalize_paid_order(order, payment):
         locked.save(update_fields=['status', 'stock_consumed', 'updated_at'])
         return locked
 
-    for item in locked.items.select_related("product"):
-        product = item.product
-        product.stock_reserved = max((product.stock_reserved or 0) - item.quantity, 0)
-        product.save(update_fields=["stock_reserved", "updated_at"])
+    release_order_stock_reservation(locked)
 
     confirm_order_payment(locked, user=payment.user, allow_awaiting_payment=True)
     locked.stock_reservation_status = Order.StockReservationStatus.CONSUMED
