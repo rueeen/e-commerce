@@ -6,6 +6,7 @@ import { notyf } from '../api/notifier';
 import ProductAutocomplete from '../components/ProductAutocomplete';
 import LoadingOverlay from '../components/LoadingOverlay';
 import LoadingButton from '../components/LoadingButton';
+import ConfirmModal from '../components/ConfirmModal';
 
 const emptyForm = {
   supplier: '',
@@ -184,6 +185,9 @@ export default function AdminPurchaseOrdersPage() {
   const [isCreatingMissingProducts, setIsCreatingMissingProducts] = useState(false);
   const [isReceivingOrder, setIsReceivingOrder] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [createMissingProductsTargetId, setCreateMissingProductsTargetId] = useState(null);
+  const [receiveTargetId, setReceiveTargetId] = useState(null);
+  const [currencyChangeTarget, setCurrencyChangeTarget] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -230,6 +234,34 @@ export default function AdminPurchaseOrdersPage() {
 
     loadPricingSettings();
   }, []);
+
+
+  useEffect(() => {
+    if (!createMissingProductsTargetId) return;
+    const el = document.getElementById('createMissingProductsModal');
+    if (el) {
+      const modal = new window.bootstrap.Modal(el);
+      modal.show();
+    }
+  }, [createMissingProductsTargetId]);
+
+  useEffect(() => {
+    if (!receiveTargetId) return;
+    const el = document.getElementById('receivePurchaseOrderModal');
+    if (el) {
+      const modal = new window.bootstrap.Modal(el);
+      modal.show();
+    }
+  }, [receiveTargetId]);
+
+  useEffect(() => {
+    if (!currencyChangeTarget) return;
+    const el = document.getElementById('currencyChangeModal');
+    if (el) {
+      const modal = new window.bootstrap.Modal(el);
+      modal.show();
+    }
+  }, [currencyChangeTarget]);
 
   useEffect(() => {
     const preProduct = Number(search.get('product_id'));
@@ -389,12 +421,13 @@ export default function AdminPurchaseOrdersPage() {
     }
   };
 
-  const createMissingProducts = async (orderId) => {
-    const ok = window.confirm(
-      'Esto intentará crear automáticamente los productos faltantes desde los datos importados y Scryfall. ¿Deseas continuar?'
-    );
+  const createMissingProducts = (orderId) => {
+    setCreateMissingProductsTargetId(orderId);
+  };
 
-    if (!ok) return;
+  const executeCreateMissingProducts = async () => {
+    if (!createMissingProductsTargetId) return;
+    const orderId = createMissingProductsTargetId;
 
     setCreatingMissingId(orderId);
     setIsCreatingMissingProducts(true);
@@ -419,7 +452,7 @@ export default function AdminPurchaseOrdersPage() {
     }
   };
 
-  const receive = async (id) => {
+  const receive = (id) => {
     const order = orders.find((item) => item.id === id);
     const missingProductsCount = getMissingProductsCount(order);
 
@@ -430,17 +463,17 @@ export default function AdminPurchaseOrdersPage() {
       return;
     }
 
-    const ok = window.confirm(
-      'Esto aumentará el stock, creará lotes FIFO y generará movimientos Kardex. ¿Deseas continuar?'
-    );
+    setReceiveTargetId(id);
+  };
 
-    if (!ok) return;
+  const executeReceiveOrder = async () => {
+    if (!receiveTargetId) return;
 
-    setReceivingId(id);
+    setReceivingId(receiveTargetId);
     setIsReceivingOrder(true);
 
     try {
-      await api.receivePurchaseOrder(id);
+      await api.receivePurchaseOrder(receiveTargetId);
       notyf.success('Orden marcada como recibida.');
       await load();
     } catch {
@@ -448,9 +481,45 @@ export default function AdminPurchaseOrdersPage() {
     } finally {
       setReceivingId(null);
       setIsReceivingOrder(false);
+      setReceiveTargetId(null);
     }
   };
 
+  const applyNewCurrency = (current, nextCurrency) => {
+    const updatedItems = current.items.map((item) => {
+      const sourceProduct = products.find((product) => product.id === item.product_id) || item.source_product || {};
+      const nextUnitCost = getProductUnitCostForOrder(sourceProduct, nextCurrency);
+
+      return {
+        ...item,
+        unit_price_original: String(nextUnitCost || 0),
+        subtotal_clp: toNumber(item.quantity_ordered) * toNumber(nextUnitCost),
+      };
+    });
+
+    return {
+      ...current,
+      original_currency: nextCurrency,
+      items: updatedItems,
+    };
+  };
+
+  const handleCurrencyChange = (nextCurrency) => {
+    setForm((current) => {
+      if (current.original_currency === nextCurrency) return current;
+      if (current.items.length === 0) {
+        return { ...current, original_currency: nextCurrency };
+      }
+      setCurrencyChangeTarget({ nextCurrency });
+      return current;
+    });
+  };
+
+  const confirmCurrencyChange = async () => {
+    if (!currencyChangeTarget) return;
+    setForm((current) => applyNewCurrency(current, currencyChangeTarget.nextCurrency));
+    setCurrencyChangeTarget(null);
+  };
 
   const validateForm = () => {
     if (!form.supplier) {
@@ -652,36 +721,7 @@ export default function AdminPurchaseOrdersPage() {
               <select
                 className="form-select"
                 value={form.original_currency}
-                onChange={(event) => {
-                  const nextCurrency = event.target.value;
-
-                  setForm((current) => {
-                    if (current.original_currency === nextCurrency) return current;
-
-                    const shouldRecalculate = current.items.length === 0
-                      ? true
-                      : window.confirm('Cambiar la moneda recalculará los costos unitarios.');
-
-                    if (!shouldRecalculate) return current;
-
-                    const updatedItems = current.items.map((item) => {
-                      const sourceProduct = products.find((product) => product.id === item.product_id) || item.source_product || {};
-                      const nextUnitCost = getProductUnitCostForOrder(sourceProduct, nextCurrency);
-
-                      return {
-                        ...item,
-                        unit_price_original: String(nextUnitCost || 0),
-                        subtotal_clp: toNumber(item.quantity_ordered) * toNumber(nextUnitCost),
-                      };
-                    });
-
-                    return {
-                      ...current,
-                      original_currency: nextCurrency,
-                      items: updatedItems,
-                    };
-                  });
-                }}
+                onChange={(event) => handleCurrencyChange(event.target.value)}
               >
                 <option value="CLP">CLP</option>
                 <option value="USD">USD</option>
@@ -1158,6 +1198,32 @@ export default function AdminPurchaseOrdersPage() {
           </tbody>
         </table>
       </div>
+
+
+      <ConfirmModal
+        id='createMissingProductsModal'
+        title='Crear productos faltantes'
+        text='Esto intentará crear automáticamente los productos faltantes desde los datos importados y Scryfall. ¿Deseas continuar?'
+        confirmText='Crear productos'
+        confirmVariant='primary'
+        onConfirm={executeCreateMissingProducts}
+      />
+      <ConfirmModal
+        id='receivePurchaseOrderModal'
+        title='Recibir orden de compra'
+        text='Esto aumentará el stock, creará lotes FIFO y generará movimientos Kardex. ¿Deseas continuar?'
+        confirmText='Recibir orden'
+        confirmVariant='success'
+        onConfirm={executeReceiveOrder}
+      />
+      <ConfirmModal
+        id='currencyChangeModal'
+        title='Cambiar moneda'
+        text='Cambiar la moneda recalculará los costos unitarios.'
+        confirmText='Cambiar moneda'
+        confirmVariant='warning'
+        onConfirm={confirmCurrencyChange}
+      />
 
       {showModal && selectedOrder && (
         <div

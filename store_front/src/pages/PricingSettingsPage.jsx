@@ -3,6 +3,7 @@ import { api } from '../api/endpoints';
 import { notyf } from '../api/notifier';
 import LoadingOverlay from '../components/LoadingOverlay';
 import LoadingButton from '../components/LoadingButton';
+import ConfirmModal from '../components/ConfirmModal';
 
 const initial = {
   name: 'Configuración principal',
@@ -56,6 +57,7 @@ export default function PricingSettingsPage() {
   });
   const [recalcLoading, setRecalcLoading] = useState(false);
   const [recalcResult, setRecalcResult] = useState(null);
+  const [recalcWarning, setRecalcWarning] = useState('');
 
   const help = useMemo(
     () => ({
@@ -105,6 +107,15 @@ export default function PricingSettingsPage() {
   useEffect(() => {
     loadSettings();
   }, []);
+
+  useEffect(() => {
+    if (!recalcWarning) return;
+    const el = document.getElementById('recalcPricingModal');
+    if (el) {
+      const modal = new window.bootstrap.Modal(el);
+      modal.show();
+    }
+  }, [recalcWarning]);
 
   const updateSetting = (field, value) => {
     setSettings((current) => ({
@@ -195,12 +206,8 @@ export default function PricingSettingsPage() {
   };
 
 
-  const recalculatePrices = async () => {
-    const warning = recalcOptions.apply_to_sale_price
-      ? 'Esta opción cambiará el precio visible en tienda. ¿Deseas continuar?'
-      : 'Esta acción recalculará precios sugeridos usando la configuración activa. No modificará stock ni Kardex. ¿Deseas continuar?';
-
-    if (!window.confirm(warning)) return;
+  const executeRecalculatePrices = async () => {
+    if (!recalcWarning) return;
 
     setRecalcLoading(true);
     try {
@@ -215,7 +222,16 @@ export default function PricingSettingsPage() {
       // El apiClient ya muestra el error.
     } finally {
       setRecalcLoading(false);
+      setRecalcWarning('');
     }
+  };
+
+  const recalculatePrices = async () => {
+    const warning = recalcOptions.apply_to_sale_price
+      ? 'Esta opción cambiará el precio visible en tienda. ¿Deseas continuar?'
+      : 'Esta acción recalculará precios sugeridos usando la configuración activa. No modificará stock ni Kardex. ¿Deseas continuar?';
+
+    setRecalcWarning(warning);
   };
 
   if (loading) {
@@ -611,6 +627,14 @@ export default function PricingSettingsPage() {
           'Guardando resultados',
         ]}
         currentStep={1}
+      />
+      <ConfirmModal
+        id="recalcPricingModal"
+        title="Recalcular precios"
+        text={recalcWarning}
+        confirmText="Recalcular"
+        confirmVariant="warning"
+        onConfirm={executeRecalculatePrices}
       />
     </div>
   );
