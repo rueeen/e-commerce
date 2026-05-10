@@ -668,7 +668,7 @@ class InventoryLot(models.Model):
         validators=[MinValueValidator(0)],
     )
     unit_cost_clp = models.PositiveIntegerField(
-        validators=[MinValueValidator(1)],
+        validators=[MinValueValidator(0)],
     )
     received_at = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
