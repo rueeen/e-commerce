@@ -1,17 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/endpoints';
+import { formatDateShort } from '../utils/format';
 
 const normalizeList = (data) => data?.results || data || [];
-
-const formatDate = (value) => {
-  if (!value) return '-';
-
-  try {
-    return new Date(value).toLocaleDateString('es-CL');
-  } catch {
-    return value;
-  }
-};
 
 export default function DigitalLibraryPage() {
   const [items, setItems] = useState([]);
@@ -81,7 +72,7 @@ export default function DigitalLibraryPage() {
                   <h5 className="mb-2">{item.product_name}</h5>
 
                   <p className="text-muted mb-2">
-                    Comprado el {formatDate(item.purchased_at)}
+                    Comprado el {formatDateShort(item.purchased_at)}
                   </p>
 
                   {item.order_id && (

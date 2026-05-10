@@ -5,10 +5,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import { notyf } from '../api/notifier';
 import { submitWebpayForm } from '../utils/webpay';
 import { useCart } from '../hooks/useCart';
-
-const formatMoney = (value) => {
-  return `$${Number(value || 0).toLocaleString('es-CL')}`;
-};
+import { formatMoney } from '../utils/format';
 
 export default function CartPage() {
   const { items, total, updateItem, removeItem, clear, fetchCart } = useCart();

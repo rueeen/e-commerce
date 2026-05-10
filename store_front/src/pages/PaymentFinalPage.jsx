@@ -4,31 +4,7 @@ import { api } from '../api/endpoints';
 import { useCart } from '../hooks/useCart';
 import { notyf } from '../api/notifier';
 import { submitWebpayForm } from '../utils/webpay';
-
-const formatAmount = (amount) => {
-  const value = Number(amount);
-  if (Number.isNaN(value)) return amount ?? '-';
-  return new Intl.NumberFormat('es-CL', {
-    style: 'currency',
-    currency: 'CLP',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
-const formatDateTime = (value) => {
-  if (!value) return '-';
-  try {
-    return new Date(value).toLocaleString('es-CL', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return value;
-  }
-};
+import { formatAmount, formatDate } from '../utils/format';
 
 const getStoredPaymentResult = () => {
   const stored = sessionStorage.getItem('lastWebpayResult');
@@ -140,7 +116,7 @@ export default function PaymentFinalPage() {
         {!!payment?.card_detail?.card_number && (
           <li><strong>Tarjeta (últimos 4):</strong> {payment.card_detail.card_number}</li>
         )}
-        <li><strong>Fecha:</strong> {formatDateTime(payment?.transaction_date)}</li>
+        <li><strong>Fecha:</strong> {formatDate(payment?.transaction_date)}</li>
       </ul>
 
       <div className="d-flex gap-2 flex-wrap">
@@ -191,7 +167,7 @@ export default function PaymentFinalPage() {
               <li><strong>IVA (19%):</strong> {formatAmount(receipt.tax_amount_clp)}</li>
               <li><strong>Total:</strong> {formatAmount(receipt.total_amount_clp)}</li>
               <li><strong>Tipo:</strong> {DOCUMENT_TYPE_LABELS[receipt.document_type] || receipt.document_type || '-'}</li>
-              <li><strong>Fecha de emisión:</strong> {formatDateTime(receipt.issued_at)}</li>
+              <li><strong>Fecha de emisión:</strong> {formatDate(receipt.issued_at)}</li>
             </ul>
           ) : null}
         </div>

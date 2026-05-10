@@ -5,22 +5,9 @@ import { api } from '../api/endpoints';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { useCart } from '../hooks/useCart';
 import { useAuth } from '../hooks/useAuth';
+import { formatDate, formatMoney } from '../utils/format';
 
 const placeholderImage = 'https://placehold.co/900x600?text=Producto';
-
-const formatMoney = (value) => {
-  return `$${Number(value || 0).toLocaleString('es-CL')}`;
-};
-
-const formatDateTime = (value) => {
-  if (!value) return '-';
-
-  try {
-    return new Date(value).toLocaleString('es-CL');
-  } catch {
-    return value;
-  }
-};
 
 const getCard = (product) => {
   return product?.single_card?.mtg_card || product?.mtg_card || null;
@@ -237,7 +224,7 @@ export default function ProductDetailPage() {
               {kardex.slice(0, 8).map((movement) => (
                 <li key={movement.id}>
                   {movement.movement_type} · {movement.quantity} ·{' '}
-                  {formatDateTime(movement.created_at)} · Stock:{' '}
+                  {formatDate(movement.created_at)} · Stock:{' '}
                   {movement.previous_stock} → {movement.new_stock}
                 </li>
               ))}
