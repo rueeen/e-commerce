@@ -1,3 +1,5 @@
+// Cliente HTTP único del proyecto: centraliza auth, manejo de errores y notificaciones.
+// No duplicar clientes HTTP paralelos (por ejemplo con fetch nativo).
 import axios from 'axios';
 import { notyf } from './notifier';
 
