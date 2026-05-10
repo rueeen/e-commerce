@@ -3,8 +3,6 @@ import { api } from '../api/endpoints';
 import OrderTable from '../components/OrderTable';
 import { formatDate, formatMoney } from '../utils/format';
 
-const normalizeList = (data) => data?.results || data || [];
-
 const getChilexpressTrackingUrl = (trackingNumber) => {
   const baseUrl = 'https://www.chilexpress.cl/views/herramientas/seguimiento';
   if (!trackingNumber) return baseUrl;
@@ -37,16 +35,22 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
   const [receiptLoading, setReceiptLoading] = useState(false);
   const [receiptNotAvailable, setReceiptNotAvailable] = useState(false);
   const [receipt, setReceipt] = useState(null);
+
+  const PAGE_SIZE = 10
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
 
   const loadOrders = async () => {
     setLoading(true);
 
     try {
-      const { data } = await api.orders();
-      setOrders(normalizeList(data));
+      const { data } = await api.orders({ page });
+      setOrders(data?.results || []);
+      setTotalCount(Number(data?.count || 0));
     } catch {
       // El apiClient ya muestra el error.
     } finally {
@@ -56,7 +60,7 @@ export default function OrdersPage() {
 
   useEffect(() => {
     loadOrders();
-  }, []);
+  }, [page]);
 
   useEffect(() => {
     setReceipt(null);
@@ -115,6 +119,31 @@ export default function OrdersPage() {
         </div>
       ) : (
         <OrderTable orders={orders} onView={setSelected} />
+      )}
+
+
+      {totalPages > 1 && (
+        <div className="d-flex justify-content-center gap-2 mt-3">
+          <button
+            type="button"
+            className="btn btn-outline-secondary btn-sm"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1 || loading}
+          >
+            Anterior
+          </button>
+          <span className="align-self-center small text-muted">
+            Página {page} de {totalPages}
+          </span>
+          <button
+            type="button"
+            className="btn btn-outline-secondary btn-sm"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages || loading}
+          >
+            Siguiente
+          </button>
+        </div>
       )}
 
       <div className="modal fade" id="orderDetailModal" tabIndex="-1">

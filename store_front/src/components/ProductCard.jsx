@@ -1,28 +1,8 @@
 import { Link } from 'react-router-dom';
 import { formatMoney } from '../utils/format';
+import { getProductTypeLabel, getProductTypeValue } from '../utils/product';
 
 const placeholderImage = 'https://placehold.co/640x420?text=Sin+imagen';
-
-const getProductType = (product) =>
-  product?.product_type_slug ||
-  product?.product_type?.slug ||
-  product?.product_type_data?.slug ||
-  product?.product_type_detail?.slug ||
-  product?.product_type ||
-  'other';
-
-const getProductTypeLabel = (type) => {
-  const labels = {
-    single: 'Carta individual',
-    sealed: 'Producto sellado',
-    bundle: 'Bundle',
-    accessory: 'Accesorio',
-    service: 'Servicio / encargo',
-    other: 'Otro',
-  };
-
-  return labels[type] || type;
-};
 
 const getCard = (product) => {
   return product?.single_card?.mtg_card || product?.mtg_card || null;
@@ -69,7 +49,7 @@ export default function ProductCard({ product, onAdd }) {
   const stock = Number(product?.stock || 0);
   const card = getCard(product);
   const price = product?.computed_price_clp || product?.price_clp;
-  const type = getProductType(product);
+  const type = getProductTypeValue(product);
   const typeLabel = getProductTypeLabel(type);
   const isSingle = type === 'single';
   const isService = type === 'service';
@@ -103,7 +83,7 @@ export default function ProductCard({ product, onAdd }) {
           {isSingle && setCode && <span className="badge badge-soft">{String(setCode).toUpperCase()}</span>}
           {isSingle && condition && <span className="badge badge-soft">{condition}</span>}
           {isSingle && language && <span className="badge badge-soft">{String(language).toUpperCase()}</span>}
-          {isSingle && <span className="badge badge-soft">{isFoil ? 'Foil' : 'Non-foil'}</span>}
+          {isSingle && isFoil && <span className="badge badge-soft">Foil</span>}
         </div>
 
         {!isSingle && shortDescription && (

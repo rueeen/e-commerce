@@ -45,12 +45,6 @@ const menuItems = [
     roles: ['admin', 'worker'],
   },
   {
-    to: '/admin/ordenes-compra/importar',
-    icon: 'bi-file-earmark-excel',
-    label: 'Importar orden Excel',
-    roles: ['admin', 'worker'],
-  },
-  {
     to: '/admin/usuarios',
     icon: 'bi-people',
     label: 'Usuarios',

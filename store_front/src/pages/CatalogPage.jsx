@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/endpoints';
 import ProductSlider from '../components/ProductSlider';
 import { useCart } from '../hooks/useCart';
+import { getProductTypeValue } from '../utils/product';
 
 const FALLBACK_PRODUCT_TYPES = [
   { value: 'single', label: 'Carta individual' },
@@ -28,14 +29,6 @@ const RARITIES = [
   { value: 'rare', label: 'Rare' },
   { value: 'mythic', label: 'Mythic' },
 ];
-
-const getProductTypeValue = (product) =>
-  product?.product_type_slug ||
-  product?.product_type?.slug ||
-  product?.product_type_data?.slug ||
-  product?.product_type_detail?.slug ||
-  product?.product_type ||
-  'other';
 
 const groupProductsByType = (items) => {
   return items.reduce((groups, product) => {
