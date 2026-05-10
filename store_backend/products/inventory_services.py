@@ -241,7 +241,7 @@ def return_fifo_stock(product, quantity, unit_cost_clp=0, received_at=None):
         purchase_order_item=None,
         quantity_initial=qty,
         quantity_remaining=qty,
-        unit_cost_clp=int(unit_cost_clp or product.cost_real_clp or 1),
+        unit_cost_clp=int(unit_cost_clp if unit_cost_clp is not None else (product.cost_real_clp or 0)),
         received_at=received_at or timezone.now(),
     )
 
