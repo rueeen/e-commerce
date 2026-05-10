@@ -8,6 +8,7 @@ import ProductForm, {
 import ProductTable from '../components/ProductTable';
 import LoadingSpinner from '../components/LoadingSpinner';
 import LoadingButton from '../components/LoadingButton';
+import ConfirmModal from '../components/ConfirmModal';
 
 const normalizeList = (data) => data?.results || data || [];
 
@@ -86,6 +87,8 @@ export default function AdminProductsPage() {
   const [applySuggestedId, setApplySuggestedId] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [activateWarningProduct, setActivateWarningProduct] = useState(null);
+  const [deleteTargetProduct, setDeleteTargetProduct] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -103,6 +106,24 @@ export default function AdminProductsPage() {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (!activateWarningProduct) return;
+    const el = document.getElementById('activateNegativeMarginModal');
+    if (el) {
+      const modal = new window.bootstrap.Modal(el);
+      modal.show();
+    }
+  }, [activateWarningProduct]);
+
+  useEffect(() => {
+    if (!deleteTargetProduct) return;
+    const el = document.getElementById('deleteProductModal');
+    if (el) {
+      const modal = new window.bootstrap.Modal(el);
+      modal.show();
+    }
+  }, [deleteTargetProduct]);
 
   const onChange = (key, value) => {
     setForm((previous) => ({
@@ -240,14 +261,8 @@ export default function AdminProductsPage() {
     onChange('set_code', card.set_code || form.set_code);
   };
 
-  const toggleActive = async (product) => {
-    const nextActive = !product.is_active;
+  const doToggleActive = async (product, nextActive) => {
     const margin = Number(product.margin_clp || 0);
-
-    if (nextActive && margin < 0) {
-      const ok = window.confirm('Este producto tiene margen negativo. ¿Activar de todas formas?');
-      if (!ok) return;
-    }
 
     try {
       setTogglingId(product.id);
@@ -271,6 +286,23 @@ export default function AdminProductsPage() {
     }
   };
 
+  const toggleActive = async (product) => {
+    const nextActive = !product.is_active;
+    const margin = Number(product.margin_clp || 0);
+
+    if (nextActive && margin < 0) {
+      setActivateWarningProduct(product);
+      return;
+    }
+
+    await doToggleActive(product, nextActive);
+  };
+
+  const confirmActivateNegativeMargin = async () => {
+    if (!activateWarningProduct) return;
+    await doToggleActive(activateWarningProduct, true);
+    setActivateWarningProduct(null);
+  };
 
   const applySuggestedPrice = async (product) => {
     try {
@@ -285,22 +317,20 @@ export default function AdminProductsPage() {
     }
   };
 
-  const deleteProduct = async (product) => {
-    const ok = window.confirm(
-      `¿Seguro que quieres eliminar "${product.name}"? Esta acción no se puede deshacer.`
-    );
+  const deleteProduct = (product) => setDeleteTargetProduct(product);
 
-    if (!ok) return;
-
+  const executeDeleteProduct = async () => {
+    if (!deleteTargetProduct) return;
     try {
-      setDeletingId(product.id);
-      await api.deleteProduct(product.id);
+      setDeletingId(deleteTargetProduct.id);
+      await api.deleteProduct(deleteTargetProduct.id);
       notyf.success('Producto eliminado correctamente.');
       await load();
     } catch {
       // El apiClient ya muestra el error.
     } finally {
       setDeletingId(null);
+      setDeleteTargetProduct(null);
     }
   };
 
@@ -408,6 +438,26 @@ export default function AdminProductsPage() {
           <div className="modal-backdrop fade show admin-product-modal-backdrop" />
         </>
       )}
+      <ConfirmModal
+        id="activateNegativeMarginModal"
+        title="Margen negativo"
+        text={activateWarningProduct
+          ? `"${activateWarningProduct.name}" tiene margen negativo. ¿Activar de todas formas?`
+          : ''}
+        confirmText="Activar de todas formas"
+        confirmVariant="warning"
+        onConfirm={confirmActivateNegativeMargin}
+      />
+      <ConfirmModal
+        id="deleteProductModal"
+        title="Eliminar producto"
+        text={deleteTargetProduct
+          ? `¿Seguro que quieres eliminar "${deleteTargetProduct.name}"? Esta acción no se puede deshacer.`
+          : ''}
+        confirmText="Eliminar"
+        confirmVariant="danger"
+        onConfirm={executeDeleteProduct}
+      />
     </>
   );
 }

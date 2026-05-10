@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import { notyf } from '../api/notifier';
 import { useAuth } from '../hooks/useAuth';
+import ConfirmModal from '../components/ConfirmModal';
 
 const ROLES = [
   { value: 'admin', label: 'Administrador' },
@@ -41,6 +42,8 @@ export default function AdminUsersPage() {
   const [savingId, setSavingId] = useState(null);
   const [roleSavingId, setRoleSavingId] = useState(null);
   const [statusSavingId, setStatusSavingId] = useState(null);
+  const [roleChangeTarget, setRoleChangeTarget] = useState(null);
+  const [statusTarget, setStatusTarget] = useState(null);
 
   const hasLoaded = useRef(false);
 
@@ -77,6 +80,24 @@ export default function AdminUsersPage() {
     loadMe();
     loadUsers();
   }, [navigate, token]);
+
+  useEffect(() => {
+    if (!roleChangeTarget) return;
+    const el = document.getElementById('changeOwnRoleModal');
+    if (el) {
+      const modal = new window.bootstrap.Modal(el);
+      modal.show();
+    }
+  }, [roleChangeTarget]);
+
+  useEffect(() => {
+    if (!statusTarget) return;
+    const el = document.getElementById('toggleUserStatusModal');
+    if (el) {
+      const modal = new window.bootstrap.Modal(el);
+      modal.show();
+    }
+  }, [statusTarget]);
 
   const filteredUsers = useMemo(() => {
     const search = q.trim().toLowerCase();
@@ -145,15 +166,7 @@ export default function AdminUsersPage() {
     }
   };
 
-  const changeRole = async (user, role) => {
-    if (user.id === meId && role !== user.role) {
-      const ok = window.confirm(
-        'Estás cambiando el rol de tu propia cuenta. Esto podría afectar tu acceso. ¿Deseas continuar?'
-      );
-
-      if (!ok) return;
-    }
-
+  const executeChangeRole = async (user, role) => {
     setRoleSavingId(user.id);
 
     try {
@@ -167,22 +180,22 @@ export default function AdminUsersPage() {
     }
   };
 
-  const toggleStatus = async (user) => {
-    if (user.id === meId) {
-      notyf.error('No puedes desactivar tu propia cuenta.');
+  const changeRole = (user, role) => {
+    if (user.id === meId && role !== user.role) {
+      setRoleChangeTarget({ user, role });
       return;
     }
 
-    const nextStatus = !user.is_active;
+    executeChangeRole(user, role);
+  };
 
-    const ok = window.confirm(
-      nextStatus
-        ? `¿Activar la cuenta de ${user.username}?`
-        : `¿Desactivar la cuenta de ${user.username}?`
-    );
+  const confirmChangeOwnRole = async () => {
+    if (!roleChangeTarget) return;
+    await executeChangeRole(roleChangeTarget.user, roleChangeTarget.role);
+    setRoleChangeTarget(null);
+  };
 
-    if (!ok) return;
-
+  const executeToggleStatus = async (user, nextStatus) => {
     setStatusSavingId(user.id);
 
     try {
@@ -199,6 +212,23 @@ export default function AdminUsersPage() {
     } finally {
       setStatusSavingId(null);
     }
+  };
+
+  const toggleStatus = (user) => {
+    if (user.id === meId) {
+      notyf.error('No puedes desactivar tu propia cuenta.');
+      return;
+    }
+
+    const nextStatus = !user.is_active;
+
+    setStatusTarget({ user, nextStatus });
+  };
+
+  const confirmToggleStatus = async () => {
+    if (!statusTarget) return;
+    await executeToggleStatus(statusTarget.user, statusTarget.nextStatus);
+    setStatusTarget(null);
   };
 
   const clearFilters = () => {
@@ -429,6 +459,26 @@ export default function AdminUsersPage() {
           </tbody>
         </table>
       </div>
+      <ConfirmModal
+        id="changeOwnRoleModal"
+        title="Cambiar tu propio rol"
+        text="Estás cambiando el rol de tu propia cuenta. Esto podría afectar tu acceso. ¿Deseas continuar?"
+        confirmText="Continuar"
+        confirmVariant="warning"
+        onConfirm={confirmChangeOwnRole}
+      />
+      <ConfirmModal
+        id="toggleUserStatusModal"
+        title={statusTarget?.nextStatus ? 'Activar cuenta' : 'Desactivar cuenta'}
+        text={statusTarget
+          ? statusTarget.nextStatus
+            ? `¿Activar la cuenta de ${statusTarget.user.username}?`
+            : `¿Desactivar la cuenta de ${statusTarget.user.username}?`
+          : ''}
+        confirmText={statusTarget?.nextStatus ? 'Activar' : 'Desactivar'}
+        confirmVariant={statusTarget?.nextStatus ? 'success' : 'warning'}
+        onConfirm={confirmToggleStatus}
+      />
     </div>
   );
 }
