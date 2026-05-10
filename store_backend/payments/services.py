@@ -125,7 +125,7 @@ def create_webpay_transaction(order, user):
                 product = item.product
                 if product.product_type == product.ProductType.BUNDLE:
                     bundle_items = list(
-                        product.bundle_items.select_related('item').select_for_update(of=('item',))
+                        product.bundle_items.select_related('item')
                     )
                     if bundle_items:
                         for bundle_item in bundle_items:
