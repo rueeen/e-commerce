@@ -26,6 +26,8 @@ export const api = {
   // =========================
   register: (payload) => apiClient.post('/api/accounts/register/', payload),
   login: (payload) => apiClient.post('/api/accounts/login/', payload),
+  logout: (refreshToken) =>
+    apiClient.post('/api/accounts/logout/', { refresh: refreshToken }),
   me: () => apiClient.get('/api/accounts/me/'),
   getOrderTracking: (orderId) =>
     apiClient.get('/api/orders/' + orderId + '/tracking/'),

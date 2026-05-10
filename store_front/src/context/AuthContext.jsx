@@ -60,14 +60,23 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const logout = useCallback(({ silent = false } = {}) => {
+  const logout = useCallback(async ({ silent = false } = {}) => {
+    const currentRefreshToken = localStorage.getItem('refreshToken');
+
     setUser(null);
     setToken(null);
     setRefreshToken(null);
-
     localStorage.removeItem('authToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('authUser');
+
+    if (currentRefreshToken) {
+      try {
+        await api.logout(currentRefreshToken);
+      } catch {
+        // El logout local ya se aplicó; ignoramos fallos de red al invalidar token
+      }
+    }
 
     if (!silent) {
       notyf.success('Sesión cerrada.');
