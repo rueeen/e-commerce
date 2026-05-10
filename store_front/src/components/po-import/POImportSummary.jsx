@@ -1,14 +1,4 @@
-const formatCLP = (value) => {
-  return `$${Number(value || 0).toLocaleString('es-CL')}`;
-};
-
-const formatMoney = (value, currency = 'USD') => {
-  if (currency === 'CLP') {
-    return formatCLP(value);
-  }
-
-  return `${currency} ${Number(value || 0).toFixed(2)}`;
-};
+import { formatMoney } from '../../utils/format';
 
 const getTotal = (totals, key) => {
   return Number(

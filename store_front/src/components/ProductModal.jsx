@@ -1,8 +1,5 @@
 import { Link } from 'react-router-dom';
-
-const formatMoney = (value) => {
-  return `$${Number(value || 0).toLocaleString('es-CL')}`;
-};
+import { formatMoney } from '../utils/format';
 
 const getCard = (product) => {
   return product?.single_card?.mtg_card || product?.mtg_card || null;

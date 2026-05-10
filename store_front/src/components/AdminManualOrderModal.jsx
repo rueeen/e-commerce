@@ -2,10 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/endpoints';
 import { notyf } from '../api/notifier';
 import ProductAutocomplete from './ProductAutocomplete';
+import { formatMoney } from '../utils/format';
 
 const normalizeList = (data) => data?.results || data || [];
-
-const formatMoney = (value) => `$${Number(value || 0).toLocaleString('es-CL')}`;
 
 const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);

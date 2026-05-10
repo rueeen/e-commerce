@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/endpoints';
 import { notyf } from '../api/notifier';
 import ProductAutocomplete from '../components/ProductAutocomplete';
+import { formatMoney, formatDate } from '../utils/format';
 
 const movementTypes = [
   { value: 'PURCHASE_IN', label: 'Compra / ingreso' },
@@ -30,19 +31,6 @@ const initialForm = {
 };
 
 const normalizeList = (data) => data?.results || data || [];
-
-const formatMoney = (value) =>
-  `$${Number(value || 0).toLocaleString('es-CL')}`;
-
-const formatDateTime = (value) => {
-  if (!value) return '-';
-
-  try {
-    return new Date(value).toLocaleString('es-CL');
-  } catch {
-    return value;
-  }
-};
 
 const getMovementLabel = (value) => {
   return movementTypes.find((item) => item.value === value)?.label || value;
@@ -475,7 +463,7 @@ export default function AdminKardexPage() {
             {!loading &&
               movements.map((movement) => (
                 <tr key={movement.id}>
-                  <td>{formatDateTime(movement.created_at)}</td>
+                  <td>{formatDate(movement.created_at)}</td>
                   <td>{movement.product_name || movement.producto || '-'}</td>
                   <td>
                     <span

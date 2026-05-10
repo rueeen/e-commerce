@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import DataTable from 'datatables.net-bs5';
 
 import 'datatables.net-bs5/css/dataTables.bootstrap5.css';
+import { formatMoney, formatDate } from '../utils/format';
 
 const statusLabels = {
   pending_payment: 'Pendiente de pago',
@@ -31,20 +32,6 @@ const getStatusBadgeClass = (status) => {
   }
 
   return 'badge-soft';
-};
-
-const formatMoney = (value) => {
-  return `$${Number(value || 0).toLocaleString('es-CL')}`;
-};
-
-const formatDate = (value) => {
-  if (!value) return '-';
-
-  try {
-    return new Date(value).toLocaleDateString('es-CL');
-  } catch {
-    return value;
-  }
 };
 
 export default function OrderTable({ orders = [], onView }) {

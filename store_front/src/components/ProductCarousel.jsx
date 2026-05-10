@@ -1,10 +1,7 @@
 import { Link } from 'react-router-dom';
+import { formatMoney } from '../utils/format';
 
 const placeholderImage = 'https://placehold.co/640x420?text=Sin+imagen';
-
-const formatMoney = (value) => {
-  return `$${Number(value || 0).toLocaleString('es-CL')}`;
-};
 
 const getCard = (product) => {
   return product?.single_card?.mtg_card || product?.mtg_card || null;

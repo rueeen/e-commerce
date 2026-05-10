@@ -4,14 +4,11 @@ import DataTable from 'datatables.net-bs5';
 import 'datatables.net-bs5/css/dataTables.bootstrap5.css';
 
 import { PRODUCT_TYPE_OPTIONS } from './ProductForm';
+import { formatMoney } from '../utils/format';
 
 const typeLabel = Object.fromEntries(
   PRODUCT_TYPE_OPTIONS.map((option) => [option.value, option.label])
 );
-
-const formatMoney = (value) => {
-  return `$${Number(value || 0).toLocaleString('es-CL')}`;
-};
 
 const getPriceAlertClass = (priceClp, suggestedClp, costClp) => {
   if (Number(priceClp || 0) < Number(costClp || 0)) return 'text-danger fw-bold';
