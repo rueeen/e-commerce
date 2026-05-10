@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/endpoints';
-import { fetchAllPaginated } from '../api/pagination';
 import ProductSlider from '../components/ProductSlider';
 import { useCart } from '../hooks/useCart';
 
@@ -69,77 +68,81 @@ export default function CatalogPage() {
   const [products, setProducts] = useState([]);
   const [productTypes, setProductTypes] = useState(FALLBACK_PRODUCT_TYPES);
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [type, setType] = useState('');
   const [rarity, setRarity] = useState('');
   const [foil, setFoil] = useState('');
   const [loading, setLoading] = useState(false);
+  const [count, setCount] = useState(0);
+  const supportsSingleFiltersRef = useRef(false);
 
   const { addItem } = useCart();
 
-  const loadCatalogData = async () => {
-    setLoading(true);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(query);
+    }, 300);
 
-    try {
-      const [productsData, typesResponse] = await Promise.all([
-        fetchAllPaginated(api.getProducts, { active: 'true', available: 'true' }),
-        api.getProductTypes({ is_active: true }),
-      ]);
-
-      setProducts(productsData);
-
-      const typeResults = Array.isArray(typesResponse?.data?.results)
-        ? typesResponse.data.results
-        : Array.isArray(typesResponse?.data)
-          ? typesResponse.data
-          : [];
-
-      setProductTypes(typeResults.length > 0 ? typeResults : FALLBACK_PRODUCT_TYPES);
-    } catch {
-      setProductTypes(FALLBACK_PRODUCT_TYPES);
-      try {
-        const data = await fetchAllPaginated(api.getProducts, { active: 'true', available: 'true' });
-        setProducts(data);
-      } catch {
-        // El apiClient ya muestra el error.
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+    return () => clearTimeout(timer);
+  }, [query]);
 
   useEffect(() => {
-    loadCatalogData();
+    api.getProductTypes({ is_active: true })
+      .then((res) => {
+        const results = Array.isArray(res?.data?.results)
+          ? res.data.results
+          : Array.isArray(res?.data)
+            ? res.data
+            : [];
+        setProductTypes(results.length > 0 ? results : FALLBACK_PRODUCT_TYPES);
+      })
+      .catch(() => setProductTypes(FALLBACK_PRODUCT_TYPES));
   }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    const params = {
+      active: 'true',
+      available: 'true',
+    };
+
+    if (debouncedQuery.trim()) params.search = debouncedQuery.trim();
+    if (type) params.product_type = type;
+
+    api.getProducts(params)
+      .then(({ data }) => {
+        const fetchedProducts = data?.results || data || [];
+        setProducts(fetchedProducts);
+        setCount(Number(data?.count || fetchedProducts.length || 0));
+      })
+      .catch(() => {
+        setProducts([]);
+        setCount(0);
+      })
+      .finally(() => setLoading(false));
+  }, [debouncedQuery, type]);
 
   const showSingleOnlyFilters = type === '' || type === 'single';
 
-  const filtered = useMemo(() => {
-    const search = query.trim().toLowerCase();
+  const filteredProducts = useMemo(() => {
+    const appliesSingleFilters = rarity !== '' || foil !== '';
+    if (!appliesSingleFilters) return products;
 
+    // El endpoint GET /api/products/products/ se consume aquí solo con search y product_type.
+    supportsSingleFiltersRef.current = false;
     return products.filter((product) => {
-      const name = String(product.name || '').toLowerCase();
-      const description = String(product.description || '').toLowerCase();
       const productType = getProductTypeValue(product);
       const isSingle = productType === 'single';
+      if (!isSingle) return true;
 
-      const matchesSearch = !search || name.includes(search) || description.includes(search);
-      const matchesType = !type || productType === type;
-      const hasStock = Number(product.stock || 0) > 0 || productType === 'service';
+      const matchesRarity = !rarity || getProductRarity(product).toLowerCase() === rarity;
+      const matchesFoil = !foil || String(getProductIsFoil(product)) === foil;
 
-      const appliesSingleFilters =
-        type === 'single' ||
-        (!type && isSingle && (rarity !== '' || foil !== ''));
-
-      const matchesRarity =
-        !appliesSingleFilters || !rarity || getProductRarity(product).toLowerCase() === rarity;
-      const matchesFoil =
-        !appliesSingleFilters || !foil || String(getProductIsFoil(product)) === foil;
-
-      return matchesSearch && matchesType && matchesRarity && matchesFoil && hasStock;
+      return matchesRarity && matchesFoil;
     });
-  }, [products, query, type, rarity, foil]);
+  }, [products, rarity, foil]);
 
-  const groupedProducts = useMemo(() => groupProductsByType(filtered), [filtered]);
+  const groupedProducts = useMemo(() => groupProductsByType(filteredProducts), [filteredProducts]);
 
   const orderedTypes = useMemo(() => {
     if (type) return groupedProducts[type]?.length ? [type] : [];
@@ -211,13 +214,13 @@ export default function CatalogPage() {
         </div>
 
         <div className="small text-muted mt-3">
-          {loading ? 'Cargando productos...' : `${filtered.length} producto(s) encontrados.`}
+          {loading ? 'Cargando productos...' : `${count || filteredProducts.length} producto(s) encontrados.`}
         </div>
       </div>
 
       {loading ? (
         <div className="panel-card p-4 text-center text-muted">Cargando catálogo...</div>
-      ) : filtered.length === 0 ? (
+      ) : filteredProducts.length === 0 ? (
         <div className="panel-card p-4 text-center text-muted">No hay productos disponibles para los filtros seleccionados.</div>
       ) : (
         <div className="catalog-sections">

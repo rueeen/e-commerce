@@ -25,11 +25,33 @@ export default function CartPage() {
     setShippingData((prev) => ({ ...prev, [name]: value }));
   };
 
+  const validateShipping = () => {
+    if (!shippingData.recipient_name.trim()) {
+      notyf.error('El nombre del destinatario es obligatorio.');
+      return false;
+    }
+    if (!shippingData.shipping_street.trim()) {
+      notyf.error('La calle es obligatoria.');
+      return false;
+    }
+    if (!shippingData.shipping_commune.trim()) {
+      notyf.error('La comuna es obligatoria.');
+      return false;
+    }
+    if (!shippingData.shipping_region.trim()) {
+      notyf.error('La región es obligatoria.');
+      return false;
+    }
+
+    return true;
+  };
+
   const createOrder = async () => {
     if (!items.length) {
       notyf.error('Tu carrito está vacío.');
       return;
     }
+    if (!validateShipping()) return;
 
     setCheckingOut(true);
 
@@ -59,28 +81,36 @@ export default function CartPage() {
         <h5 className="mb-3">Dirección de despacho</h5>
         <div className="row g-3 mb-4">
           <div className="col-md-6">
-            <label className="form-label">Nombre destinatario</label>
-            <input className="form-control" name="recipient_name" value={shippingData.recipient_name} onChange={handleShippingChange} />
+            <label className="form-label">
+              Nombre destinatario <span className="text-danger">*</span>
+            </label>
+            <input className="form-control" name="recipient_name" required value={shippingData.recipient_name} onChange={handleShippingChange} />
           </div>
           <div className="col-md-6">
             <label className="form-label">Teléfono destinatario</label>
             <input className="form-control" name="recipient_phone" value={shippingData.recipient_phone} onChange={handleShippingChange} />
           </div>
           <div className="col-md-8">
-            <label className="form-label">Calle</label>
-            <input className="form-control" name="shipping_street" value={shippingData.shipping_street} onChange={handleShippingChange} />
+            <label className="form-label">
+              Calle <span className="text-danger">*</span>
+            </label>
+            <input className="form-control" name="shipping_street" required value={shippingData.shipping_street} onChange={handleShippingChange} />
           </div>
           <div className="col-md-4">
             <label className="form-label">Número</label>
             <input className="form-control" name="shipping_number" value={shippingData.shipping_number} onChange={handleShippingChange} />
           </div>
           <div className="col-md-6">
-            <label className="form-label">Comuna</label>
-            <input className="form-control" name="shipping_commune" value={shippingData.shipping_commune} onChange={handleShippingChange} />
+            <label className="form-label">
+              Comuna <span className="text-danger">*</span>
+            </label>
+            <input className="form-control" name="shipping_commune" required value={shippingData.shipping_commune} onChange={handleShippingChange} />
           </div>
           <div className="col-md-6">
-            <label className="form-label">Región</label>
-            <input className="form-control" name="shipping_region" value={shippingData.shipping_region} onChange={handleShippingChange} />
+            <label className="form-label">
+              Región <span className="text-danger">*</span>
+            </label>
+            <input className="form-control" name="shipping_region" required value={shippingData.shipping_region} onChange={handleShippingChange} />
           </div>
           <div className="col-12">
             <label className="form-label">Notas</label>
