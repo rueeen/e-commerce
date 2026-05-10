@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/endpoints';
 import { notyf } from '../api/notifier';
 import AdminManualOrderModal from '../components/AdminManualOrderModal';
+import ConfirmModal from '../components/ConfirmModal';
 import { useAuth } from '../hooks/useAuth';
 
 const statuses = [
@@ -64,6 +65,7 @@ export default function AdminOrdersPage() {
   const [loading, setLoading] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [showManualModal, setShowManualModal] = useState(false);
+  const [cancelTargetId, setCancelTargetId] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -131,16 +133,20 @@ export default function AdminOrdersPage() {
     }
   };
 
-  const cancelOrder = async (order) => {
-    const ok = window.confirm(`¿Seguro que quieres cancelar la orden #${order.id}?`);
-    if (!ok) return;
-    setActionLoadingId(order.id);
+  const cancelOrder = (order) => {
+    setCancelTargetId(order.id);
+  };
+
+  const executeCancelOrder = async () => {
+    if (!cancelTargetId) return;
+    setActionLoadingId(cancelTargetId);
     try {
-      await api.cancelOrder(order.id);
-      notyf.success(`Orden #${order.id} cancelada correctamente.`);
+      await api.cancelOrder(cancelTargetId);
+      notyf.success(`Orden #${cancelTargetId} cancelada correctamente.`);
       await load();
     } finally {
       setActionLoadingId(null);
+      setCancelTargetId(null);
     }
   };
 
@@ -225,7 +231,7 @@ export default function AdminOrdersPage() {
                       {order.status === 'processing' && <button type="button" className="btn btn-sm btn-outline-primary me-2" onClick={() => updateOrderStatus(order, 'shipped', `Orden #${order.id} enviada.`)} disabled={actionBusy}>Enviar</button>}
                       {order.status === 'shipped' && <button type="button" className="btn btn-sm btn-outline-primary me-2" onClick={() => updateOrderStatus(order, 'delivered', `Orden #${order.id} marcada como entregada.`)} disabled={actionBusy}>Entregado</button>}
                       {order.status === 'delivered' && <button type="button" className="btn btn-sm btn-outline-primary me-2" onClick={() => updateOrderStatus(order, 'completed', `Orden #${order.id} completada.`)} disabled={actionBusy}>Completar</button>}
-                      {canCancel && <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => cancelOrder(order)} disabled={actionBusy}>Cancelar</button>}
+                      {canCancel && <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => cancelOrder(order)} data-bs-toggle="modal" data-bs-target="#cancelOrderModal" disabled={actionBusy}>Cancelar</button>}
                       {!canConfirmPayment && !canCancel && !['paid', 'processing', 'shipped', 'delivered'].includes(order.status) && <span className="text-muted small">Sin acciones</span>}
                     </td>
                   </tr>
@@ -242,6 +248,14 @@ export default function AdminOrdersPage() {
         </div>
       </div>
       <AdminManualOrderModal show={showManualModal} onClose={() => setShowManualModal(false)} onCreated={load} />
+      <ConfirmModal
+        id="cancelOrderModal"
+        title="Cancelar orden"
+        text={cancelTargetId ? `¿Seguro que quieres cancelar la orden #${cancelTargetId}?` : ''}
+        confirmText="Sí, cancelar"
+        confirmVariant="danger"
+        onConfirm={executeCancelOrder}
+      />
     </>
   );
 }

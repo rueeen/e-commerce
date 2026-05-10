@@ -39,11 +39,6 @@ export default function ExcelImportBox({
   };
 
   const handleImport = async () => {
-    if (!selectedFile) {
-      notyf.error('Selecciona un archivo XLSX.');
-      return;
-    }
-
     await onImport?.(selectedFile);
   };
 

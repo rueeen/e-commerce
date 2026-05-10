@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { useCart } from '../hooks/useCart';
+import { useAuth } from '../hooks/useAuth';
 
 const placeholderImage = 'https://placehold.co/900x600?text=Producto';
 
@@ -61,6 +62,7 @@ export default function ProductDetailPage() {
   const [adding, setAdding] = useState(false);
 
   const { addItem } = useCart();
+  const { isAdmin, isWorker } = useAuth();
 
   const card = useMemo(() => getCard(product), [product]);
 
@@ -224,7 +226,7 @@ export default function ProductDetailPage() {
           </button>
         </div>
 
-        {kardex.length > 0 && (
+        {(isAdmin || isWorker) && kardex.length > 0 && (
           <div className="panel-card p-4 mt-3">
             <h5>Kardex</h5>
             <p>
