@@ -282,17 +282,6 @@ class Product(models.Model):
 
     def clean(self):
         super().clean()
-        costo_real = int(self.cost_real_clp or 0)
-        sugerido = int(self.get_precio_sugerido_clp() or 0)
-        if costo_real > 0 and sugerido > 0 and sugerido < costo_real:
-            raise ValidationError(
-                {
-                    "price_external_usd": (
-                        "El precio sugerido calculado es menor al costo real. "
-                        "Revisa precio externo o tipo de cambio."
-                    )
-                }
-            )
 
 
 class SingleCard(models.Model):

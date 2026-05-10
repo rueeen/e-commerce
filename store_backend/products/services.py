@@ -13,7 +13,6 @@ from openpyxl import load_workbook
 from .models import (
     Category,
     MTGCard,
-    PricingSettings,
     Product,
     PurchaseOrder,
     PurchaseOrderItem,
@@ -23,6 +22,7 @@ from .models import (
 )
 from .purchase_order_services import (
     get_active_exchange_rate,
+    get_active_pricing_settings,
     recalculate_purchase_order,
 )
 
@@ -278,24 +278,6 @@ def _normalize_card_data(card_data):
         "raw_data": card_data,
     }
 
-
-def get_active_pricing_settings():
-    settings = (
-        PricingSettings.objects.filter(is_active=True)
-        .order_by("-updated_at")
-        .first()
-    )
-
-    if settings:
-        return settings
-
-    return PricingSettings(
-        usd_to_clp=Decimal("1000"),
-        import_factor=Decimal("1.30"),
-        risk_factor=Decimal("1.10"),
-        margin_factor=Decimal("1.25"),
-        rounding_to=100,
-    )
 
 
 def extract_usd_price(card_data, is_foil=False):

@@ -6,7 +6,6 @@ from django.db import transaction
 from .models import (
     InventoryLot,
     KardexMovement,
-    PricingSettings,
     Product,
 )
 
@@ -54,15 +53,6 @@ def _round_to(value, rounding_to):
         return int(round(value))
 
     return int(round(float(value) / base) * base)
-
-
-def _get_active_pricing_settings():
-    return (
-        PricingSettings.objects.filter(is_active=True)
-        .order_by("-updated_at")
-        .first()
-        or PricingSettings()
-    )
 
 
 @transaction.atomic
