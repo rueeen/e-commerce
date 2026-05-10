@@ -1,22 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/endpoints';
 import OrderTable from '../components/OrderTable';
+import { formatDate, formatMoney } from '../utils/format';
 
 const normalizeList = (data) => data?.results || data || [];
-
-const formatMoney = (value) => {
-  return `$${Number(value || 0).toLocaleString('es-CL')}`;
-};
-
-const formatDate = (value) => {
-  if (!value) return '-';
-
-  try {
-    return new Date(value).toLocaleString('es-CL');
-  } catch {
-    return value;
-  }
-};
 
 const getChilexpressTrackingUrl = (trackingNumber) => {
   const baseUrl = 'https://www.chilexpress.cl/views/herramientas/seguimiento';

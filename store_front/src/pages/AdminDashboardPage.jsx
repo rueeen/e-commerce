@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/endpoints';
+import { Link } from 'react-router-dom';
 
 const initialStats = {
   products: 0,
@@ -54,24 +55,28 @@ export default function AdminDashboardPage() {
         label: statLabels.products,
         value: stats.products,
         icon: statIcons.products,
+        to: '/admin/productos',
       },
       {
         key: 'categories',
         label: statLabels.categories,
         value: stats.categories,
         icon: statIcons.categories,
+        to: '/admin/categorias',
       },
       {
         key: 'users',
         label: statLabels.users,
         value: stats.users,
         icon: statIcons.users,
+        to: '/admin/usuarios',
       },
       {
         key: 'orders',
         label: statLabels.orders,
         value: stats.orders,
         icon: statIcons.orders,
+        to: '/admin/pedidos',
       },
     ],
     [stats]
@@ -138,7 +143,7 @@ export default function AdminDashboardPage() {
       <div className="row g-3 mb-3">
         {cards.map((card) => (
           <div key={card.key} className="col-md-3">
-            <div className="panel-card p-3 h-100">
+            <Link to={card.to} className="panel-card p-3 h-100 d-block text-decoration-none">
               <div className="d-flex justify-content-between align-items-start">
                 <div>
                   <h6 className="text-muted mb-2">{card.label}</h6>
@@ -146,7 +151,7 @@ export default function AdminDashboardPage() {
                 </div>
                 <i className={`bi ${card.icon} fs-3 text-muted`} />
               </div>
-            </div>
+            </Link>
           </div>
         ))}
       </div>

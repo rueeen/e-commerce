@@ -4,6 +4,7 @@ import { notyf } from '../api/notifier';
 import AdminManualOrderModal from '../components/AdminManualOrderModal';
 import ConfirmModal from '../components/ConfirmModal';
 import { useAuth } from '../hooks/useAuth';
+import { formatDate, formatMoney } from '../utils/format';
 
 const statuses = [
   { value: 'pending_payment', label: 'Pendiente de pago' },
@@ -28,17 +29,6 @@ const getStatusBadgeClass = (status) => {
   if (status === 'pending' || status === 'processing' || status === 'shipped') return 'badge-warning';
   if (status === 'canceled') return 'badge-error';
   return 'badge-soft';
-};
-
-const formatMoney = (value) => `$${Number(value || 0).toLocaleString('es-CL')}`;
-
-const formatDate = (value) => {
-  if (!value) return '-';
-  try {
-    return new Date(value).toLocaleString('es-CL');
-  } catch {
-    return value;
-  }
 };
 
 const getChilexpressTrackingUrl = (trackingNumber) => {

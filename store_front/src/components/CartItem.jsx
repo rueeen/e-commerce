@@ -1,6 +1,4 @@
-const formatMoney = (value) => {
-  return `$${Number(value || 0).toLocaleString('es-CL')}`;
-};
+import { formatMoney } from '../utils/format';
 
 const getCartItemProduct = (item) => {
   if (item.product_detail && typeof item.product_detail === 'object') {
@@ -93,7 +91,14 @@ export default function CartItem({ item, onUpdate, onRemove, disabled = false })
       <td>{formatMoney(unitPrice)}</td>
 
       <td style={{ maxWidth: 120 }}>
+        <label
+          htmlFor={`qty-${item.id}`}
+          className="visually-hidden"
+        >
+          Cantidad de {item.product_name || product?.name || 'producto'}
+        </label>
         <input
+          id={`qty-${item.id}`}
           type="number"
           min="1"
           className="form-control form-control-sm"
