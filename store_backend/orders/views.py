@@ -202,7 +202,13 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        user = User.objects.get(id=data["user_id"])
+        try:
+            user = User.objects.get(id=data["user_id"])
+        except User.DoesNotExist:
+            return Response(
+                {"detail": f"No existe un usuario con id {data['user_id']}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         item_payloads = data["items"]
         product_ids = [item["product_id"] for item in item_payloads]
         products_queryset = Product.objects.select_for_update().filter(id__in=product_ids)

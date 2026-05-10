@@ -273,13 +273,6 @@ class Product(models.Model):
 
         return int(calculate_suggested_price_from_real_cost(int(self.cost_real_clp or 0)) or 0)
 
-    def get_precio_sugerido_clp(self):
-        return int(self.suggested_price_clp or 0)
-
-    @property
-    def precio_sugerido_clp(self):
-        return int(self.suggested_price_clp or 0)
-
     def clean(self):
         super().clean()
 
@@ -324,6 +317,7 @@ class SealedProduct(models.Model):
         PRECON = "precon", "Precon"
         BOOSTER = "booster", "Booster"
         BUNDLE = "bundle", "Bundle"
+        BOX = "box", "Display / Box"
         OTHER = "other", "Otro"
 
     product = models.OneToOneField(
@@ -564,11 +558,6 @@ class PurchaseOrder(models.Model):
         ordering = ["-created_at"]
         verbose_name = "Orden de compra"
         verbose_name_plural = "Órdenes de compra"
-
-    @property
-    def real_total_clp(self):
-        """Alias temporal de grand_total_clp para transición de API."""
-        return self.grand_total_clp
 
     def __str__(self):
         return f"OC {self.order_number} - {self.supplier}"
