@@ -419,6 +419,7 @@ class ShippingQuoteView(APIView):
 
     def post(self, request):
         commune = (request.data.get('commune') or '').strip()
+        region = (request.data.get('region') or '').strip()
         if not commune:
             return Response(
                 {'detail': 'La comuna es requerida.'},
@@ -427,7 +428,7 @@ class ShippingQuoteView(APIView):
 
         try:
             from shipping.chilexpress_service import quote_shipment
-            result = quote_shipment(commune)
+            result = quote_shipment(commune, region_name=region)
         except Exception as exc:
             logger.exception('Error en cotización de envío: %s', exc)
             return Response(

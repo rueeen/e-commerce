@@ -9,6 +9,26 @@ from django.core.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
+# Mapeo de nombre de región (del JSON local) a código de región de Chilexpress
+_REGION_CODES = {
+    'arica y parinacota': '01',
+    'tarapacá': '02',
+    'antofagasta': '03',
+    'atacama': '04',
+    'coquimbo': '05',
+    'valparaíso': '06',
+    "libertador general bernardo o'higgins": '07',
+    'maule': '08',
+    'biobío': '09',
+    'la araucanía': '10',
+    'los ríos': '11',
+    'los lagos': '12',
+    'aysén del general carlos ibáñez del campo': '13',
+    'magallanes y de la antártica chilena': '14',
+    'metropolitana de santiago': '15',
+    'ñuble': '16',
+}
+
 
 def _env():
     return getattr(settings, 'CHILEXPRESS_ENV', 'test')
@@ -79,30 +99,105 @@ def _chilexpress_post(url, api_key, payload):
         ) from exc
 
 
-def get_coverage_code(commune_name):
+def debug_coverage_api():
+    """
+    Función de diagnóstico temporal.
+    Llamar desde Django shell: from shipping.chilexpress_service import debug_coverage_api; debug_coverage_api()
+    """
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
+
+    api_key = getattr(settings, 'CHILEXPRESS_COVERAGE_KEY', '')
+    base = _coverage_base()
+
+    for region_code in ['99', '01', '02', '15']:
+        url = f'{base}/coverage-areas/communes?regionCode={region_code}'
+        print(f'\n--- regionCode={region_code} ---')
+        req = urllib.request.Request(url, headers={
+            'Cache-Control': 'no-cache',
+            'Ocp-Apim-Subscription-Key': api_key,
+        }, method='GET')
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                data = json.loads(r.read().decode('utf-8'))
+                areas = data.get('data', {}).get('coverageAreas', [])
+                print(f'Total items: {len(areas)}')
+                if areas:
+                    print(f'Keys: {list(areas[0].keys())}')
+                    for area in areas[:3]:
+                        print(f'  {area}')
+        except urllib.error.HTTPError as e:
+            body = e.read().decode() if hasattr(e, 'read') else ''
+            print(f'HTTP {e.code}: {body[:200]}')
+        except Exception as e:
+            print(f'ERROR: {e}')
+
+
+def _get_communes_for_region(api_key, region_code):
+    """Obtiene comunas de una región específica de Chilexpress."""
+    url = f'{_coverage_base()}/coverage-areas/communes?regionCode={region_code}'
+    try:
+        data = _chilexpress_get(url, api_key)
+        areas = data.get('data', {}).get('coverageAreas', [])
+        if areas:
+            logger.debug(
+                'Región %s: %d comunas. Primeras 3: %s',
+                region_code,
+                len(areas),
+                [a.get('countyName') for a in areas[:3]],
+            )
+        else:
+            logger.debug('Región %s: 0 comunas devueltas', region_code)
+        return areas
+    except ValidationError as exc:
+        logger.warning('Coverage error región %s: %s', region_code, exc)
+        return []
+
+
+def _normalize(text):
+    """Normaliza texto para comparación: minúsculas y sin tildes."""
+    import unicodedata
+    text = text.strip().lower()
+    return ''.join(
+        c for c in unicodedata.normalize('NFD', text)
+        if unicodedata.category(c) != 'Mn'
+    )
+
+
+def get_coverage_code(commune_name, region_name=None):
     api_key = getattr(settings, 'CHILEXPRESS_COVERAGE_KEY', '')
     if not api_key:
         logger.warning('CHILEXPRESS_COVERAGE_KEY no configurada')
         return None
 
-    url = f'{_coverage_base()}/coverage-areas/communes?regionCode=99'
-    try:
-        data = _chilexpress_get(url, api_key)
-    except ValidationError as exc:
-        logger.warning('Coverage lookup error: %s', exc)
-        return None
+    commune_norm = _normalize(commune_name)
 
-    areas = data.get('data', {}).get('coverageAreas', [])
-    commune_lower = commune_name.strip().lower()
-    for area in areas:
-        if area.get('countyName', '').strip().lower() == commune_lower:
-            return area.get('coverageCode')
+    region_codes_to_try = []
+    if region_name:
+        code = _REGION_CODES.get(_normalize(region_name))
+        if code:
+            region_codes_to_try = [code]
 
-    logger.info('Sin cobertura para: %s', commune_name)
+    if not region_codes_to_try:
+        region_codes_to_try = list(_REGION_CODES.values())
+
+    for region_code in region_codes_to_try:
+        areas = _get_communes_for_region(api_key, region_code)
+        for area in areas:
+            county = area.get('countyName') or area.get('communeName') or area.get('name') or ''
+            if _normalize(county) == commune_norm:
+                code = area.get('coverageCode') or area.get('coverage_code')
+                logger.info(
+                    'Cobertura encontrada: %s → %s (región %s)',
+                    commune_name, code, region_code
+                )
+                return code
+
+    logger.warning('Sin cobertura Chilexpress para: %s', commune_name)
     return None
 
 
-def quote_shipment(commune_name, weight_kg=0.5, length_cm=20, width_cm=15, height_cm=10):
+def quote_shipment(commune_name, region_name=None, weight_kg=0.5, length_cm=20, width_cm=15, height_cm=10):
     cotizador_key = getattr(settings, 'CHILEXPRESS_COTIZADOR_KEY', '')
     origin = getattr(settings, 'CHILEXPRESS_ORIGEN_COVERAGE', 'STGO')
 
@@ -110,7 +205,7 @@ def quote_shipment(commune_name, weight_kg=0.5, length_cm=20, width_cm=15, heigh
         logger.warning('CHILEXPRESS_COTIZADOR_KEY no configurada')
         return None
 
-    dest_code = get_coverage_code(commune_name)
+    dest_code = get_coverage_code(commune_name, region_name=region_name)
     if not dest_code:
         return None
 

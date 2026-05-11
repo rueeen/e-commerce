@@ -36,7 +36,7 @@ export default function CartPage() {
     setQuotingShipping(true)
     setShippingQuote(null)
 
-    api.getShippingQuote(commune)
+    api.getShippingQuote(commune, shippingData.shipping_region)
       .then(({ data }) => {
         if (!cancelled) setShippingQuote(data)
       })
@@ -50,7 +50,7 @@ export default function CartPage() {
     return () => {
       cancelled = true
     }
-  }, [shippingData.shipping_commune])
+  }, [shippingData.shipping_commune, shippingData.shipping_region])
 
   const handleShippingChange = (event) => {
     const { name, value } = event.target;
