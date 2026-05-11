@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
@@ -33,3 +35,29 @@ class Command(BaseCommand):
                 order.save(update_fields=["status", "updated_at"])
                 processed += 1
         self.stdout.write(self.style.SUCCESS(f"Reservas liberadas: {processed}"))
+
+        # Marcar como EXPIRED órdenes en payment_failed sin actividad por 24h
+        expiry_threshold = now - timedelta(hours=24)
+
+        stale_orders = Order.objects.filter(
+            status=Order.Status.PAYMENT_FAILED,
+            updated_at__lt=expiry_threshold,
+        )
+
+        expired_count = 0
+        for order in stale_orders:
+            order.status = Order.Status.EXPIRED
+            order.save(update_fields=["status", "updated_at"])
+            expired_count += 1
+            self.stdout.write(
+                f"  Orden #{order.id} marcada como EXPIRED "
+                f"(payment_failed desde {order.updated_at})"
+            )
+
+        if expired_count:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"{expired_count} orden(es) marcadas como EXPIRED."
+                )
+            )
+
