@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Modal } from 'bootstrap';
 
 export default function ConfirmModal({
   id = 'confirmModal',
@@ -18,6 +19,11 @@ export default function ConfirmModal({
 
     try {
       await onConfirm();
+      const el = document.getElementById(id);
+      if (el) {
+        const modal = Modal.getInstance(el);
+        if (modal) modal.hide();
+      }
     } finally {
       setLoading(false);
     }
