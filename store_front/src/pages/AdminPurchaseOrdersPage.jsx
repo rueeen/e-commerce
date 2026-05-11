@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { Modal } from 'bootstrap';
 
 import { api } from '../api/endpoints';
 import { notyf } from '../api/notifier';
@@ -209,7 +210,7 @@ export default function AdminPurchaseOrdersPage() {
     if (!createMissingProductsTargetId) return;
     const el = document.getElementById('createMissingProductsModal');
     if (el) {
-      const modal = new window.bootstrap.Modal(el);
+      const modal = new Modal(el);
       modal.show();
     }
   }, [createMissingProductsTargetId]);
@@ -218,7 +219,7 @@ export default function AdminPurchaseOrdersPage() {
     if (!receiveTargetId) return;
     const el = document.getElementById('receivePurchaseOrderModal');
     if (el) {
-      const modal = new window.bootstrap.Modal(el);
+      const modal = new Modal(el);
       modal.show();
     }
   }, [receiveTargetId]);
@@ -227,7 +228,7 @@ export default function AdminPurchaseOrdersPage() {
     if (!currencyChangeTarget) return;
     const el = document.getElementById('currencyChangeModal');
     if (el) {
-      const modal = new window.bootstrap.Modal(el);
+      const modal = new Modal(el);
       modal.show();
     }
   }, [currencyChangeTarget]);
