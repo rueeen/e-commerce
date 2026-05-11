@@ -28,6 +28,7 @@ const getStatusBadgeClass = (status) => {
   if (status === 'paid' || status === 'delivered') return 'badge-success';
   if (status === 'pending' || status === 'processing' || status === 'shipped') return 'badge-warning';
   if (status === 'canceled') return 'badge-error';
+  if (status === 'expired') return 'badge-soft';
   return 'badge-soft';
 };
 

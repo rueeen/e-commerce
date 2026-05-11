@@ -138,7 +138,7 @@ Variables requeridas en entorno (`.env` o variables del sistema):
 - `STOCK_RESERVATION_MINUTES`
 
 Debes programar la ejecución periódica del comando:
-`python manage.py release_expired_stock_reservations` cada 5 minutos (cron o scheduler equivalente).
+`python manage.py release_expired_stock_reservations` cada 5 minutos (cron o scheduler equivalente). Además de liberar stock, este comando marca como `expired` las órdenes en `payment_failed` sin actividad por más de 24 horas.
 
 
 ## Deploy en PythonAnywhere
