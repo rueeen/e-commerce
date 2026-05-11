@@ -71,7 +71,6 @@ export default function ConfirmModal({
               type="button"
               className={`btn btn-${confirmVariant}`}
               onClick={handleConfirm}
-              data-bs-dismiss="modal"
               disabled={loading}
             >
               {loading ? 'Procesando...' : confirmText}
