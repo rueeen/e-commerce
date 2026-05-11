@@ -11,6 +11,6 @@ router.register("assisted", AssistedPurchaseOrderViewSet,
 router.register("", OrderViewSet, basename="order")
 
 urlpatterns = [
-    *router.urls,
     path('shipping-quote/', ShippingQuoteView.as_view(), name='shipping-quote'),
+    *router.urls,
 ]
