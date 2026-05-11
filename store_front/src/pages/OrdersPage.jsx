@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/endpoints';
+import { notyf } from '../api/notifier';
+import ConfirmModal from '../components/ConfirmModal';
 import OrderTable from '../components/OrderTable';
 import { formatDate, formatMoney } from '../utils/format';
 
@@ -40,6 +42,7 @@ export default function OrdersPage() {
   const [receiptLoading, setReceiptLoading] = useState(false);
   const [receiptNotAvailable, setReceiptNotAvailable] = useState(false);
   const [receipt, setReceipt] = useState(null);
+  const [cancelTarget, setCancelTarget] = useState(null);
 
   const PAGE_SIZE = 10
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
@@ -70,6 +73,9 @@ export default function OrdersPage() {
 
   const canShowReceipt = ['paid', 'delivered', 'completed'].includes(selected?.status);
 
+  const canCancelOrder = (order) =>
+    ['pending_payment', 'payment_failed', 'payment_started'].includes(order?.status);
+
   const loadReceipt = async () => {
     if (!selected?.id || receiptLoading) return;
 
@@ -86,6 +92,20 @@ export default function OrdersPage() {
       setReceipt(null);
     } finally {
       setReceiptLoading(false);
+    }
+  };
+
+  const executeCancelOrder = async () => {
+    if (!cancelTarget) return;
+
+    try {
+      await api.cancelOrder(cancelTarget.id);
+      notyf.success(`Orden #${cancelTarget.id} cancelada.`);
+      setCancelTarget(null);
+      setSelected(null);
+      await loadOrders();
+    } catch {
+      // El apiClient ya muestra el error.
     }
   };
 
@@ -269,6 +289,20 @@ export default function OrdersPage() {
                       ) : null}
                     </div>
                   ) : null}
+
+                  {canCancelOrder(selected) && (
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        className="btn btn-outline-danger btn-sm"
+                        data-bs-toggle="modal"
+                        data-bs-target="#cancelOrderModal"
+                        onClick={() => setCancelTarget(selected)}
+                      >
+                        Cancelar orden
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -285,6 +319,17 @@ export default function OrdersPage() {
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        id="cancelOrderModal"
+        title="Cancelar orden"
+        text={cancelTarget
+          ? `¿Seguro que deseas cancelar la orden #${cancelTarget.id}? Esta acción no se puede deshacer.`
+          : ''}
+        confirmText="Sí, cancelar"
+        confirmVariant="danger"
+        onConfirm={executeCancelOrder}
+      />
     </>
   );
 }
