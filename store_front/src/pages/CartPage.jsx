@@ -1,15 +1,18 @@
-import { useState } from 'react';
-import { api } from '../api/endpoints';
-import CartItem from '../components/CartItem';
-import ConfirmModal from '../components/ConfirmModal';
-import { notyf } from '../api/notifier';
-import { submitWebpayForm } from '../utils/webpay';
-import { useCart } from '../hooks/useCart';
-import { formatMoney } from '../utils/format';
+import { useEffect, useState } from 'react'
+import { REGIONES_COMUNAS, getComunasByRegion } from '../data/chile_regiones_comunas'
+import { api } from '../api/endpoints'
+import CartItem from '../components/CartItem'
+import ConfirmModal from '../components/ConfirmModal'
+import { notyf } from '../api/notifier'
+import { submitWebpayForm } from '../utils/webpay'
+import { useCart } from '../hooks/useCart'
+import { formatMoney } from '../utils/format'
 
 export default function CartPage() {
   const { items, total, updateItem, removeItem, clear, fetchCart } = useCart();
-  const [checkingOut, setCheckingOut] = useState(false);
+  const [checkingOut, setCheckingOut] = useState(false)
+  const [shippingQuote, setShippingQuote] = useState(null)
+  const [quotingShipping, setQuotingShipping] = useState(false)
   const [shippingData, setShippingData] = useState({
     recipient_name: '',
     recipient_phone: '',
@@ -18,7 +21,36 @@ export default function CartPage() {
     shipping_commune: '',
     shipping_region: '',
     shipping_notes: '',
-  });
+  })
+
+  const comunasDisponibles = getComunasByRegion(shippingData.shipping_region)
+
+  useEffect(() => {
+    const commune = shippingData.shipping_commune
+    if (!commune) {
+      setShippingQuote(null)
+      return
+    }
+
+    let cancelled = false
+    setQuotingShipping(true)
+    setShippingQuote(null)
+
+    api.getShippingQuote(commune)
+      .then(({ data }) => {
+        if (!cancelled) setShippingQuote(data)
+      })
+      .catch(() => {
+        if (!cancelled) setShippingQuote(null)
+      })
+      .finally(() => {
+        if (!cancelled) setQuotingShipping(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [shippingData.shipping_commune])
 
   const handleShippingChange = (event) => {
     const { name, value } = event.target;
@@ -104,13 +136,48 @@ export default function CartPage() {
             <label className="form-label">
               Comuna <span className="text-danger">*</span>
             </label>
-            <input className="form-control" name="shipping_commune" required value={shippingData.shipping_commune} onChange={handleShippingChange} />
+            <select
+              className="form-select"
+              name="shipping_commune"
+              required
+              value={shippingData.shipping_commune}
+              onChange={handleShippingChange}
+              disabled={!shippingData.shipping_region}
+            >
+              <option value="">
+                {shippingData.shipping_region
+                  ? 'Selecciona una comuna'
+                  : 'Primero selecciona una región'}
+              </option>
+              {comunasDisponibles.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
           </div>
           <div className="col-md-6">
             <label className="form-label">
               Región <span className="text-danger">*</span>
             </label>
-            <input className="form-control" name="shipping_region" required value={shippingData.shipping_region} onChange={handleShippingChange} />
+            <select
+              className="form-select"
+              name="shipping_region"
+              required
+              value={shippingData.shipping_region}
+              onChange={(e) =>
+                setShippingData((prev) => ({
+                  ...prev,
+                  shipping_region: e.target.value,
+                  shipping_commune: '',
+                }))
+              }
+            >
+              <option value="">Selecciona una región</option>
+              {REGIONES_COMUNAS.map((r) => (
+                <option key={r.nombre} value={r.nombre}>
+                  {r.nombre}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="col-12">
             <label className="form-label">Notas</label>
@@ -152,7 +219,49 @@ export default function CartPage() {
         </div>
 
         <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3">
-          <h4 className="mb-0">Total: {formatMoney(total)}</h4>
+          <div className="mt-3 pt-3 border-top">
+            <div className="d-flex justify-content-between mb-1">
+              <span className="text-muted">Subtotal productos</span>
+              <span>{formatMoney(total)}</span>
+            </div>
+
+            {quotingShipping && (
+              <div className="d-flex justify-content-between text-muted small mb-1">
+                <span>Envío</span>
+                <span>Calculando...</span>
+              </div>
+            )}
+
+            {!quotingShipping && shippingQuote && (
+              <div className="d-flex justify-content-between mb-1">
+                <span className="small">
+                  Envío · {shippingQuote.service_name}
+                  {shippingQuote.delivery_days
+                    ? ` · ${shippingQuote.delivery_days}`
+                    : ''}
+                </span>
+                <span className="small">{formatMoney(shippingQuote.amount)}</span>
+              </div>
+            )}
+
+            {!quotingShipping && !shippingQuote && shippingData.shipping_commune && (
+              <div className="d-flex justify-content-between text-muted small mb-1">
+                <span>Envío</span>
+                <span>Sin cobertura · se coordinará por separado</span>
+              </div>
+            )}
+
+            <div className="d-flex justify-content-between fw-bold border-top pt-2 mt-2">
+              <span>Total estimado</span>
+              <span>{formatMoney(total + (shippingQuote?.amount || 0))}</span>
+            </div>
+
+            {shippingQuote && (
+              <small className="text-muted d-block mt-1">
+                * Costo referencial. Puede variar según peso y dimensiones reales del paquete.
+              </small>
+            )}
+          </div>
 
           <div className="d-flex flex-wrap gap-2">
             <button
