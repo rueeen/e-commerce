@@ -74,7 +74,7 @@ if _mysql_name:
             'NAME': _mysql_name,
             'USER': os.getenv('MYSQL_USER', ''),
             'PASSWORD': os.getenv('MYSQL_PASSWORD', ''),
-            'HOST': os.getenv('MYSQL_HOST', ''),
+            'HOST': os.getenv('MYSQL_HOST', 'localhost'),
             'PORT': os.getenv('MYSQL_PORT', '3306'),
             'OPTIONS': {
                 'charset': 'utf8mb4',
