@@ -107,17 +107,14 @@ const buildManualItemFromProduct = (product, currency) => {
 };
 
 const getMissingProductsCount = (order) => {
+  if (!order || !Array.isArray(order?.items)) return 0;
+
   const value = Number(order?.missing_products_count);
 
   if (Number.isFinite(value) && value > 0) {
     return value;
   }
-
-  if (Array.isArray(order?.items)) {
-    return order.items.filter((item) => !item.product).length;
-  }
-
-  return 0;
+  return order.items.filter((item) => !item.product).length;
 };
 
 const canReceiveOrder = (order) => {
@@ -440,20 +437,22 @@ export default function AdminPurchaseOrdersPage() {
 
   const executeReceiveOrder = async () => {
     if (!receiveTargetId) return;
+    const targetId = receiveTargetId;
 
-    setReceivingId(receiveTargetId);
+    setReceivingId(targetId);
     setIsReceivingOrder(true);
+    setReceiveTargetId(null);
 
     try {
-      await api.receivePurchaseOrder(receiveTargetId);
+      await api.receivePurchaseOrder(targetId);
       notyf.success('Orden marcada como recibida.');
+      setSelectedOrder(null);
       await load();
     } catch {
       // El apiClient ya muestra el error.
     } finally {
       setReceivingId(null);
       setIsReceivingOrder(false);
-      setReceiveTargetId(null);
     }
   };
 
@@ -1273,7 +1272,7 @@ export default function AdminPurchaseOrdersPage() {
                     </thead>
 
                     <tbody>
-                      {(selectedOrder.items || []).map((item, index) => (
+                      {(Array.isArray(selectedOrder?.items) ? selectedOrder.items : []).map((item, index) => (
                         <tr key={`${item.id || item.product || 'item'}-${index}`}>
                           <td>
                             {item.product_name ||
