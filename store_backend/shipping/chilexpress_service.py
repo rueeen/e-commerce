@@ -133,6 +133,68 @@ def debug_coverage_api():
             print(f'ERROR: {e}')
 
 
+def explore_chilexpress_api():
+    """
+    Explora la API de Chilexpress para encontrar los endpoints correctos.
+    Correr desde Django shell:
+        from shipping.chilexpress_service import explore_chilexpress_api
+        explore_chilexpress_api()
+    """
+    api_key = getattr(settings, 'CHILEXPRESS_COVERAGE_KEY', '')
+    base = _coverage_base()
+
+    print(f'Base URL: {base}')
+    print(f'API Key: {api_key[:8]}...\n')
+
+    paths_to_try = [
+        '/regions',
+        '/coverage-areas',
+        '/coverage-areas/regions',
+        '/coverage-areas/communes',
+        '/coverage-areas/communes?regionCode=15',
+        '/communes',
+        '/communes?regionCode=15',
+        '/geo-reference/regions',
+        '/coverages',
+        '/coverages/regions',
+        '/coverages?regionCode=15',
+        '/v1/coverage-areas',
+        '/v1/regions',
+    ]
+
+    for path in paths_to_try:
+        url = f'{base}{path}'
+        req = urllib.request.Request(
+            url,
+            headers={
+                'Cache-Control': 'no-cache',
+                'Ocp-Apim-Subscription-Key': api_key,
+            },
+            method='GET',
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=8) as r:
+                data = json.loads(r.read().decode('utf-8'))
+                keys = list(data.keys()) if isinstance(data, dict) else type(data).__name__
+                print(f'✓ {path} → HTTP {r.status} keys={keys}')
+                if isinstance(data, dict):
+                    for k, v in data.items():
+                        if isinstance(v, list) and v:
+                            print(f'  {k}[0] = {v[0]}')
+                            break
+        except urllib.error.HTTPError as e:
+            body = ''
+            try:
+                body = e.read().decode('utf-8', errors='ignore')[:80]
+            except Exception:
+                pass
+            print(f'✗ {path} → HTTP {e.code} {body}')
+        except urllib.error.URLError as e:
+            print(f'✗ {path} → URLError: {e.reason}')
+        except Exception as e:
+            print(f'✗ {path} → {type(e).__name__}: {e}')
+
+
 def _get_communes_for_region(api_key, region_code):
     """Obtiene comunas de una región específica de Chilexpress."""
     url = f'{_coverage_base()}/coverage-areas/communes?regionCode={region_code}'
