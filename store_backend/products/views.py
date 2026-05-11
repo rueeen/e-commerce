@@ -22,6 +22,7 @@ from .models import (
     KardexMovement,
     MTGCard,
     PricingSettings,
+    PricingSource,
     Product,
     ProductTypeConfig,
     PurchaseOrder,
@@ -67,7 +68,6 @@ from .services import (
     import_purchase_order_from_xlsx,
     search_cards,
 )
-from .tasks import sync_product_external_price
 from .throttles import ScryfallThrottle
 
 
@@ -820,14 +820,47 @@ class ProductViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        task = sync_product_external_price.delay(product.id, str(exchange_rate))
+        if not hasattr(product, "single_card") or not product.single_card:
+            return Response(
+                {"detail": "El producto no tiene datos de carta para sincronizar."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not product.single_card.mtg_card_id:
+            return Response(
+                {"detail": "El producto no tiene carta MTG asociada."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            card_data = get_scryfall_card_by_id(product.single_card.mtg_card.scryfall_id)
+            usd_price = extract_usd_price(card_data, is_foil=product.single_card.is_foil)
+
+            product.price_external_usd = Decimal(str(usd_price or 0))
+            product.exchange_rate_usd_clp = Decimal(str(exchange_rate or 0))
+            product.pricing_source = PricingSource.SCRYFALL
+            product.pricing_last_update = timezone.now()
+            product.save(
+                update_fields=[
+                    "price_external_usd",
+                    "exchange_rate_usd_clp",
+                    "pricing_source",
+                    "pricing_last_update",
+                    "updated_at",
+                ]
+            )
+        except Exception as exc:
+            return Response(
+                {"detail": f"Error al sincronizar precio externo: {exc}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         return Response(
             {
-                "detail": "Sincronización encolada.",
-                "task_id": task.id,
+                "detail": "Sincronización completada.",
                 "product_id": product.id,
             },
-            status=status.HTTP_202_ACCEPTED,
+            status=status.HTTP_200_OK,
         )
 
     @action(

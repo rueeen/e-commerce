@@ -192,3 +192,18 @@ CORS_ALLOWED_ORIGINS=https://tu-frontend.vercel.app
 ```
 
 Para producción se recomienda migrar de SQLite a MySQL 8 (PythonAnywhere).
+
+## Sincronización de precios desde Scryfall
+
+Ejecutar manualmente o como cron en PythonAnywhere:
+
+```bash
+python manage.py sync_external_prices
+python manage.py sync_external_prices --product-id 42
+```
+
+En PythonAnywhere: panel Tasks → agregar tarea diaria:
+
+```bash
+cd /home/tu_usuario/e-commerce/store_backend && python manage.py sync_external_prices
+```
