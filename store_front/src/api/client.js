@@ -81,13 +81,88 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+// Variable de control para evitar loops infinitos de refresh
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     const status = error.response?.status;
     const silent = error.config?.silent === true;
+    const originalRequest = error.config;
 
-    if (status === 401) {
+    // Intentar renovar el token antes de cerrar sesión
+    if (status === 401 && !originalRequest._retry) {
+      const storedRefreshToken = localStorage.getItem('refreshToken');
+
+      if (storedRefreshToken) {
+        if (isRefreshing) {
+          // Encolar requests mientras se renueva
+          return new Promise((resolve, reject) => {
+            failedQueue.push({ resolve, reject });
+          })
+            .then((token) => {
+              originalRequest.headers.Authorization = `Bearer ${token}`;
+              return apiClient(originalRequest);
+            })
+            .catch((err) => Promise.reject(err));
+        }
+
+        originalRequest._retry = true;
+        isRefreshing = true;
+
+        try {
+          const response = await axios.post(
+            `${API_BASE_URL}/api/accounts/token/refresh/`,
+            { refresh: storedRefreshToken },
+            { headers: { 'Content-Type': 'application/json' } }
+          );
+
+          const newAccessToken = response.data.access;
+          const newRefreshToken = response.data.refresh;
+
+          // Guardar el nuevo access token
+          localStorage.setItem('authToken', newAccessToken);
+          apiClient.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
+          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+
+          // Guardar el nuevo refresh token (ROTATE_REFRESH_TOKENS=True)
+          if (newRefreshToken) {
+            localStorage.setItem('refreshToken', newRefreshToken);
+          }
+
+          processQueue(null, newAccessToken);
+          return apiClient(originalRequest);
+        } catch (refreshError) {
+          processQueue(refreshError, null);
+
+          // El refresh falló — sesión realmente expirada
+          clearAuthSession();
+          localStorage.removeItem('refreshToken');
+
+          if (!silent) {
+            notyf.error('Tu sesión expiró. Inicia sesión nuevamente.');
+          }
+
+          return Promise.reject(refreshError);
+        } finally {
+          isRefreshing = false;
+        }
+      }
+
+      // No hay refresh token — cerrar sesión directamente
       clearAuthSession();
 
       if (!silent) {
