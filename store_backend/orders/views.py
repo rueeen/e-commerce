@@ -1,3 +1,4 @@
+import logging
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
@@ -24,6 +25,7 @@ from .serializers import (
 from .services import cancel_order, confirm_order_payment, create_order_from_cart
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 VALID_TRANSITIONS = {
@@ -407,3 +409,36 @@ class AssistedPurchaseOrderViewSet(viewsets.ModelViewSet):
         order.save()
 
         return Response(self.get_serializer(order).data)
+
+
+from rest_framework.views import APIView
+
+
+class ShippingQuoteView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        commune = (request.data.get('commune') or '').strip()
+        if not commune:
+            return Response(
+                {'detail': 'La comuna es requerida.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            from shipping.chilexpress_service import quote_shipment
+            result = quote_shipment(commune)
+        except Exception as exc:
+            logger.exception('Error en cotización de envío: %s', exc)
+            return Response(
+                {'detail': 'Error al contactar el servicio de envíos.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        if result is None:
+            return Response(
+                {'detail': 'Sin cobertura disponible para esta comuna.'},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        return Response(result)
